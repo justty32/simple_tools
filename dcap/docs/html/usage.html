@@ -32,10 +32,18 @@
 
 <h2>模板三種來源</h2>
 <p>解析順序：<strong>路徑式（<code>.</code> / <code>/</code> 開頭）&gt; <code>$DCAP_TEMPLATES/&lt;名&gt;</code> &gt; 內建</strong>。</p>
-<h3>內建：c / cpp</h3>
-<p>以 C++20 <code>#embed</code> 編進執行檔，永遠可用，不需環境變數。<code>cpp</code> → <code>g++ -std=c++20 -O2 -Wall -Wextra -Iinclude</code>；<code>c</code> → <code>gcc -std=c11 -O2 -Wall -Wextra -Iinclude</code> 並連結 <code>-lm -lpthread</code>。兩者產生的都是<strong>單一產物</strong>專案——一個既可執行、又可被連結的 <code>main</code>（見下節）並 <code>git init</code>。</p>
+<h3>內建（目前是 c / cpp）</h3>
+<p>以 C++20 <code>#embed</code> 編進執行檔，永遠可用，不需環境變數。內建有哪些<strong>不是寫死的</strong>——<code>templates/</code> 底下每個含 <code>Makefile</code> 的目錄都會在 build 時自動成為一個內建模板。跑 <code>dcap</code> 不帶參數就會列出這份執行檔實際帶了哪些。</p>
+<p><code>cpp</code> → <code>g++ -std=c++20 -O2 -Wall -Wextra -Iinclude</code>；<code>c</code> → <code>gcc -std=c11 -O2 -Wall -Wextra -Iinclude</code> 並連結 <code>-lm -lpthread</code>。兩者產生的都是<strong>單一產物</strong>專案——一個既可執行、又可被連結的 <code>main</code>（見下節）並 <code>git init</code>。</p>
+<h4>自己加一個內建模板</h4>
+<p>建一個目錄就好，不用改任何程式碼：</p>
+<pre><code>mkdir -p templates/clib/src templates/clib/include
+$EDITOR templates/clib/Makefile      # 裡面用 @NAME@ 當專案名佔位符
+make                                 # 重建 dcap
+dcap clib mylib                      # 就能用了</code></pre>
+<p>規則跟外部模板一樣：<strong>該目錄底下要有 <code>Makefile</code> 或 <code>makefile</code></strong>，否則 build 時會印一行提示並跳過它。目錄名就是模板名（不能含空白），檔名不能含 <code>"</code> 或 <code>\</code>。目錄底下可以有任意層數的子目錄，會照原樣重建。空目錄不會保留（放個 <code>.gitkeep</code>）。</p>
 <h3>具名外部：$DCAP_TEMPLATES/&lt;名&gt;</h3>
-<p>設了 <code>DCAP_TEMPLATES</code> 時，裸名會<strong>先</strong>去 <code>$DCAP_TEMPLATES/&lt;名&gt;</code> 找；找到（且含 Makefile）就用它，因此在那裡放叫 <code>c</code>／<code>cpp</code> 的模板會<strong>蓋掉同名內建模板</strong>。沒設 → 只有 c/cpp 可用。</p>
+<p>設了 <code>DCAP_TEMPLATES</code> 時，裸名會<strong>先</strong>去 <code>$DCAP_TEMPLATES/&lt;名&gt;</code> 找；找到（且含 Makefile）就用它，因此在那裡放一個與內建同名的模板會<strong>蓋掉那個內建模板</strong>。沒設 → 只有內建的可用。</p>
 <pre><code>DCAP_TEMPLATES=~/tpls dcap web api   # 用 ~/tpls/web 模板建立 ./api</code></pre>
 <h3>路徑式</h3>
 <p><code>&lt;template&gt;</code> 開頭是 <code>.</code> 或 <code>/</code>（<code>./x</code>、<code>../x</code>、<code>/abs/y</code>）→ 相對 cwd 或絕對路徑。<code>a/b</code> 這種含 <code>/</code> 但不以 <code>.</code>/<code>/</code> 開頭的<strong>不是</strong>路徑式，當裸名。</p>
@@ -103,7 +111,8 @@ file main
 <table>
   <tr><th>症狀</th><th>原因 / 解法</th></tr>
   <tr><td>dcap 找不到</td><td>尚未把本 repo <code>bin/</code> 加入 PATH；用絕對路徑加到 <code>~/.bashrc</code> / <code>~/.zshrc</code>。</td></tr>
-  <tr><td><code>error: template not found</code></td><td>裸名非 c/cpp 且 <code>$DCAP_TEMPLATES</code> 底下沒有，或路徑打錯。</td></tr>
+  <tr><td><code>error: template not found</code></td><td>裸名不在內建清單裡、<code>$DCAP_TEMPLATES</code> 底下也沒有，或路徑打錯。跑 <code>dcap</code> 不帶參數看實際有哪些內建。</td></tr>
+  <tr><td>新加的 <code>templates/&lt;名&gt;</code> 沒出現</td><td>該目錄缺 <code>Makefile</code>／<code>makefile</code>（build 時會印 <code>gen-embed: skipping ...</code>），或忘了重新 <code>make</code>。</td></tr>
   <tr><td><code>error: not a template (no Makefile)</code></td><td>該目錄底下沒有 <code>Makefile</code> 或 <code>makefile</code>；模板必須含其一。</td></tr>
   <tr><td><code>error: '&lt;name&gt;' already exists</code></td><td>目標目錄已存在；dcap 不覆蓋，換名或先移除。</td></tr>
   <tr><td>用 c/cpp 卻長得不像內建模板</td><td><code>$DCAP_TEMPLATES</code> 底下有同名模板會蓋掉內建；unset 該變數或改名。</td></tr>

@@ -39,18 +39,33 @@ usage 除了固定文字外，還會把 `$DCAP_TEMPLATES` 底下找得到的具�
 
 解析順序：**路徑式（`.` / `/` 開頭）> `$DCAP_TEMPLATES/<名>` > 內建**。
 
-### 內建：`c` / `cpp`
+### 內建（目前是 `c` / `cpp`）
 
-以 C++20 `#embed` 編進執行檔，永遠可用，不需任何環境變數。
+以 C++20 `#embed` 編進執行檔，永遠可用，不需任何環境變數。內建有哪些**不是寫死的**——`templates/` 底下每個含 `Makefile` 的目錄都會在 build 時自動成為一個內建模板。跑 `dcap` 不帶參數就會列出這份執行檔實際帶了哪些。
 
 - `dcap cpp <name>` → C++：`g++ -std=c++20 -O2 -Wall -Wextra -Iinclude`。
 - `dcap c <name>` → C：`gcc -std=c11 -O2 -Wall -Wextra -Iinclude`，另連結 `-lm -lpthread`。
 
 兩者產生的都是**單一產物**專案——一個既可執行、又可被連結的 `main`（見下節），並 `git init`。
 
+#### 自己加一個內建模板
+
+建一個目錄就好，不用改任何程式碼：
+
+```sh
+mkdir -p templates/clib/src templates/clib/include
+$EDITOR templates/clib/Makefile      # 裡面用 @NAME@ 當專案名佔位符
+make                                 # 重建 dcap
+dcap clib mylib                      # 就能用了
+```
+
+規則跟外部模板一樣：**該目錄底下要有 `Makefile` 或 `makefile`**，否則 build 時會印一行提示並跳過它。目錄名就是模板名（不能含空白），檔名不能含 `"` 或 `\`。目錄底下可以有任意層數的子目錄，會照原樣重建。
+
+用 `.gitkeep` 之類的佔位檔保留空目錄——內建模板只帶檔案，空目錄不會保留（外部模板走的是原樣複製，沒有這個限制）。
+
 ### 具名外部：`$DCAP_TEMPLATES/<名>`
 
-若設了環境變數 `DCAP_TEMPLATES`，裸名會**先**去 `$DCAP_TEMPLATES/<名>` 找；找到（且該目錄含 Makefile）就用它。因此在那裡放一個叫 `c` 或 `cpp` 的模板會**蓋掉同名內建模板**。沒設 `DCAP_TEMPLATES` → 只有 c/cpp 可用。
+若設了環境變數 `DCAP_TEMPLATES`，裸名會**先**去 `$DCAP_TEMPLATES/<名>` 找；找到（且該目錄含 Makefile）就用它。因此在那裡放一個與內建同名的模板會**蓋掉那個內建模板**。沒設 `DCAP_TEMPLATES` → 只有內建的可用。
 
 ```sh
 DCAP_TEMPLATES=~/tpls dcap web api   # 用 ~/tpls/web 模板建立 ./api
@@ -153,7 +168,8 @@ file main
 | 症狀 | 原因 / 解法 |
 |------|-------------|
 | `dcap` 找不到 | 尚未把本 repo 的 `bin/` 加入 PATH；用絕對路徑加到 `~/.bashrc` / `~/.zshrc`。 |
-| `error: template not found` | 裸名非 c/cpp 且 `$DCAP_TEMPLATES` 底下沒有，或路徑打錯。 |
+| `error: template not found` | 裸名不在內建清單裡、`$DCAP_TEMPLATES` 底下也沒有，或路徑打錯。跑 `dcap` 不帶參數看實際有哪些內建。 |
+| 新加的 `templates/<名>` 沒出現 | 該目錄缺 `Makefile`／`makefile`（build 時會印 `gen-embed: skipping ...`），或忘了重新 `make`。 |
 | `error: not a template (no Makefile)` | 該目錄底下沒有 `Makefile` 或 `makefile`；模板必須含其一。 |
 | `error: '<name>' already exists` | 目標目錄已存在；dcap 不覆蓋，換個名字或先移除。 |
 | 用 `c`/`cpp` 卻長得不像內建模板 | `$DCAP_TEMPLATES` 底下有同名模板，會蓋掉內建；unset 該變數或改名。 |

@@ -1,6 +1,6 @@
 # dcap
 
-極簡的 **POSIX/UNIX**（以 Linux 為主）C / C++ 專案 scaffolder。把一個模板複製成新專案、替換 `@NAME@`、並 `git init`。只依賴 **gcc/g++ + git + make**（不使用 CMake）。
+極簡的 **POSIX/UNIX**（以 Linux 為主）C / C++ 專案 scaffolder。把一個模板複製成新專案、替換 `@NAME@`、並 `git init`。只依賴 **gcc/g++ + git + make + sh**（不使用 CMake）。
 
 > Windows 使用者請自行在 Git Bash / MinGW 環境裡想辦法；本工具不再做任何 Windows 專屬處理。
 
@@ -10,7 +10,7 @@
 dcap <template> <name>
 ```
 
-- `<template>`：路徑式模板、具名外部模板、或內建的 `c` / `cpp`（永遠可用）。
+- `<template>`：路徑式模板、具名外部模板、或內建模板（目前是 `c` / `cpp`，永遠可用）。
 - `<name>`：要建立的新專案目錄名。
 - 行為：把解析到的模板目錄底下的東西全部原樣（逐位元組）複製成 `./<name>/`，只在新專案的 `Makefile`/`makefile` 內把 `@NAME@` 替換成 `<name>`（其他檔案內容與所有檔名都不變），再對新專案執行 `git init`。
 - 參數不足 → 印 usage 到 stderr 並回傳 1。`<name>` 已存在 → 報錯，不覆蓋。沒有子指令、沒有 help 指令。
@@ -18,20 +18,33 @@ dcap <template> <name>
 ## 模板來源（`argv[1]` 的解析順序）
 
 1. **路徑式**：`argv[1]` 開頭是 `.` 或 `/`（如 `./x`、`../x`、`/abs/y`）→ 視為路徑（相對呼叫 dcap 的工作目錄 cwd 或絕對路徑）。注意像 `a/b` 這種「含 `/` 但不以 `.` 或 `/` 開頭」的**不是**路徑式，會被當裸名。
-2. **具名外部**：設了環境變數 `DCAP_TEMPLATES` 時，裸名會先去 `$DCAP_TEMPLATES/<名>` 找；找到就用它，因此在那裡放一個叫 `c` 或 `cpp` 的模板會**蓋掉同名內建模板**。
-3. **內建**：`c`、`cpp`。以 C++20 `#embed` 編進執行檔，永遠可用，不需任何環境變數。
+2. **具名外部**：設了環境變數 `DCAP_TEMPLATES` 時，裸名會先去 `$DCAP_TEMPLATES/<名>` 找；找到就用它，因此在那裡放一個與內建同名的模板會**蓋掉那個內建模板**。
+3. **內建**：以 C++20 `#embed` 編進執行檔，永遠可用，不需任何環境變數。目前是 `c` 與 `cpp`；跑 `dcap` 不帶參數會列出實際有哪些。
 
 合法模板的判定 = 該目錄底下有 `Makefile` 或 `makefile`。找不到目錄或缺 Makefile/makefile → 報錯。
 
+### 自己加一個內建模板
+
+在 `templates/` 底下建一個目錄就好，C++ 完全不用動：
+
+```sh
+mkdir -p templates/clib/src templates/clib/include
+$EDITOR templates/clib/Makefile      # 裡面用 @NAME@ 當專案名佔位符
+make                                 # 重建 dcap
+dcap clib mylib                      # 就能用了
+```
+
+判定規則跟外部模板同一條（要有 `Makefile`／`makefile`），沒有的話 build 時會印一行 `gen-embed: skipping ...` 並跳過。目錄名即模板名，底下可以有任意層數的子目錄。
+
 ## 建置 dcap 本體
 
-需要支援 C++20 `#embed` 的 g++（GCC 15+）與 make。
+需要支援 C++20 `#embed` 的 g++（GCC 15+）、make 與 sh。
 
 ```sh
 make                       # 產出 bin/dcap
 ```
 
-不使用 CMake、不 static、無安裝腳本。
+build 時 `tools/gen-embed.sh` 會掃 `templates/`，把整份內建模板登錄表（有哪些模板、各自有哪些檔）產生到 `build/`——**新增模板或模板裡的檔案完全不用改 C++**。不使用 CMake、不 static、無安裝腳本。
 
 ## 安裝
 

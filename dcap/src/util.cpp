@@ -15,6 +15,11 @@ bool ensure_dir(const std::string& path) {
     return !ec;
 }
 
+bool ensure_parent_dir(const std::string& path) {
+    const fs::path parent = fs::path(path).parent_path();
+    return parent.empty() ? true : ensure_dir(parent.string());
+}
+
 bool write_file(const std::string& path, const std::string& content) {
     std::ofstream out(path, std::ios::binary);
     if (!out)

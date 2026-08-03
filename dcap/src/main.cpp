@@ -1,7 +1,7 @@
 #include "scaffold.hpp"
 
 // dcap <template> <name>
-//   argv[1] = template  (c | cpp | <name in $DCAP_TEMPLATES> | path)
+//   argv[1] = template  (built-in name | <name in $DCAP_TEMPLATES> | path)
 //   argv[2] = new project directory name
 int main(int argc, char** argv) {
     if (argc < 3) {

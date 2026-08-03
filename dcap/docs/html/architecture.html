@@ -26,21 +26,50 @@
   <tr><th>檔</th><th>職責</th></tr>
   <tr><td><code>src/main.cpp</code></td><td>進入點；解析 <code>argv</code>（<code>&lt;template&gt; &lt;name&gt;</code>）並派發</td></tr>
   <tr><td><code>src/scaffold.{hpp,cpp}</code></td><td>模板解析順序 → 原樣複製 + 只在 <code>Makefile</code>/<code>makefile</code> 內替換 <code>@NAME@</code> + <code>git init</code>；複製時跳過 <code>.git</code>；<code>print_usage()</code></td></tr>
-  <tr><td><code>src/builtin.{hpp,cpp}</code></td><td>內建模板的派發（<code>is_builtin</code> / <code>write_builtin</code>）</td></tr>
-  <tr><td><code>src/builtin_c.cpp</code></td><td>以 <code>#embed</code> 內嵌 c 模板的 8 個檔並寫出</td></tr>
-  <tr><td><code>src/builtin_cpp.cpp</code></td><td>以 <code>#embed</code> 內嵌 cpp 模板的 8 個檔並寫出</td></tr>
+  <tr><td><code>src/builtin.{hpp,cpp}</code></td><td>內建模板：<code>#include</code> 產生出來的登錄表，查表後逐檔寫出（含建子目錄）</td></tr>
   <tr><td><code>src/paths.{hpp,cpp}</code></td><td><code>DCAP_TEMPLATES</code> 讀取與路徑正規化（<code>weakly_canonical</code>）</td></tr>
   <tr><td><code>src/util.{hpp,cpp}</code></td><td>檔案 helper、<code>@NAME@</code> 替換、<code>std::system</code> 包裝</td></tr>
+  <tr><td><code>tools/gen-embed.sh</code></td><td>掃 <code>templates/</code> 產生整份內建模板登錄表，由 Makefile 呼叫</td></tr>
 </table>
-<p>c / cpp 各自一個 <code>builtin_*.cpp</code>，是為了讓每檔留在 150 行內——模板檔數變多時只會往那兩檔加。</p>
+<p><strong>C++ 裡沒有任何地方寫死模板名稱。</strong><code>builtin.cpp</code> 只認得「登錄表」這個概念——<code>is_builtin()</code> 是查表、<code>write_builtin()</code> 是查表後逐檔寫出、<code>builtin_names()</code> 把表裡的名字串起來給 usage 用。要有哪些內建模板，完全由 build 時掃到什麼決定。</p>
 
 <h2>模板嵌入：#embed</h2>
-<p>內建範本存成 <code>templates/</code> 下的真實檔案（可正常編輯 / diff），編譯期用 C++20 的 <code>#embed</code>（GCC 15+）嵌入：</p>
-<pre><code>constexpr unsigned char kMakefile[] = {
+<p>內建範本存成 <code>templates/</code> 下的真實檔案（可正常編輯 / diff），編譯期用 C++20 的 <code>#embed</code>（GCC 15+）嵌入。</p>
+
+<h3>登錄表是產生的，不是手寫的</h3>
+<p><code>#embed</code> 是預處理指令，檔名必須是編譯期字面值——C++ 沒有任何方式在編譯期列舉目錄。所以「自動偵測」只能發生在 build 時：<code>tools/gen-embed.sh</code> 掃 <code>templates/</code>，把整份登錄表寫成 <code>build/builtin_tables.inc</code>，<code>src/builtin.cpp</code> 再 <code>#include</code> 它。</p>
+<p>自動偵測是<strong>兩層</strong>的：</p>
+<ol>
+  <li><strong>哪些目錄是內建模板</strong> — <code>templates/</code> 底下每個含 <code>Makefile</code> 的目錄各成一個。判定規則跟 dcap 執行期認外部模板的規則是同一條，所以行為一致。沒有 Makefile 的目錄會被跳過並在 build 時印一行提示（而不是默默出貨一個不能用的東西）。</li>
+  <li><strong>每個模板裡有哪些檔</strong> — 該目錄底下遞迴的所有檔案。</li>
+</ol>
+<p>也就是說，<strong>新增一個內建模板 = 建一個目錄</strong>。不用改 C++、不用改 Makefile、不用改這份文件裡的任何清單：</p>
+<pre><code>mkdir -p templates/clib/src &amp;&amp; $EDITOR templates/clib/Makefile   # 內含 @NAME@
+make                                                             # dcap clib &lt;name&gt; 就能用了</code></pre>
+<p>Makefile 把 <code>templates/</code> 底下所有檔案列為 <code>.inc</code> 的相依，模板一改就重新產生、進而重編。產生出來的內容長這樣——一個模板一個 namespace，最後一張表把它們串起來：</p>
+<pre><code>namespace tpl1 {  // templates/cpp
+constexpr unsigned char kE2[] = {
 #embed "../templates/cpp/Makefile"
-    , 0};   // 尾端補 0 → C 字串</code></pre>
-<p>用 <code>unsigned char</code> 而非 <code>char</code>：範本檔含非 ASCII 的 UTF-8 位元組（README 是中文），存進有號 <code>char[]</code> 的 braced initializer 會 narrowing 而編譯失敗。寫出時再 <code>reinterpret_cast&lt;const char*&gt;</code>。</p>
-<p>內建模板寫出時會先建 <code>include/</code>、<code>src/</code>、<code>test/</code> 三個目錄再逐檔寫出；外部模板則走 <code>copy_dir()</code> 原樣遞迴複製。兩條路徑之後都只在新專案的 <code>Makefile</code>/<code>makefile</code> 內把 <code>@NAME@</code> 替換成專案名。範本與程式碼分離，且不需額外 codegen 工具，只靠 g++。</p>
+, 0};
+constexpr Entry kEntries[] = {
+    {"Makefile", kE2, sizeof kE2 - 1},
+    // ...
+};
+}  // namespace tpl1
+
+constexpr Template kTemplates[] = {
+    {"c",   tpl0::kEntries, sizeof tpl0::kEntries / sizeof(Entry)},
+    {"cpp", tpl1::kEntries, sizeof tpl1::kEntries / sizeof(Entry)},
+};</code></pre>
+<table>
+  <tr><th>選擇</th><th>原因</th></tr>
+  <tr><td><code>unsigned char</code> 而非 <code>char</code></td><td>範本檔含非 ASCII 的 UTF-8 位元組（README 是中文），存進有號 <code>char[]</code> 的 braced initializer 會 narrowing 而編譯失敗。寫出時再 <code>reinterpret_cast&lt;const char*&gt;</code>。</td></tr>
+  <tr><td>補尾端 0，另記真正長度</td><td>補 0 讓<strong>空檔案</strong>仍是合法 initializer（<code>{}</code> 在 C++ 不合法）；記長度讓內容含 NUL 的二進位檔也能原樣寫出。空檔案由產生器直接寫成 <code>{0}</code>，連 <code>#embed</code> 都不發。</td></tr>
+  <tr><td>路徑相對於 <code>build/</code></td><td><code>.inc</code> 產生在那裡；<code>#embed "..."</code> 跟 <code>#include "..."</code> 一樣先找所在檔案的目錄。</td></tr>
+  <tr><td>輸出排序過（目錄與檔案）</td><td>模板沒變時重新產生的位元組完全相同，不會無謂觸發重編。檔名含 <code>"</code> 或 <code>\</code>、目錄名含空白都會直接報錯，而不是吐出編不過的程式碼；<code>templates/</code> 不存在或空的也直接失敗（空的 <code>kTemplates[]</code> 在 C++ 不合法）。</td></tr>
+</table>
+<p>寫出時依表中的相對路徑自動建立需要的子目錄，所以模板多一層 <code>docs/deep/note.md</code> 也能正常運作。唯一的限制是 <code>find -type f</code> 只列檔案，內建模板裡的<strong>空目錄</strong>不會保留（要保留就放個 <code>.gitkeep</code>）；外部模板走 <code>copy_dir()</code> 原樣遞迴複製，沒有這個限制。兩條路徑之後都只在新專案的 <code>Makefile</code>/<code>makefile</code> 內把 <code>@NAME@</code> 替換成專案名。</p>
+<p>好處：範本與程式碼分離、可直接檢視 diff、清單不可能與實際檔案脫節。代價是多了一個 <code>sh</code> 產生步驟——工具鏈是 <strong>gcc/g++ + git + make + sh</strong>，仍然不需要 CMake 或任何 codegen 套件。</p>
 
 <h2>模板解析（三種來源）</h2>
 <p>順序是<strong>路徑式 &gt; 具名外部 &gt; 內建</strong>：</p>
@@ -48,7 +77,7 @@
   <tr><th>順位</th><th>形式</th><th>判定</th><th>解析</th></tr>
   <tr><td>1</td><td>路徑式</td><td>開頭是 <code>.</code> 或 <code>/</code></td><td>相對 cwd 或絕對路徑（<code>weakly_canonical</code>）</td></tr>
   <tr><td>2</td><td>具名外部</td><td>裸名，且 <code>$DCAP_TEMPLATES/&lt;名&gt;</code> 底下有 Makefile</td><td>用該目錄；<strong>同名時蓋過內建 c/cpp</strong></td></tr>
-  <tr><td>3</td><td>內建</td><td>裸名 <code>c</code> / <code>cpp</code></td><td>直接用 <code>#embed</code> 內嵌內容，不查檔案系統</td></tr>
+  <tr><td>3</td><td>內建</td><td>裸名，且在內建登錄表裡</td><td>直接用 <code>#embed</code> 內嵌內容，不查檔案系統</td></tr>
 </table>
 <p>合法模板 = 該目錄底下有 <code>Makefile</code> 或 <code>makefile</code>。<code>print_usage()</code> 也會掃 <code>$DCAP_TEMPLATES</code>，把符合這個判定的目錄列進 usage 文字。目標目錄已存在 → 直接報錯離開，不覆蓋。</p>
 
@@ -80,7 +109,7 @@
 <p>來源 <code>SRC := $(wildcard src/*.cpp)</code>（C 版 <code>src/*.c</code>）→ <strong>全部</strong>編進同一個產物，沒有命名規則。<code>lib/lib$(NAME).so</code> 是指向 <code>../main</code> 的 symlink，讓 <code>-Llib -l$(NAME)</code> 能用；測試就是這樣連的（配 <code>-Wl,-rpath,'$$ORIGIN/../lib'</code>）。targets：<code>all</code> / <code>run</code> / <code>test</code> / <code>debug</code> / <code>release</code> / <code>install</code> / <code>fmt</code> / <code>clean</code>。<code>install</code> 把那唯一的產物裝成 <code>$(PREFIX)/lib/lib$(NAME).so</code>，再讓 <code>$(PREFIX)/bin/$(NAME)</code> 成為指向它的 symlink。用 <code>ifeq ($(origin CXX),default)</code> 強制 g++/gcc，但允許 <code>make CXX=...</code> 覆蓋。include 就是 <code>-Iinclude</code>；C 模板另外連結 <code>-lm -lpthread</code>。</p>
 
 <h2>建置本體</h2>
-<p><code>Makefile</code> 用 <code>g++ -std=c++20 -O2 -Wall -Wextra</code>，<code>SRC := $(wildcard src/*.cpp)</code>。<code>TEMPLATE_FILES := $(shell find templates -type f)</code> 列為 <code>bin/dcap</code> 的相依，改任何一個範本檔都會觸發重編（因為它們被 <code>#embed</code> 進來）。產出 <code>bin/dcap</code>。不使用 CMake、不 static、無安裝腳本。</p>
+<p><code>Makefile</code> 用 <code>g++ -std=c++20 -O2 -Wall -Wextra</code>，<code>SRC := $(wildcard src/*.cpp)</code>。<code>TEMPLATE_FILES := $(shell find templates -type f)</code> 列為 <code>build/builtin_tables.inc</code> 的相依，所以改任何一個範本檔都會重新產生登錄表、進而重編。編譯時加 <code>-Ibuild</code> 讓 <code>builtin.cpp</code> 找得到產生的 <code>.inc</code>。<code>.DELETE_ON_ERROR:</code> 確保產生失敗時不會留下半截檔案。產出 <code>bin/dcap</code>；<code>make clean</code> 清掉 <code>bin/</code> 與 <code>build/</code>。不使用 CMake、不 static、無安裝腳本。</p>
 
 <footer>← <a href="index.html">回總覽</a></footer>
 </div>

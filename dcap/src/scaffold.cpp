@@ -26,7 +26,7 @@ void print_usage() {
                 extra += ", " + e.path().filename().string();
     std::cerr <<
         "usage: dcap <template> <name>\n"
-        "  <template>  c | cpp (built-in)" << extra << "\n"
+        "  <template>  " << builtin_names() << " (built-in)" << extra << "\n"
         "              or a path to a template dir (./x, ../x, /abs)\n"
         "  <name>      new project directory to create\n"
         "A template is a directory containing a Makefile.\n"

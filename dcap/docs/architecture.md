@@ -14,13 +14,12 @@
 |----|------|
 | `src/main.cpp` | 進入點；解析 `argv`（`<template> <name>`）並派發到 scaffold |
 | `src/scaffold.{hpp,cpp}` | 模板解析順序 → 原樣複製 + 只在 `Makefile`/`makefile` 內替換 `@NAME@` + `git init`；複製時跳過 `.git`；`print_usage()` |
-| `src/builtin.{hpp,cpp}` | 內建模板的派發（`is_builtin` / `write_builtin`） |
-| `src/builtin_c.cpp` | 以 `#embed` 內嵌 c 模板的 8 個檔並寫出 |
-| `src/builtin_cpp.cpp` | 以 `#embed` 內嵌 cpp 模板的 8 個檔並寫出 |
+| `src/builtin.{hpp,cpp}` | 內建模板：`#include` 產生出來的登錄表，查表後逐檔寫出（含建子目錄） |
 | `src/paths.{hpp,cpp}` | `DCAP_TEMPLATES` 讀取與路徑正規化（`weakly_canonical`） |
 | `src/util.{hpp,cpp}` | 檔案 helper、`@NAME@` 替換、`std::system` 包裝 |
+| `tools/gen-embed.sh` | 掃 `templates/` 產生整份內建模板登錄表，由 Makefile 呼叫 |
 
-c / cpp 各自一個 `builtin_*.cpp`，是為了讓每檔留在 150 行內——模板檔數變多時只會往那兩檔加。
+**C++ 裡沒有任何地方寫死模板名稱。**`builtin.cpp` 只認得「登錄表」這個概念——`is_builtin()` 是查表、`write_builtin()` 是查表後逐檔寫出、`builtin_names()` 把表裡的名字串起來給 usage 用。要有哪些內建模板，完全由 build 時掃到什麼決定。
 
 ## 模板嵌入：`#embed`
 
@@ -34,17 +33,53 @@ templates/
   c/include/lib.h      c/src/lib.c      c/src/main.c      c/test/test.c
 ```
 
-`src/builtin_c.cpp` / `src/builtin_cpp.cpp` 於編譯期用 C++20 的 `#embed`（GCC 15+）把每個檔案嵌入成 `constexpr unsigned char[]`：
+### 登錄表是產生的，不是手寫的
 
-```cpp
-constexpr unsigned char kMakefile[] = {
-#embed "../templates/cpp/Makefile"
-    , 0};   // 尾端補 0 → C 字串
+`#embed` 是預處理指令，檔名必須是編譯期字面值——C++ 沒有任何方式在編譯期列舉目錄。所以「自動偵測」只能發生在 build 時：`tools/gen-embed.sh` 掃 `templates/`，把整份登錄表寫成 `build/builtin_tables.inc`，`src/builtin.cpp` 再 `#include` 它。
+
+自動偵測是**兩層**的：
+
+1. **哪些目錄是內建模板** — `templates/` 底下每個含 `Makefile` 的目錄各成一個。判定規則跟 dcap 執行期認外部模板的規則是同一條，所以行為一致。沒有 Makefile 的目錄會被跳過並在 build 時印一行提示（而不是默默出貨一個不能用的東西）。
+2. **每個模板裡有哪些檔** — 該目錄底下遞迴的所有檔案。
+
+也就是說，**新增一個內建模板 = 建一個目錄**。不用改 C++、不用改 Makefile、不用改這份文件裡的任何清單：
+
+```sh
+mkdir -p templates/clib/src && $EDITOR templates/clib/Makefile   # 內含 @NAME@
+make                                                             # dcap clib <name> 就能用了
 ```
 
-用 `unsigned char` 而非 `char`：範本檔含非 ASCII 的 UTF-8 位元組（README 是中文），存進有號 `char[]` 的 braced initializer 會 narrowing 而編譯失敗。寫出時再 `reinterpret_cast<const char*>`。
+Makefile 把 `templates/` 底下所有檔案列為 `.inc` 的相依，所以模板一改就重新產生、進而重編。
 
-內建模板寫出時會先建 `include/`、`src/`、`test/` 三個目錄，再逐檔寫出；外部模板則走 `copy_dir()` 原樣遞迴複製。兩條路徑之後都只在新專案的 `Makefile`/`makefile` 內把 `@NAME@` 替換成專案名（其他檔案內容與所有檔名都不變）。好處：範本與程式碼分離、可直接檢視 diff、無需額外 codegen 工具（只靠 g++）。內建模板永遠可用，不需任何環境變數。
+產生出來的內容長這樣——一個模板一個 namespace，最後一張表把它們串起來：
+
+```cpp
+namespace tpl1 {  // templates/cpp
+constexpr unsigned char kE2[] = {
+#embed "../templates/cpp/Makefile"
+, 0};
+constexpr Entry kEntries[] = {
+    {"Makefile", kE2, sizeof kE2 - 1},
+    // ...
+};
+}  // namespace tpl1
+
+constexpr Template kTemplates[] = {
+    {"c",   tpl0::kEntries, sizeof tpl0::kEntries / sizeof(Entry)},
+    {"cpp", tpl1::kEntries, sizeof tpl1::kEntries / sizeof(Entry)},
+};
+```
+
+幾個刻意的選擇：
+
+- **`unsigned char` 而非 `char`**：範本檔含非 ASCII 的 UTF-8 位元組（README 是中文），存進有號 `char[]` 的 braced initializer 會 narrowing 而編譯失敗。寫出時再 `reinterpret_cast<const char*>`。
+- **補一個尾端 0，但另外記真正的長度**（`sizeof - 1`）。補 0 是為了讓**空檔案**仍是合法的 initializer（`{}` 在 C++ 不合法）；記長度則讓內容含 NUL 的二進位檔也能原樣寫出，不會被截斷。空檔案由產生器直接寫成 `{0}`，連 `#embed` 都不發。
+- **路徑相對於 `build/`**（`../templates/...`），因為 `.inc` 產生在那裡；`#embed "..."` 跟 `#include "..."` 一樣先找所在檔案的目錄。
+- 產生器輸出**排序過**（目錄與檔案都是），所以模板沒變時重新產生的位元組完全相同，不會無謂觸發重編；檔名含 `"` 或 `\`、或目錄名含空白，都會直接報錯，而不是吐出編不過的程式碼。`templates/` 不存在或裡面一個模板都沒有也是直接失敗——空的 `kTemplates[]` 在 C++ 不合法。
+
+寫出時依表中的相對路徑自動建立需要的子目錄，所以模板多一層 `docs/deep/note.md` 也能正常運作。唯一的限制是 `find -type f` 只列檔案，內建模板裡的**空目錄**不會保留（要保留就放個 `.gitkeep`）；外部模板走 `copy_dir()` 原樣遞迴複製，沒有這個限制。兩條路徑之後都只在新專案的 `Makefile`/`makefile` 內把 `@NAME@` 替換成專案名（其他檔案內容與所有檔名都不變）。
+
+好處：範本與程式碼分離、可直接檢視 diff、清單不可能與實際檔案脫節。代價是多了一個 `sh` 產生步驟——所以工具鏈是 **gcc/g++ + git + make + sh**，仍然不需要 CMake 或任何 codegen 套件。內建模板永遠可用，不需任何環境變數。
 
 ## 模板解析（三種來源）
 
@@ -54,7 +89,7 @@ constexpr unsigned char kMakefile[] = {
 |------|------|------|------|
 | 1 | 路徑式 | 開頭是 `.` 或 `/` | 相對呼叫 dcap 的 cwd 或絕對路徑（`weakly_canonical`） |
 | 2 | 具名外部 | 裸名，且 `$DCAP_TEMPLATES/<名>` 底下有 Makefile | 用該目錄；**同名時蓋過內建 c/cpp** |
-| 3 | 內建 | 裸名 `c` / `cpp` | 直接用 `#embed` 內嵌內容，不查檔案系統 |
+| 3 | 內建 | 裸名，且在內建登錄表裡 | 直接用 `#embed` 內嵌內容，不查檔案系統 |
 
 合法模板的判定 = 該目錄底下有 `Makefile` 或 `makefile`。找不到目錄或缺 Makefile/makefile → 報錯。`print_usage()` 也會掃 `$DCAP_TEMPLATES`，把符合這個判定的目錄列進 usage 文字。
 
@@ -103,4 +138,4 @@ extern "C" __attribute__((used, section(".interp"))) const char dcap_interp[] = 
 
 ## 建置本體
 
-`Makefile` 用 `g++ -std=c++20 -O2 -Wall -Wextra`，`SRC := $(wildcard src/*.cpp)`（本體原始碼都在單層 `src/`）。`TEMPLATE_FILES := $(shell find templates -type f)` 列為 `bin/dcap` 的相依，改任何一個範本檔都會觸發重編（因為它們被 `#embed` 進來）。產出 `bin/dcap`。不使用 CMake、不 static、無安裝腳本。
+`Makefile` 用 `g++ -std=c++20 -O2 -Wall -Wextra`，`SRC := $(wildcard src/*.cpp)`（本體原始碼都在單層 `src/`）。`TEMPLATE_FILES := $(shell find templates -type f)` 列為 `build/builtin_tables.inc` 的相依，所以改任何一個範本檔都會重新產生登錄表、進而重編。編譯時加 `-Ibuild` 讓 `builtin.cpp` 找得到產生的 `.inc`。`.DELETE_ON_ERROR:` 確保產生失敗時不會留下半截檔案給下一次 build 用。產出 `bin/dcap`；`make clean` 清掉 `bin/` 與 `build/`。不使用 CMake、不 static、無安裝腳本。

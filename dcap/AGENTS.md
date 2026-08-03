@@ -25,7 +25,8 @@ AGENTS.md（本檔，最頂）→ WORKFLOWS.md / INDEX.md → 各工作流入口
 
 ## 開發環境
 
-- **工具鏈**：gcc/g++（需 GCC 15+，支援 C++20 `#embed`）、git、make。不使用 CMake。
+- **工具鏈**：gcc/g++（需 GCC 15+，支援 C++20 `#embed`）、git、make、sh。不使用 CMake。
+- **內建模板登錄表是產生的**：`tools/gen-embed.sh` 於 build 時掃 `templates/`（每個含 Makefile 的目錄 = 一個內建模板），產出 `build/builtin_tables.inc`，`src/builtin.cpp` `#include` 它。**C++ 裡不准出現任何模板名稱**——新增內建模板 = 建目錄，別手寫 `#embed`、別在 `builtin.cpp` 或 usage 文字裡列名字。
 - **定位**：**POSIX/UNIX（以 Linux 為主），已放棄跨平台**——不再有 Windows 專屬處理（`#ifdef _WIN32`、`.exe`、`mingw32-make`、`-static`、安裝腳本皆已移除）。
 - **include 路徑**：產生的 Makefile 就是 `-Iinclude`（已移除 `DCAP_HOME`）。具名外部模板根目錄用 `DCAP_TEMPLATES`。
 - **產生的專案是「可執行的 .so」**：單一產物 `main`，以 `-shared -fPIC` + 內嵌 `.interp` + `-Wl,-e,dcap_main` 做到既可執行又可被連結。進入點的三個約束（不能 return、無 argc/argv、必須 `force_align_arg_pointer`）見 [docs/architecture.md](docs/architecture.md)——動模板前先讀。

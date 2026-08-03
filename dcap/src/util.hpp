@@ -5,6 +5,8 @@
 namespace dcap {
 
 bool ensure_dir(const std::string& path);
+// Create the directories leading up to a file path (no-op if there are none).
+bool ensure_parent_dir(const std::string& path);
 bool write_file(const std::string& path, const std::string& content);
 std::string read_file(const std::string& path); // "" if missing/empty
 bool path_exists(const std::string& path);
