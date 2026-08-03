@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>dcap — 使用指南</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="wrap">
+<header>
+  <h1>使用指南</h1>
+  <p class="tagline">安裝、指令、<code>DCAP_HOME</code> 與疑難排解。</p>
+  <nav>
+    <a href="index.html">總覽</a>
+    <a href="usage.html">使用指南</a>
+    <a href="architecture.html">設計說明</a>
+  </nav>
+</header>
+
+<h2>安裝</h2>
+<pre><code># UNIX / macOS
+make
+sudo ./install.sh            # 複製 bin/dcap → /usr/local/bin
+#   ./install.sh ~/bin       # 或指定其他目錄
+
+# Windows (MinGW)
+mingw32-make                 # 產出 bin\dcap.exe</code></pre>
+<p>Windows 上把 <code>bin</code> 加入 PATH，或把 <code>dcap.exe</code> 複製到已在 PATH 的目錄。</p>
+
+<h2>指令</h2>
+<h3>dcap new &lt;name&gt; — C++ 專案</h3>
+<p>建立 <code>&lt;name&gt;/</code>，含 <code>Makefile</code>、<code>main.cpp</code>、<code>.gitignore</code>，並執行 <code>git init</code>。Makefile 使用 <code>g++ -std=c++20</code>、<code>-I. -I$(DCAP_HOME)/cpp_libs</code>、<code>find</code> 遞迴搜尋、靜態連結、輸出 <code>bin/&lt;name&gt;</code>。</p>
+<h3>dcap new-c &lt;name&gt; — C 專案</h3>
+<p>同上，改用 <code>gcc -std=c11</code>、<code>-I$(DCAP_HOME)/c_libs</code>、連結 <code>-lm -lpthread</code>、搜尋 <code>.c</code>、範本 <code>main.c</code>。</p>
+<h3>dcap build — 建置並執行</h3>
+<p>檢查有 <code>Makefile</code>（無則報錯）；執行 <code>make -j4</code>（Windows：<code>mingw32-make -j4</code>）；成功後於 <code>bin/</code> 找產物並執行，印出退出碼。</p>
+
+<h2>DCAP_HOME：共用函式庫根目錄</h2>
+<table>
+  <tr><th>平台</th><th>預設</th></tr>
+  <tr><td>UNIX / macOS</td><td><code>~/dev/dcap</code></td></tr>
+  <tr><td>Windows</td><td><code>C:/dev/dcap</code></td></tr>
+</table>
+<p>覆蓋：<code>DCAP_HOME=/opt/libs dcap build</code> 或 <code>make DCAP_HOME=/opt/libs</code>。把共用標頭放進 <code>cpp_libs/</code> 或 <code>c_libs/</code> 即可直接 <code>#include</code>。目錄不存在也無妨。</p>
+
+<h2>疑難排解</h2>
+<table>
+  <tr><th>症狀</th><th>原因 / 解法</th></tr>
+  <tr><td>dcap.exe 一啟動就退出、無輸出</td><td>非 <code>-static</code> 版缺 MinGW DLL；用本專案 Makefile 重建即為靜態。</td></tr>
+  <tr><td>Windows 上 <code>find</code> 錯誤或找不到原始碼</td><td>mingw32-make 用到 <code>cmd.exe</code>。在 Git Bash 執行，或把 <code>C:\Program Files\Git\usr\bin</code> 放到 PATH 前段。</td></tr>
+  <tr><td>找不到 make</td><td>確認 <code>make</code>（UNIX）或 <code>mingw32-make</code>（Windows）在 PATH。</td></tr>
+  <tr><td>想換編譯器</td><td><code>make CXX=clang++</code> 或 <code>make CC=clang</code>；明確指定會覆蓋預設。</td></tr>
+</table>
+
+<footer>← <a href="index.html">回總覽</a></footer>
+</div>
+</body>
+</html>

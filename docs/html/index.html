@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>dcap — 輕量 C/C++ 建置工具</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="wrap">
+<header>
+  <h1>dcap <span class="pill">C/C++ scaffolding &amp; build</span></h1>
+  <p class="tagline">輕量、跨平台（Windows/MinGW + UNIX）的 CLI 工具，快速建立與建置純 C 或 C++ 的腳本式小專案。</p>
+  <nav>
+    <a href="index.html">總覽</a>
+    <a href="usage.html">使用指南</a>
+    <a href="architecture.html">設計說明</a>
+  </nav>
+</header>
+
+<h2>一分鐘上手</h2>
+<pre><code>make                 # 建置 dcap（Windows 用 mingw32-make）
+dcap new hello       # 建立 C++ 小專案 + git init
+cd hello
+dcap build           # 編譯並執行 → Hello, World! (C++)</code></pre>
+
+<h2>指令</h2>
+<table>
+  <tr><th>指令</th><th>作用</th></tr>
+  <tr><td><code>dcap new &lt;name&gt;</code></td><td>建立 C++ 專案（<code>g++ -std=c++20</code>）</td></tr>
+  <tr><td><code>dcap new-c &lt;name&gt;</code></td><td>建立 C 專案（<code>gcc -std=c11 -lm -lpthread</code>）</td></tr>
+  <tr><td><code>dcap build</code></td><td><code>make -j4</code> 後執行 <code>bin/</code> 內的產物</td></tr>
+  <tr><td><code>dcap help</code></td><td>顯示說明</td></tr>
+</table>
+
+<h2>特點</h2>
+<table>
+  <tr><td>只依賴</td><td>gcc/g++ + git + make（<strong>不用 CMake</strong>）</td></tr>
+  <tr><td>跨平台</td><td>保留 UNIX 慣例字串，執行期 <code>#ifdef _WIN32</code> + <code>std::filesystem</code> 偵測</td></tr>
+  <tr><td>模板即真檔</td><td>範本存於 <code>templates/</code>，以 C++20 <code>#embed</code> 編譯期嵌入</td></tr>
+  <tr><td>可攜產物</td><td>dcap 與產生的專案皆 <code>-static</code> 靜態連結</td></tr>
+  <tr><td>共用 lib</td><td>環境變數 <code>DCAP_HOME</code>（預設 <code>~/dev/dcap</code>、<code>C:/dev/dcap</code>）</td></tr>
+</table>
+
+<h2>下一步</h2>
+<p>
+  安裝、指令細節與疑難排解見 <a href="usage.html">使用指南</a>；
+  模組結構、<code>#embed</code> 嵌入機制與跨平台設計見 <a href="architecture.html">設計說明</a>。
+</p>
+
+<footer>dcap — 產生的 HTML 文件。原始 Markdown 見 <code>docs/</code>。</footer>
+</div>
+</body>
+</html>

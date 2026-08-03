@@ -1,0 +1,4 @@
+# Keep LF in the working tree on all platforms. The generated Makefiles and
+# #embed-ed templates are newline-sensitive, so avoid CRLF conversion.
+* text=auto eol=lf
+*.exe binary

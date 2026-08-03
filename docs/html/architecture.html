@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>dcap — 設計說明</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="wrap">
+<header>
+  <h1>設計說明</h1>
+  <p class="tagline">模組結構、<code>#embed</code> 嵌入、跨平台策略、靜態連結。</p>
+  <nav>
+    <a href="index.html">總覽</a>
+    <a href="usage.html">使用指南</a>
+    <a href="architecture.html">設計說明</a>
+  </nav>
+</header>
+
+<h2>模組結構（每檔 ≤150 行）</h2>
+<table>
+  <tr><th>檔</th><th>職責</th></tr>
+  <tr><td><code>src/main.cpp</code></td><td>進入點；解析 <code>argv[1]</code> 並派發</td></tr>
+  <tr><td><code>src/commands.{hpp,cpp}</code></td><td><code>cmd_new()</code>、<code>cmd_build()</code>、<code>print_usage()</code></td></tr>
+  <tr><td><code>src/templates.{hpp,cpp}</code></td><td><code>#embed</code> 嵌入範本並替換 <code>@NAME@</code></td></tr>
+  <tr><td><code>src/platform.{hpp,cpp}</code></td><td><code>make_program()</code>、<code>exe_suffix()</code>、<code>dcap_home()</code>、<code>run()</code></td></tr>
+  <tr><td><code>src/util.{hpp,cpp}</code></td><td><code>write_file()</code>、<code>ensure_dir()</code>、<code>path_exists()</code></td></tr>
+</table>
+<p>所有 OS 專屬分支收在 <code>platform.*</code>，其餘保持平台中立。</p>
+
+<h2>模板嵌入：#embed</h2>
+<p>範本存成 <code>templates/</code> 下的真實檔案（可正常編輯 / diff），編譯期用 C++20 的 <code>#embed</code>（GCC 15+）嵌入：</p>
+<pre><code>constexpr char kCppMakefile[] = {
+#embed "../templates/cpp/Makefile"
+    , 0};   // 尾端補 0 → C 字串</code></pre>
+<p>執行期把 <code>@NAME@</code> 替換成專案名。範本與程式碼分離，且不需額外 codegen 工具，只靠 g++。</p>
+
+<h2>跨平台策略</h2>
+<table>
+  <tr><th>面向</th><th>作法</th></tr>
+  <tr><td>make 程式</td><td>Windows 先試 <code>mingw32-make</code> 否則 <code>make</code>（反之亦然）</td></tr>
+  <tr><td>產物副檔名</td><td><code>exe_suffix()</code> + <code>find_binary()</code> 以 <code>std::filesystem</code> 找實際檔</td></tr>
+  <tr><td>共用 lib 路徑</td><td><code>DCAP_HOME</code> + Makefile 內 <code>ifeq ($(OS),Windows_NT)</code> 後援</td></tr>
+  <tr><td>執行子程序</td><td><code>std::system</code>；呼叫前 flush 自身 stdout 避免輸出交錯</td></tr>
+</table>
+
+<h2>靜態連結</h2>
+<p>dcap 本體與產生的專案都用 <code>-static</code>：dcap.exe 不依賴 <code>libstdc++-6.dll</code> / <code>libgcc_s_seh-1.dll</code>，產生的小工具也是單一可執行檔。</p>
+
+<h2>為何用 find</h2>
+<p><code>$(shell find . -name '*.cpp')</code> 做無限遞迴，新增檔案不用改 Makefile。Windows 上依賴 Git 附帶的 <code>find</code>/<code>sh</code>。</p>
+
+<footer>← <a href="index.html">回總覽</a></footer>
+</div>
+</body>
+</html>
