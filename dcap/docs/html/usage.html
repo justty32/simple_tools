@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>dcap — 使用指南</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="wrap">
+<header>
+  <h1>使用指南</h1>
+  <p class="tagline">建置與安裝、唯一指令、模板三種來源與疑難排解。</p>
+  <nav>
+    <a href="index.html">總覽</a>
+    <a href="usage.html">使用指南</a>
+    <a href="architecture.html">設計說明</a>
+  </nav>
+</header>
+
+<h2>建置 dcap 本體</h2>
+<p>需要 g++（GCC 15+，支援 C++20 與 <code>#embed</code>）與 make。不使用 CMake、不 static、無安裝腳本。</p>
+<pre><code>make                          # 產出 bin/dcap</code></pre>
+
+<h2>安裝</h2>
+<p>自行把本 repo 的 <code>bin/</code> 加入 PATH（dcap 執行檔本身也是這樣用）。在 <code>~/.bashrc</code> 或 <code>~/.zshrc</code> 加入下面這行（<strong>用絕對路徑</strong>，因為 rc 檔載入時 <code>$PWD</code> 不會是本目錄）：</p>
+<pre><code>export PATH="/絕對路徑/dcap/bin:$PATH"</code></pre>
+<p>沒有 install.sh、不 copy 到系統目錄。Windows 使用者請自行在 Git Bash / MinGW 環境裡想辦法。</p>
+
+<h2>唯一指令：dcap &lt;template&gt; &lt;name&gt;</h2>
+<p>把解析到的模板目錄底下的東西全部原樣（逐位元組）複製成 <code>./&lt;name&gt;/</code>，複製時跳過 <code>.git</code>，只在新專案的 <code>Makefile</code>/<code>makefile</code> 內把 <code>@NAME@</code> 替換成 <code>&lt;name&gt;</code>（其他檔案內容與所有檔名都不變），最後 <code>git init</code>。參數不足 → 印 usage 到 stderr 並回傳 1。沒有子指令、沒有 help 指令。</p>
+
+<h2>模板三種來源</h2>
+<h3>內建：c / cpp</h3>
+<p>以 C++20 <code>#embed</code> 編進執行檔，永遠可用，不需環境變數。<code>cpp</code> → <code>g++ -std=c++20 -I.</code>、搜尋 <code>.cpp</code>、範本 <code>main.cpp</code>；<code>c</code> → <code>gcc -std=c11 -I.</code>、連結 <code>-lm -lpthread</code>、搜尋 <code>.c</code>、範本 <code>main.c</code>。兩者都產生 <code>.gitignore</code>（<code>bin/</code>、<code>build/</code>、<code>*.o</code>）並 <code>git init</code>。</p>
+<h3>具名外部：$DCAP_TEMPLATES/&lt;名&gt;</h3>
+<p>設了 <code>DCAP_TEMPLATES</code> 時，c/cpp 以外裸名去 <code>$DCAP_TEMPLATES/&lt;名&gt;</code> 找；沒設 → 只有 c/cpp 可用。</p>
+<pre><code>DCAP_TEMPLATES=~/tpls dcap web api   # 用 ~/tpls/web 模板建立 ./api</code></pre>
+<h3>路徑式</h3>
+<p><code>&lt;template&gt;</code> 開頭是 <code>.</code> 或 <code>/</code>（<code>./x</code>、<code>../x</code>、<code>/abs/y</code>）→ 相對 cwd 或絕對路徑。<code>a/b</code> 這種含 <code>/</code> 但不以 <code>.</code>/<code>/</code> 開頭的<strong>不是</strong>路徑式，當裸名。</p>
+<pre><code>dcap ./my-template proj              # 用當前目錄下的 my-template</code></pre>
+<p>合法模板 = 該目錄底下有 <code>Makefile</code> 或 <code>makefile</code>。找不到目錄或缺 Makefile/makefile → 報錯（退出碼 1）。</p>
+
+<h2>建置 / 執行產生的專案</h2>
+<p>dcap 不再包裝建置，直接用產生的 Makefile：</p>
+<pre><code>cd &lt;name&gt;
+make        # 編譯 → bin/&lt;name&gt;
+make run    # 執行 ./bin/&lt;name&gt;
+make clean  # 移除 bin/</code></pre>
+<p>多檔專案：把更多 <code>.cpp</code>（或 <code>.c</code>）放進任何層級，<code>find</code> 自動納入，無需改 Makefile。</p>
+
+<h2>include 路徑</h2>
+<p>產生的 Makefile 的 include 就是 <code>INCLUDES := -I.</code>（已移除 <code>DCAP_HOME</code>，不再有 <code>cpp_libs</code>、<code>c_libs</code>）。C 模板仍連結 <code>-lm -lpthread</code>（數學 + 執行緒，基本款）。</p>
+
+<h2>疑難排解</h2>
+<table>
+  <tr><th>症狀</th><th>原因 / 解法</th></tr>
+  <tr><td>dcap 找不到</td><td>尚未把本 repo <code>bin/</code> 加入 PATH；用絕對路徑加到 <code>~/.bashrc</code> / <code>~/.zshrc</code>。</td></tr>
+  <tr><td><code>error: template not found</code></td><td>裸名非 c/cpp 且未設 <code>DCAP_TEMPLATES</code>，或路徑打錯。</td></tr>
+  <tr><td><code>error: not a template (no Makefile)</code></td><td>該目錄底下沒有 <code>Makefile</code> 或 <code>makefile</code>；模板必須含其一。</td></tr>
+  <tr><td>建置產生的專案找不到 make</td><td>確認 <code>make</code> 在 PATH。</td></tr>
+  <tr><td>想換編譯器</td><td><code>make CXX=clang++</code> 或 <code>make CC=clang</code>；明確指定會覆蓋預設。</td></tr>
+</table>
+
+<footer>← <a href="index.html">回總覽</a></footer>
+</div>
+</body>
+</html>
