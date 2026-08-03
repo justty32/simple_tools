@@ -115,7 +115,14 @@ ln -sf ../lib/lib<name>.so ~/.local/bin/<name>
 
 ## 平台
 
-**Linux / ELF / x86-64。** dcap-2 本體（`std::filesystem` + `#embed`）本身沒什麼平台包袱，但它**產生的專案**綁死在 ELF 上：`.interp`／PT_INTERP、`-Wl,-soname`、`readelf`、以及 `force_align_arg_pointer` 那條 x86-64 的 RSP 假設，在 macOS（Mach-O）或 Windows（PE）都不成立。換成 CMake 沒有改變這件事——擋在跨平台前面的從來不是 make，是那個「可執行的 .so」把戲。
+**Linux / ELF / x86-64。** dcap-2 本體（`std::filesystem` + `#embed`）本身沒什麼平台包袱，但它**產生的專案**綁死在 ELF 上：`.interp`／PT_INTERP、`-Wl,-soname`、`readelf`、以及 `force_align_arg_pointer` 那條 x86-64 的 RSP 假設，在 macOS（Mach-O）或 Windows（PE）都不成立。換成 CMake 沒有改變這件事——擋在跨平台前面的從來不是 make，是那個「可執行的 .so」把戲。這是刻意的取捨，不打算修。
+
+### WSL2
+
+可以用：WSL2 是真的 Linux kernel + ELF loader + glibc，上面那套全部成立。但那是「在 Windows 上跑 Linux」，產物仍然是 ELF，Windows 端不能直接執行。兩個地雷：
+
+- **專案別放在 `/mnt/c/...`**。build 最後那個 `cmake -E create_symlink` 在 drvfs 上會失敗（不支援建 symlink），`/mnt/c` 的權限模型也讓 exec bit 形同虛設。放在 WSL 自己的檔案系統（`~/` 底下）就沒事，也快很多。
+- **ARM 版 Windows 的 WSL2 不行**：那是 aarch64，`force_align_arg_pointer` 是 x86 專屬 attribute，那條 RSP 假設不存在。
 
 ## 授權
 
