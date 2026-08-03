@@ -10,7 +10,7 @@
 <div class="wrap">
 <header>
   <h1>使用指南</h1>
-  <p class="tagline">建置與安裝、唯一指令、模板三種來源與疑難排解。</p>
+  <p class="tagline">建置與安裝、唯一指令、模板三種來源、產生的專案與疑難排解。</p>
   <nav>
     <a href="index.html">總覽</a>
     <a href="usage.html">使用指南</a>
@@ -28,37 +28,90 @@
 <p>沒有 install.sh、不 copy 到系統目錄。Windows 使用者請自行在 Git Bash / MinGW 環境裡想辦法。</p>
 
 <h2>唯一指令：dcap &lt;template&gt; &lt;name&gt;</h2>
-<p>把解析到的模板目錄底下的東西全部原樣（逐位元組）複製成 <code>./&lt;name&gt;/</code>，複製時跳過 <code>.git</code>，只在新專案的 <code>Makefile</code>/<code>makefile</code> 內把 <code>@NAME@</code> 替換成 <code>&lt;name&gt;</code>（其他檔案內容與所有檔名都不變），最後 <code>git init</code>。參數不足 → 印 usage 到 stderr 並回傳 1。沒有子指令、沒有 help 指令。</p>
+<p>把解析到的模板目錄底下的東西全部原樣（逐位元組）複製成 <code>./&lt;name&gt;/</code>，複製時跳過 <code>.git</code>，只在新專案的 <code>Makefile</code>/<code>makefile</code> 內把 <code>@NAME@</code> 替換成 <code>&lt;name&gt;</code>（其他檔案內容與所有檔名都不變），最後 <code>git init</code>。參數不足 → 印 usage 到 stderr 並回傳 1。<code>&lt;name&gt;</code> 已存在 → 報錯，不覆蓋。沒有子指令、沒有 help 指令。usage 文字還會把 <code>$DCAP_TEMPLATES</code> 底下找得到的具名模板一併列出。</p>
 
 <h2>模板三種來源</h2>
+<p>解析順序：<strong>路徑式（<code>.</code> / <code>/</code> 開頭）&gt; <code>$DCAP_TEMPLATES/&lt;名&gt;</code> &gt; 內建</strong>。</p>
 <h3>內建：c / cpp</h3>
-<p>以 C++20 <code>#embed</code> 編進執行檔，永遠可用，不需環境變數。<code>cpp</code> → <code>g++ -std=c++20 -I.</code>、搜尋 <code>.cpp</code>、範本 <code>main.cpp</code>；<code>c</code> → <code>gcc -std=c11 -I.</code>、連結 <code>-lm -lpthread</code>、搜尋 <code>.c</code>、範本 <code>main.c</code>。兩者都產生 <code>.gitignore</code>（<code>bin/</code>、<code>build/</code>、<code>*.o</code>）並 <code>git init</code>。</p>
+<p>以 C++20 <code>#embed</code> 編進執行檔，永遠可用，不需環境變數。<code>cpp</code> → <code>g++ -std=c++20 -O2 -Wall -Wextra -Iinclude</code>；<code>c</code> → <code>gcc -std=c11 -O2 -Wall -Wextra -Iinclude</code> 並連結 <code>-lm -lpthread</code>。兩者產生的都是<strong>單一產物</strong>專案——一個既可執行、又可被連結的 <code>main</code>（見下節）並 <code>git init</code>。</p>
 <h3>具名外部：$DCAP_TEMPLATES/&lt;名&gt;</h3>
-<p>設了 <code>DCAP_TEMPLATES</code> 時，c/cpp 以外裸名去 <code>$DCAP_TEMPLATES/&lt;名&gt;</code> 找；沒設 → 只有 c/cpp 可用。</p>
+<p>設了 <code>DCAP_TEMPLATES</code> 時，裸名會<strong>先</strong>去 <code>$DCAP_TEMPLATES/&lt;名&gt;</code> 找；找到（且含 Makefile）就用它，因此在那裡放叫 <code>c</code>／<code>cpp</code> 的模板會<strong>蓋掉同名內建模板</strong>。沒設 → 只有 c/cpp 可用。</p>
 <pre><code>DCAP_TEMPLATES=~/tpls dcap web api   # 用 ~/tpls/web 模板建立 ./api</code></pre>
 <h3>路徑式</h3>
 <p><code>&lt;template&gt;</code> 開頭是 <code>.</code> 或 <code>/</code>（<code>./x</code>、<code>../x</code>、<code>/abs/y</code>）→ 相對 cwd 或絕對路徑。<code>a/b</code> 這種含 <code>/</code> 但不以 <code>.</code>/<code>/</code> 開頭的<strong>不是</strong>路徑式，當裸名。</p>
 <pre><code>dcap ./my-template proj              # 用當前目錄下的 my-template</code></pre>
 <p>合法模板 = 該目錄底下有 <code>Makefile</code> 或 <code>makefile</code>。找不到目錄或缺 Makefile/makefile → 報錯（退出碼 1）。</p>
 
+<h2>產生出來的專案：一個檔案，兩種身分</h2>
+<p>內建 c / cpp 模板 <code>make</code> 出來的是<strong>單一產物</strong> <code>main</code>，它同時是可執行檔與 shared library：</p>
+<pre><code>./main                                   # 直接執行
+gcc yours.c -Llib -l&lt;name&gt; -o yours      # 當函式庫連結
+dlopen("/path/to/main", RTLD_NOW)        # 或動態載入</code></pre>
+<p>作法是把它以 <code>-shared -fPIC</code> 連結成 .so，再內嵌一個 <code>.interp</code> 段指向系統的 dynamic loader（PT_INTERP），並用 <code>-Wl,-e,dcap_main</code> 指定進入點；<code>-Wl,-soname</code> 讓它能被連結。<code>lib/lib&lt;name&gt;.so</code> 只是指向 <code>../main</code> 的 symlink，好讓 <code>-Llib -l&lt;name&gt;</code> 找得到。</p>
+<p>loader 路徑由 Makefile 從 <code>/bin/sh</code> 的 <code>.interp</code> 自動偵測（glibc、musl 都適用）；偵測失敗時自己指定：<code>make INTERP=/lib64/ld-linux-x86-64.so.2</code>。</p>
+<pre><code>&lt;name&gt;/
+├── Makefile           # 唯一被替換 @NAME@ 的檔
+├── README.md
+├── .clang-format
+├── .gitignore         # main、test/test、lib/、build/、*.o
+├── include/lib.hpp    # C 版為 lib.h — 公開標頭
+├── src/lib.cpp        # C 版為 lib.c — 實作
+├── src/main.cpp       # C 版為 main.c — 進入點 dcap_main
+└── test/test.cpp      # C 版為 test.c</code></pre>
+<table>
+  <tr><th>路徑</th><th>角色</th></tr>
+  <tr><td><code>include/</code></td><td>公開標頭，他人以 <code>-Iinclude</code> 引用</td></tr>
+  <tr><td><code>src/*.cpp</code></td><td><strong>全部</strong>編進同一個產物，沒有命名規則；新增檔案直接放進 <code>src/</code></td></tr>
+  <tr><td><code>test/</code></td><td>測試 → <code>test/test</code>，連結產物本身</td></tr>
+</table>
+
+<h2>寫進入點要注意</h2>
+<p><code>dcap_main</code> 不是普通的 <code>main()</code>：</p>
+<table>
+  <tr><th>約束</th><th>原因</th></tr>
+  <tr><td>不能 return</td><td>沒有 crt0 接手，必須自己呼叫 <code>exit()</code></td></tr>
+  <tr><td>拿不到 argc/argv</td><td>需要的話讀 <code>/proc/self/cmdline</code></td></tr>
+  <tr><td>必須掛 <code>__attribute__((force_align_arg_pointer))</code></td><td>ELF entry point 進來時 RSP 是 16-byte 對齊，但函式 prologue 預期的是「call 之後」的 <code>RSP % 16 == 8</code>；差這 8 bytes 會讓任何對齊的 SSE spill 直接 segfault（例如 <code>std::cout &lt;&lt; some_int</code> 或 <code>printf("%f", x)</code>）</td></tr>
+</table>
+<p>模板已經掛好了，改寫進入點時別拿掉。其他函式照常寫，完全不受影響。</p>
+
 <h2>建置 / 執行產生的專案</h2>
-<p>dcap 不再包裝建置，直接用產生的 Makefile：</p>
 <pre><code>cd &lt;name&gt;
-make        # 編譯 → bin/&lt;name&gt;
-make run    # 執行 ./bin/&lt;name&gt;
-make clean  # 移除 bin/</code></pre>
-<p>多檔專案：把更多 <code>.cpp</code>（或 <code>.c</code>）放進任何層級，<code>find</code> 自動納入，無需改 Makefile。</p>
+make            # 建 main（+ lib/lib&lt;name&gt;.so symlink）
+make run        # 執行 ./main
+make test       # 建置並執行 test/test
+make debug      # clean 後以 -g -O0 重建
+make release    # 同 all
+make install    # 裝到 PREFIX（預設 /usr/local）
+make fmt        # clang-format -i 格式化
+make clean      # 移除 lib/、main、test/test、*.o</code></pre>
+<p><code>make install</code> 把那唯一的產物裝成 <code>$(PREFIX)/lib/lib&lt;name&gt;.so</code>，再讓 <code>$(PREFIX)/bin/&lt;name&gt;</code> 成為指向它的 symlink——一份檔案，兩個入口。換前綴：<code>make install PREFIX=~/.local</code>。LSP 用的 <code>compile_commands.json</code> 可用 <code>bear -- make</code> 產生。</p>
 
 <h2>include 路徑</h2>
-<p>產生的 Makefile 的 include 就是 <code>INCLUDES := -I.</code>（已移除 <code>DCAP_HOME</code>，不再有 <code>cpp_libs</code>、<code>c_libs</code>）。C 模板仍連結 <code>-lm -lpthread</code>（數學 + 執行緒，基本款）。</p>
+<p>產生的 Makefile 的 include 就是 <code>-Iinclude</code>（已移除 <code>DCAP_HOME</code>，不再有 <code>cpp_libs</code>、<code>c_libs</code>）。C 模板另外連結 <code>-lm -lpthread</code>（數學 + 執行緒，基本款）。</p>
+
+<h2>範例</h2>
+<pre><code>dcap cpp hello &amp;&amp; cd hello
+make run
+# 2 + 3 = 5
+make test
+# all tests passed
+file main
+# main: ELF 64-bit LSB shared object, ..., interpreter /lib64/ld-linux-x86-64.so.2</code></pre>
 
 <h2>疑難排解</h2>
 <table>
   <tr><th>症狀</th><th>原因 / 解法</th></tr>
   <tr><td>dcap 找不到</td><td>尚未把本 repo <code>bin/</code> 加入 PATH；用絕對路徑加到 <code>~/.bashrc</code> / <code>~/.zshrc</code>。</td></tr>
-  <tr><td><code>error: template not found</code></td><td>裸名非 c/cpp 且未設 <code>DCAP_TEMPLATES</code>，或路徑打錯。</td></tr>
+  <tr><td><code>error: template not found</code></td><td>裸名非 c/cpp 且 <code>$DCAP_TEMPLATES</code> 底下沒有，或路徑打錯。</td></tr>
   <tr><td><code>error: not a template (no Makefile)</code></td><td>該目錄底下沒有 <code>Makefile</code> 或 <code>makefile</code>；模板必須含其一。</td></tr>
+  <tr><td><code>error: '&lt;name&gt;' already exists</code></td><td>目標目錄已存在；dcap 不覆蓋，換名或先移除。</td></tr>
+  <tr><td>用 c/cpp 卻長得不像內建模板</td><td><code>$DCAP_TEMPLATES</code> 底下有同名模板會蓋掉內建；unset 該變數或改名。</td></tr>
+  <tr><td><code>cannot detect the dynamic loader</code></td><td>從 <code>/bin/sh</code> 讀不到 <code>.interp</code>；改用 <code>make INTERP=/lib64/ld-linux-x86-64.so.2</code>。</td></tr>
+  <tr><td><code>./main</code> 執行時 <code>required file not found</code></td><td>內嵌的 loader 路徑不對；用 <code>readelf -p .interp main</code> 對照 <code>readelf -p .interp /bin/sh</code>，再 <code>make INTERP=...</code> 重建。</td></tr>
+  <tr><td>改了進入點之後 <code>./main</code> segfault</td><td>進入點少了 <code>force_align_arg_pointer</code>，或 return 了而沒呼叫 <code>exit()</code>。</td></tr>
   <tr><td>建置產生的專案找不到 make</td><td>確認 <code>make</code> 在 PATH。</td></tr>
+  <tr><td><code>make fmt</code> 失敗</td><td>需要 <code>clang-format</code> 在 PATH（模板附了 <code>.clang-format</code>）。</td></tr>
   <tr><td>想換編譯器</td><td><code>make CXX=clang++</code> 或 <code>make CC=clang</code>；明確指定會覆蓋預設。</td></tr>
 </table>
 

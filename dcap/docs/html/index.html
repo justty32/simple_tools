@@ -21,7 +21,7 @@
 <h2>一分鐘上手</h2>
 <pre><code>make                       # 建置 dcap → bin/dcap，然後自行把 bin/ 加入 PATH
 dcap cpp hello             # 用內建 cpp 模板建立 ./hello（並 git init）
-cd hello &amp;&amp; make run       # → Hello, World! (C++)</code></pre>
+cd hello &amp;&amp; make run       # → 2 + 3 = 5</code></pre>
 
 <h2>唯一指令</h2>
 <pre><code>dcap &lt;template&gt; &lt;name&gt;</code></pre>
@@ -30,19 +30,20 @@ cd hello &amp;&amp; make run       # → Hello, World! (C++)</code></pre>
 <h2>模板三種來源</h2>
 <table>
   <tr><th>來源</th><th>說明</th></tr>
-  <tr><td>內建</td><td><code>c</code>（<code>gcc -std=c11 -lm -lpthread</code>）/ <code>cpp</code>（<code>g++ -std=c++20</code>），以 <code>#embed</code> 編進執行檔，永遠可用</td></tr>
-  <tr><td>具名外部</td><td>設了 <code>DCAP_TEMPLATES</code> 時，c/cpp 以外裸名去 <code>$DCAP_TEMPLATES/&lt;名&gt;</code> 找</td></tr>
   <tr><td>路徑式</td><td><code>&lt;template&gt;</code> 開頭是 <code>.</code> 或 <code>/</code>（<code>./x</code>、<code>../x</code>、<code>/abs/y</code>）→ 相對 cwd 或絕對路徑；<code>a/b</code> 這種不以 <code>.</code>/<code>/</code> 開頭的當裸名</td></tr>
+  <tr><td>具名外部</td><td>設了 <code>DCAP_TEMPLATES</code> 時，裸名先去 <code>$DCAP_TEMPLATES/&lt;名&gt;</code> 找；同名時<strong>蓋過</strong>內建 c/cpp</td></tr>
+  <tr><td>內建</td><td><code>c</code>（<code>gcc -std=c11 -lm -lpthread</code>）/ <code>cpp</code>（<code>g++ -std=c++20</code>），以 <code>#embed</code> 編進執行檔，永遠可用</td></tr>
 </table>
-<p>合法模板 = 該目錄底下有 <code>Makefile</code> 或 <code>makefile</code>。</p>
+<p>合法模板 = 該目錄底下有 <code>Makefile</code> 或 <code>makefile</code>。解析順序即上表由上而下。</p>
 
 <h2>特點</h2>
 <table>
   <tr><td>定位</td><td>POSIX-only（以 Linux 為主），<strong>已放棄跨平台</strong></td></tr>
-  <tr><td>只依賴</td><td>gcc/g++ + git + make（<strong>不用 CMake</strong>）</td></tr>
+  <tr><td>只依賴</td><td>gcc/g++ + git + make（<strong>不用 CMake</strong>；<code>make fmt</code> 另需 clang-format）</td></tr>
   <tr><td>內建模板即真檔</td><td>範本存於 <code>templates/</code>，以 C++20 <code>#embed</code> 編譯期嵌入</td></tr>
-  <tr><td>產生的專案</td><td>用 <code>make</code> / <code>make run</code> / <code>make clean</code> 自行建置；輸出 <code>bin/&lt;name&gt;</code>（無 <code>.exe</code>）</td></tr>
-  <tr><td>include</td><td><code>INCLUDES := -I.</code>（已移除 <code>DCAP_HOME</code>）；C 模板連結 <code>-lm -lpthread</code></td></tr>
+  <tr><td>產生的專案</td><td><strong>單一產物</strong> <code>main</code>：既能 <code>./main</code> 執行，也能被 <code>-l&lt;name&gt;</code> 連結或 <code>dlopen</code></td></tr>
+  <tr><td>佈局</td><td><code>include/</code> 公開標頭、<code>src/</code> 全部原始碼（無命名規則）、<code>test/</code> 測試</td></tr>
+  <tr><td>include</td><td><code>-Iinclude</code>（已移除 <code>DCAP_HOME</code>）；C 模板連結 <code>-lm -lpthread</code></td></tr>
 </table>
 
 <h2>下一步</h2>

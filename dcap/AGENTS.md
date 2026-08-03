@@ -18,7 +18,7 @@ AGENTS.md（本檔，最頂）→ WORKFLOWS.md / INDEX.md → 各工作流入口
 - **README**＝初入一個資料夾**先讀的入口／導引**；**INDEX**＝**描述該資料夾頂層結構**的索引。小資料夾兩者合一，大了才分出獨立 INDEX。
 - **durable 知識歸到它所屬的那一層／那個工作流**，絕不往上堆——所以 AGENTS.md 才這麼薄。要某主題的細節，順著上面的樹往下走，不在本檔找。
 - **鐵律（always-on，任何工作流任何時候都遵守）**：
-  1. 重構/整理必須**不改變原意**（行為不變、改完跑驗證：以 `make` build 並端對端跑 `dcap cpp demo && cd demo && make run`，應印出 Hello World；無 lint）。
+  1. 重構/整理必須**不改變原意**（行為不變、改完跑驗證：以 `make` build 並端對端跑 `dcap cpp demo && cd demo && make run`，應印出 `2 + 3 = 5`；再跑 `make test` 應印出 `all tests passed`；無 lint）。
   2. **未經確認不 push、不開新工作**（commit 到主分支是慣例，push 先確認）。
   3. 各工作流的**具體流程在它自己的入口檔**，不在頂層。
 - **[DEV-GUIDE.md](wf/DEV-GUIDE.md) 是被動參考**（結構整理原則 + 四級成長軌跡）——**只在你要重構/整理結構時才取用**，不貫穿日常每個動作。只在**碰原始碼**時適用的**程式碼慣例 + 導航 index 維護鏈**在 `common/conventions`（由**開發 flavor 包**提供）。
@@ -27,7 +27,8 @@ AGENTS.md（本檔，最頂）→ WORKFLOWS.md / INDEX.md → 各工作流入口
 
 - **工具鏈**：gcc/g++（需 GCC 15+，支援 C++20 `#embed`）、git、make。不使用 CMake。
 - **定位**：**POSIX/UNIX（以 Linux 為主），已放棄跨平台**——不再有 Windows 專屬處理（`#ifdef _WIN32`、`.exe`、`mingw32-make`、`-static`、安裝腳本皆已移除）。
-- **include 路徑**：產生的 Makefile 就是 `INCLUDES := -I.`（已移除 `DCAP_HOME`）。具名外部模板根目錄用 `DCAP_TEMPLATES`。
+- **include 路徑**：產生的 Makefile 就是 `-Iinclude`（已移除 `DCAP_HOME`）。具名外部模板根目錄用 `DCAP_TEMPLATES`。
+- **產生的專案是「可執行的 .so」**：單一產物 `main`，以 `-shared -fPIC` + 內嵌 `.interp` + `-Wl,-e,dcap_main` 做到既可執行又可被連結。進入點的三個約束（不能 return、無 argc/argv、必須 `force_align_arg_pointer`）見 [docs/architecture.md](docs/architecture.md)——動模板前先讀。
 
 ## 主工作流（活狀態：進度 / 待測 / 信件）
 

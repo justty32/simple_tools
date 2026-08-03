@@ -1,60 +1,67 @@
-# Hybrid C++ project: builds an executable `main` and a library (.a + .so).
-# @NAME@ is filled in by dcap (only this Makefile is patched).
+# @NAME@ — ONE artifact that is both an executable and a shared library.
+# `main` is linked as a .so (-shared -fPIC) carrying an embedded PT_INTERP and
+# a custom entry point, so the kernel can run it directly AND other programs
+# can link against it. @NAME@ is filled in by dcap (only this Makefile is patched).
 ifeq ($(origin CXX),default)
   CXX := g++
 endif
 NAME     := @NAME@
-CXXFLAGS := -std=c++20 -O2 -Wall -Wextra -Iinclude
+CXXFLAGS := -std=c++20 -O2 -Wall -Wextra -Iinclude -fPIC
 PREFIX   ?= /usr/local
+ENTRY    := dcap_main
 
-LIB_SRC := $(wildcard src/lib*.cpp)
-LIB_OBJ := $(LIB_SRC:.cpp=.o)
-A_LIB   := lib/lib$(NAME).a
-SO_LIB  := lib/lib$(NAME).so
+# Dynamic loader path, embedded as PT_INTERP so ./main is runnable. Detected
+# from a known binary; override if that fails:
+#   make INTERP=/lib64/ld-linux-x86-64.so.2
+ifeq ($(origin INTERP),undefined)
+  INTERP := $(shell readelf -p .interp /bin/sh 2>/dev/null | grep -o '/[^ ]*ld-[^ ]*')
+endif
 
-all: main $(A_LIB) $(SO_LIB)
+SRC := $(wildcard src/*.cpp)
+OBJ := $(SRC:.cpp=.o)
+SO  := lib/lib$(NAME).so
 
-lib:
+all: main $(SO)
+
+%.o: %.cpp
+	$(CXX) $(CXXFLAGS) -DDCAP_INTERP='"$(INTERP)"' -c $< -o $@
+
+# -shared makes it a library; -e makes it runnable; -soname makes it linkable.
+main: $(OBJ)
+	@test -n "$(INTERP)" || { echo "error: cannot detect the dynamic loader; retry with 'make INTERP=/lib64/ld-linux-x86-64.so.2'" >&2; exit 1; }
+	$(CXX) $(CXXFLAGS) -shared -Wl,-e,$(ENTRY) -Wl,-soname,lib$(NAME).so $(OBJ) -o $@
+	@chmod +x $@
+
+# Consumers link -Llib -l$(NAME); the .so is just a symlink to the one artifact.
+$(SO): main
 	@mkdir -p lib
-
-$(A_LIB): $(LIB_OBJ) | lib
-	ar rcs $@ $(LIB_OBJ)
-
-$(SO_LIB): $(LIB_SRC) | lib
-	$(CXX) $(CXXFLAGS) -fPIC -shared $(LIB_SRC) -o $@
-
-# executable links the static lib so ./main runs standalone
-main: src/main.cpp $(A_LIB)
-	$(CXX) $(CXXFLAGS) src/main.cpp $(A_LIB) -o $@
+	ln -sf ../main $@
 
 run: main
 	./main
 
 test: test/test
 	./test/test
-test/test: test/test.cpp $(A_LIB)
-	$(CXX) $(CXXFLAGS) test/test.cpp $(A_LIB) -o $@
+test/test: test/test.cpp $(SO)
+	$(CXX) $(CXXFLAGS) test/test.cpp -Llib -l$(NAME) -Wl,-rpath,'$$ORIGIN/../lib' -o $@
 
 debug:
 	$(MAKE) clean
-	$(MAKE) CXXFLAGS="-std=c++20 -g -O0 -Wall -Wextra -Iinclude" all
+	$(MAKE) CXXFLAGS="-std=c++20 -g -O0 -Wall -Wextra -Iinclude -fPIC" all
 
 release: all
 
-# install: make a renamed copy first, install that, then delete the local copy
-# (leaves `main` in the tree; never creates $(PREFIX)/bin/main)
+# One file lands in $(PREFIX)/lib; $(PREFIX)/bin/$(NAME) is a symlink to it.
 install: all
 	install -d $(PREFIX)/bin $(PREFIX)/lib $(PREFIX)/include/$(NAME)
-	cp main $(NAME)
-	install -m755 $(NAME) $(PREFIX)/bin/
-	rm -f $(NAME)
-	install -m644 $(A_LIB) $(SO_LIB) $(PREFIX)/lib/
+	install -m755 main $(PREFIX)/lib/lib$(NAME).so
+	ln -sf ../lib/lib$(NAME).so $(PREFIX)/bin/$(NAME)
 	install -m644 include/*.hpp $(PREFIX)/include/$(NAME)/
 
 fmt:
 	clang-format -i $(wildcard src/*.cpp include/*.hpp test/*.cpp)
 
 clean:
-	rm -rf lib main test/test $(LIB_OBJ)
+	rm -rf lib main test/test $(OBJ)
 
-.PHONY: all lib run test debug release install fmt clean
+.PHONY: all run test debug release install fmt clean
