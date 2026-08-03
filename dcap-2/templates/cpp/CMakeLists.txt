@@ -18,8 +18,11 @@ if(NOT DCAP_INTERP)
   message(FATAL_ERROR "cannot detect the dynamic loader; pass -DDCAP_INTERP=...")
 endif()
 
-# Every src/*.cpp goes into the one artifact; there is no naming rule.
-add_library(main SHARED src/main.cpp src/lib.cpp)
+# Everything under src/ goes into the one artifact; there is no naming rule and
+# subdirectories are fine. CONFIGURE_DEPENDS re-checks the glob on every build,
+# so a newly added file is picked up without re-configuring by hand.
+file(GLOB_RECURSE SOURCES CONFIGURE_DEPENDS src/*.cpp)
+add_library(main SHARED ${SOURCES})
 target_include_directories(main PUBLIC include)
 target_compile_features(main PUBLIC cxx_std_20)
 target_compile_options(main PRIVATE -Wall -Wextra)

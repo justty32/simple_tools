@@ -90,7 +90,7 @@ dlopen("/path/to/build/main", RTLD_NOW)             # 或動態載入
 
 ### 專案佈局與指令
 
-`include/` 放公開標頭、`src/` 放**全部**原始碼（沒有命名規則，`src/main.cpp` 只是放進入點的地方）。**沒有 test/、沒有 fmt、沒有 install target**——debug/release 用 CMake 原生的：
+`include/` 放公開標頭、`src/` 放**全部**原始碼（沒有命名規則，`src/main.cpp` 只是放進入點的地方；子目錄也可以）。`src/` 底下的檔案是 glob 進去的，而且帶 `CONFIGURE_DEPENDS`，所以**新增原始碼直接 `cmake --build build` 就會編進去**，不用手動重跑 configure、也不用改 CMakeLists。**沒有 test/、沒有 fmt、沒有 install target**——debug/release 用 CMake 原生的：
 
 ```sh
 cmake -B build -DCMAKE_BUILD_TYPE=Debug     # 預設是 Release
