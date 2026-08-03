@@ -1,13 +1,13 @@
 # dcap 文件
 
-dcap 是輕量、跨平台的 CLI 工具，用來快速建立與建置純 C / C++ 的腳本式小專案。
+dcap 是極簡的 **POSIX/UNIX**（以 Linux 為主）C / C++ 專案 scaffolder：把模板複製成新專案、替換 `@NAME@`、並 `git init`。
 
 ## 目錄
 
 | 文件 | 內容 |
 |------|------|
-| [usage.md](usage.md) | 安裝、三個指令、`DCAP_HOME`、範例、疑難排解 |
-| [architecture.md](architecture.md) | 模組結構、`#embed` 模板嵌入、跨平台策略、靜態連結 |
+| [usage.md](usage.md) | 建置與安裝、唯一指令、模板三種來源、範例、疑難排解 |
+| [architecture.md](architecture.md) | 模組結構、`#embed` 模板嵌入、模板解析、產生的 Makefile |
 
 網頁版（可用瀏覽器直接開啟）：
 
@@ -20,20 +20,19 @@ dcap 是輕量、跨平台的 CLI 工具，用來快速建立與建置純 C / C+
 ## 一分鐘版
 
 ```sh
-make                 # 建置 dcap（Windows 用 mingw32-make）
-dcap new hello       # 建立 C++ 小專案 + git init
-cd hello
-dcap build           # 編譯並執行 → Hello, World! (C++)
+make                       # 建置 dcap → bin/dcap，然後自行把 bin/ 加入 PATH
+dcap cpp hello             # 用內建 cpp 模板建立 ./hello（並 git init）
+cd hello && make run       # → Hello, World! (C++)
 ```
 
-- `dcap new <name>` → C++（`g++ -std=c++20`）
-- `dcap new-c <name>` → C（`gcc -std=c11 -lm -lpthread`）
-- `dcap build` → `make -j4`（Windows：`mingw32-make -j4`）後執行 `bin/` 內的產物
+- `dcap <template> <name>`：把模板原樣複製成 `./<name>/`、只在 `Makefile`/`makefile` 內替換 `@NAME@`、`git init`。
+- `<template>` = `c`（`gcc -std=c11 -lm -lpthread`）、`cpp`（`g++ -std=c++20`）、具名外部（`$DCAP_TEMPLATES/<名>`）或路徑式（開頭是 `.` 或 `/`）。
+- 產生出來的專案用 `make` / `make run` / `make clean` 自行建置與執行。
 
 ## 設計原則
 
+- **POSIX-only**：已放棄跨平台，不再有任何 Windows 專屬處理。
 - **只依賴 gcc/g++ + git + make**，不使用 CMake。
-- **跨平台**：保留 UNIX 慣例字串，執行期以 `#ifdef _WIN32` + `std::filesystem` 偵測。
-- **模板即真檔**：範本存於 `templates/`，以 C++20 `#embed` 於編譯期嵌入 dcap 執行檔。
+- **內建模板即真檔**：範本存於 `templates/`，以 C++20 `#embed` 於編譯期嵌入執行檔，永遠可用。
+- **單一指令**：只有 `dcap <template> <name>`，沒有子指令。
 - **單檔 ≤150 行**：原始碼按職責分成多個小模組。
-- **產物可攜**：dcap 與產生的專案皆 `-static` 靜態連結，獨立可執行。

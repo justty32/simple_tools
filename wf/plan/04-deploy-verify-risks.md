@@ -4,38 +4,41 @@
 
 ## 部署 / 安裝
 
-- **UNIX**：`install.sh`
-  ```sh
-  make            # 產出 bin/dcap
-  sudo make install   # cp bin/dcap /usr/local/bin/（或提示加入 PATH）
-  ```
-- **Windows**：用 `mingw32-make` 產出 `bin\dcap.exe`，把 `bin` 加入 PATH，或複製到 `C:\dev\mingw64\bin`。
+**由使用者自行把本 repo 的 `bin/` 加入 PATH**（dcap 執行檔本身也是這樣用）。不做系統層安裝、無安裝腳本、不 copy 到系統目錄。
+
+- 建置：`make`（產出 `bin/dcap`）。
+- 在 `~/.bashrc` 或 `~/.zshrc` 加入 `export PATH="/絕對路徑/dcap/bin:$PATH"`（用絕對路徑，rc 載入時 `$PWD` 不適用）。
+
+> Windows 使用者請自行在 Git Bash / MinGW 環境裡想辦法。
 
 ## 驗證步驟（端對端）
 
-1. 建置本體：`mingw32-make`（產出 `bin/dcap.exe`）。
+1. 建置本體：`make`（產出 `bin/dcap`）。
 2. 在暫存目錄：
-   - `dcap new demo` → 檔案齊全、`git` 已初始化。
-   - `cd demo && dcap build` → 編譯並印出 `Hello, World!`。
-   - `dcap new-c democ` → `cd democ && dcap build` → 同上（C 版）。
-   - 空目錄 `dcap build` → 應報錯。
-   - 未知指令 / `dcap help` → 檢查輸出。
+   - `dcap cpp demo` → 檔案齊全（Makefile / main.cpp / .gitignore）、`git` 已初始化。
+   - `cd demo && make run` → 編譯並印出 `Hello, World! (C++)`。
+   - `dcap c democ` → `cd democ && make run` → 同上（C 版）。
+   - `dcap ./some-template proj`（含 Makefile）→ 成功複製。
+   - 缺 Makefile 的目錄 / 找不到的模板 → 應報錯（退出碼 1）。
+   - 參數不足（`dcap` 或 `dcap cpp`）→ 印 usage 到 stderr、回傳 1。
 3. 修正錯誤直到全綠。
 
 ## 風險
 
-- **R2**：`make -j4` 在極少數 MinGW 設定下平行度受限；不影響正確性。
-- **R3**：`$(DCAP_HOME)/cpp_libs`、`c_libs` 可能不存在 → `-I` 指向不存在目錄，g++ 忽略，無害。
-- **R4**：「安裝到 `/usr/local/bin`」在 Windows 無意義 → 以 PATH 說明替代。
-- **R5**：Windows 上 `find` 需為 Git 附帶的 `usr/bin/find.exe`（非 System32 版）。若 mingw32-make 的 shell 找到 System32 版 find，`$(shell find ...)` 會失敗。
-  - 緩解：實作時驗證；README 提醒 Windows 使用者把 Git `usr/bin` 置於 PATH 前段，或於 Git Bash 執行。必要時提供 `wildcard` 後援。
+- **R2**：多檔專案 `find` 遞迴搜尋在極大樹上略慢；不影響正確性。
+- ~~R3（`DCAP_HOME` 的 `cpp_libs`/`c_libs` 可能不存在）~~：已不適用——**已移除 `DCAP_HOME`**，include 就是 `-I.`。
+- **R4**：`DCAP_TEMPLATES` 未設時，非 c/cpp 的裸名無來源 → 明確報錯 `template not found`（預期行為）。
+- ~~R5（Windows `find` 需為 Git 附帶版）~~：已不適用——POSIX-only，不再處理 Windows。
 
 ## 已確認決策
 
 1. 名稱：**dcap** ✅
-2. 跨平台：保留 UNIX 字串 + 執行期偵測 ✅
-3. Makefile 檔案搜尋：`find` 無限遞迴 ✅
-4. 不使用 CMake，本體用 Makefile + g++ ✅
-5. 共用 lib 路徑：環境變數 `DCAP_HOME`（預設 `~/dev/dcap`、`C:/dev/dcap`）✅
-6. 單檔 ≤150 行，多模組 ✅
-7. `dcap build` 不傳額外參數給子專案（可再議）
+2. 定位：**POSIX-only**（以 Linux 為主），已放棄跨平台 ✅
+3. 唯一指令：`dcap <template> <name>`（無子指令、無 help）✅
+4. 模板三種來源：內建 c/cpp（`#embed`）、具名外部（`DCAP_TEMPLATES`）、路徑式 ✅
+5. 合法模板 = 目錄底下有 `Makefile` 或 `makefile` ✅
+6. 產生的 Makefile 用 `find` 無限遞迴、輸出 `bin/<name>`（無 `.exe`）、無 `-static` ✅
+7. 不使用 CMake，本體用 Makefile + g++ ✅
+8. **已移除 `DCAP_HOME`**：include 就是 `-I.`（C 模板仍連結 `-lm -lpthread`）✅
+9. 單檔 ≤150 行，多模組 ✅
+10. 安裝：自行加 PATH，不做系統層安裝、無安裝腳本 ✅

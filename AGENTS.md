@@ -1,6 +1,6 @@
 # dcap — AI agent 專案備忘
 
-dcap = **輕量、跨平台（Windows/MinGW + UNIX）的 CLI 自動化建置工具，用於隨手快速建立與管理純 C 或 C++ 的腳本式小專案；提供 `new` / `new-c` / `build` 三個指令**。本檔是**最頂層路由器**：只指向下一層，**durable 細節一律不寫這裡**。
+dcap = **極簡的 POSIX/UNIX（以 Linux 為主）C / C++ 專案 scaffolder：唯一指令 `dcap <template> <name>`，把模板原樣複製成 `./<name>/`、只在 `Makefile`/`makefile` 內替換 `@NAME@`、`git init`**。本檔是**最頂層路由器**：只指向下一層，**durable 細節一律不寫這裡**。
 
 ## 先讀哪裡
 
@@ -18,16 +18,16 @@ AGENTS.md（本檔，最頂）→ WORKFLOWS.md / INDEX.md → 各工作流入口
 - **README**＝初入一個資料夾**先讀的入口／導引**；**INDEX**＝**描述該資料夾頂層結構**的索引。小資料夾兩者合一，大了才分出獨立 INDEX。
 - **durable 知識歸到它所屬的那一層／那個工作流**，絕不往上堆——所以 AGENTS.md 才這麼薄。要某主題的細節，順著上面的樹往下走，不在本檔找。
 - **鐵律（always-on，任何工作流任何時候都遵守）**：
-  1. 重構/整理必須**不改變原意**（行為不變、改完跑驗證：以 `mingw32-make` build 並端對端跑 `dcap new demo && cd demo && dcap build`，應印出 Hello World；無 lint）。
+  1. 重構/整理必須**不改變原意**（行為不變、改完跑驗證：以 `make` build 並端對端跑 `dcap cpp demo && cd demo && make run`，應印出 Hello World；無 lint）。
   2. **未經確認不 push、不開新工作**（commit 到主分支是慣例，push 先確認）。
   3. 各工作流的**具體流程在它自己的入口檔**，不在頂層。
 - **[DEV-GUIDE.md](wf/DEV-GUIDE.md) 是被動參考**（結構整理原則 + 四級成長軌跡）——**只在你要重構/整理結構時才取用**，不貫穿日常每個動作。只在**碰原始碼**時適用的**程式碼慣例 + 導航 index 維護鏈**在 `common/conventions`（由**開發 flavor 包**提供）。
 
 ## 開發環境
 
-- **工具鏈**：gcc/g++ 16.1.0 @ `C:/dev/mingw64/bin`、git 2.54、mingw32-make 4.4.1。**本機無 cmake、亦無 `make`（只有 `mingw32-make`）**——Windows 用 `mingw32-make`，UNIX 用 `make`。
-- **跨平台策略**：原始碼保留 UNIX 慣例字串，執行期用 `#ifdef _WIN32` 偵測平台差異。
-- **共用 lib 路徑**：由環境變數 `DCAP_HOME` 指定，預設 UNIX `~/dev/dcap`、Windows `C:/dev/dcap`。
+- **工具鏈**：gcc/g++（需 GCC 15+，支援 C++20 `#embed`）、git、make。不使用 CMake。
+- **定位**：**POSIX/UNIX（以 Linux 為主），已放棄跨平台**——不再有 Windows 專屬處理（`#ifdef _WIN32`、`.exe`、`mingw32-make`、`-static`、安裝腳本皆已移除）。
+- **include 路徑**：產生的 Makefile 就是 `INCLUDES := -I.`（已移除 `DCAP_HOME`）。具名外部模板根目錄用 `DCAP_TEMPLATES`。
 
 ## 主工作流（活狀態：進度 / 待測 / 信件）
 

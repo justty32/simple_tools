@@ -2,31 +2,32 @@
 
 ← [plan 索引](README.md)
 
-## `dcap new <name>` — 建立 C++ 小專案
+## 唯一指令：`dcap <template> <name>`
 
-在當前目錄建立 `<name>/`，內含：
-- `Makefile`：`g++ -std=c++20`、`-I. -I$(DCAP_HOME)/cpp_libs`、`find` 遞迴搜尋所有 `.cpp`、輸出 `bin/<name>(.exe)`。
-- `main.cpp`：Hello World 範本。
-- `git init` + `.gitignore`（含 `bin/`、`build/`、`*.o`）。
+- `argv[1]` = 模板；`argv[2]` = 要建立的新專案目錄名。
+- 行為：把解析到的模板目錄底下的東西全部原樣（逐位元組）複製成 `./<name>/`，複製時跳過 `.git`，只在新專案的 `Makefile`/`makefile` 內把 `@NAME@` 替換成 `<name>`（其他檔案內容與所有檔名都不變），最後對新專案執行 `git init`。
+- 參數不足（`argc < 3`）→ 印 usage 到 **stderr** 並回傳 1。
+- **沒有子指令、沒有 help 指令**。已移除的舊指令：`new`、`new-c`、`build`、`help` 全部不存在了。
 
-## `dcap new-c <name>` — 建立純 C 小專案
+## 模板三種來源（`argv[1]` 的解析）
 
-在當前目錄建立 `<name>/`，內含：
-- `Makefile`：`gcc -std=c11`、`-I. -I$(DCAP_HOME)/c_libs`、連結 `-lm -lpthread`、`find` 遞迴搜尋所有 `.c`、輸出 `bin/<name>(.exe)`。
-- `main.c`：Hello World 範本。
-- `git init` + `.gitignore`。
+| 形式 | 判定 | 解析 |
+|------|------|------|
+| 內建 | `c` / `cpp` | 以 `#embed` 內嵌內容，永遠可用，不需環境變數，不查檔案系統 |
+| 路徑式 | 開頭是 `.` 或 `/`（`./x`、`../x`、`/abs/y`）| 相對呼叫 dcap 的 cwd 或絕對路徑 |
+| 具名外部 | 裸名（不以 `.` 或 `/` 開頭）且非 c/cpp | `$DCAP_TEMPLATES/<名>`；未設 `DCAP_TEMPLATES` 則無此來源 |
 
-## `dcap build` — 建置並執行當前專案
+注意像 `a/b` 這種「含 `/` 但不以 `.` 或 `/` 開頭」的**不是**路徑式，會被當裸名。合法模板的判定 = 該目錄底下有 `Makefile` 或 `makefile`。找不到目錄或缺 Makefile/makefile → 報錯（退出碼 1）。
 
-1. 檢查當前目錄有 `Makefile`，無則報錯退出（非零碼）。
-2. 呼叫 `make -j4`（平台化：Windows `mingw32-make -j4`／UNIX `make -j4`；找不到再退回另一個）。
-3. 成功 → 於 `bin/` 找對應二進位（含 `.exe`）並執行，印出結果；失敗 → 印錯誤訊息與非零退出碼。
+## 內建模板產出
 
-## 其他
+- `cpp`：`Makefile`（`g++ -std=c++20 -I.`、搜尋 `.cpp`、輸出 `bin/<name>`）、`main.cpp`、`.gitignore`（`bin/`、`build/`、`*.o`）。
+- `c`：`Makefile`（`gcc -std=c11 -I.`、連結 `-lm -lpthread`、搜尋 `.c`、輸出 `bin/<name>`）、`main.c`、`.gitignore`。
+- 兩者最後都 `git init`。
 
-- `dcap`（無參數）或 `dcap help` → 印用法。
-- 未知指令 → 印錯誤 + 用法，退出碼 1。
-- `dcap build` 目前**不**傳額外參數給子專案二進位（可再議）。
+## 建置 / 執行產生的專案
+
+dcap **不再**包裝建置。直接用產生的 Makefile：`make` / `make run`（`./bin/<name>`）/ `make clean`。
 
 ## 產生的子專案 Makefile — 檔案搜尋
 
@@ -36,4 +37,4 @@
 SRC := $(shell find . -name '*.cpp')   # C 版為 '*.c'
 ```
 
-Windows 上依賴 Git 附帶的 `find.exe`（見 [04 風險 R5](04-deploy-verify-risks.md)）。
+用 `ifeq ($(origin CXX),default)` 強制 g++/gcc，但允許 `make CXX=...` 覆蓋。輸出 `bin/<name>`（無 `.exe`），無 `-static`。

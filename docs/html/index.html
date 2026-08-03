@@ -3,14 +3,14 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>dcap — 輕量 C/C++ 建置工具</title>
+<title>dcap — 極簡 C/C++ scaffolder</title>
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
 <div class="wrap">
 <header>
-  <h1>dcap <span class="pill">C/C++ scaffolding &amp; build</span></h1>
-  <p class="tagline">輕量、跨平台（Windows/MinGW + UNIX）的 CLI 工具，快速建立與建置純 C 或 C++ 的腳本式小專案。</p>
+  <h1>dcap <span class="pill">C/C++ scaffolder</span></h1>
+  <p class="tagline">極簡的 POSIX/UNIX（以 Linux 為主）CLI 工具：把模板複製成新專案、替換 <code>@NAME@</code>、並 <code>git init</code>。</p>
   <nav>
     <a href="index.html">總覽</a>
     <a href="usage.html">使用指南</a>
@@ -19,33 +19,36 @@
 </header>
 
 <h2>一分鐘上手</h2>
-<pre><code>make                 # 建置 dcap（Windows 用 mingw32-make）
-dcap new hello       # 建立 C++ 小專案 + git init
-cd hello
-dcap build           # 編譯並執行 → Hello, World! (C++)</code></pre>
+<pre><code>make                       # 建置 dcap → bin/dcap，然後自行把 bin/ 加入 PATH
+dcap cpp hello             # 用內建 cpp 模板建立 ./hello（並 git init）
+cd hello &amp;&amp; make run       # → Hello, World! (C++)</code></pre>
 
-<h2>指令</h2>
+<h2>唯一指令</h2>
+<pre><code>dcap &lt;template&gt; &lt;name&gt;</code></pre>
+<p><code>&lt;template&gt;</code> = 模板來源；<code>&lt;name&gt;</code> = 要建立的新專案目錄。行為：把模板原樣複製成 <code>./&lt;name&gt;/</code>、只在 <code>Makefile</code>/<code>makefile</code> 內替換 <code>@NAME@</code>、<code>git init</code>。沒有子指令、沒有 help；參數不足時印 usage 到 stderr 並回傳 1。</p>
+
+<h2>模板三種來源</h2>
 <table>
-  <tr><th>指令</th><th>作用</th></tr>
-  <tr><td><code>dcap new &lt;name&gt;</code></td><td>建立 C++ 專案（<code>g++ -std=c++20</code>）</td></tr>
-  <tr><td><code>dcap new-c &lt;name&gt;</code></td><td>建立 C 專案（<code>gcc -std=c11 -lm -lpthread</code>）</td></tr>
-  <tr><td><code>dcap build</code></td><td><code>make -j4</code> 後執行 <code>bin/</code> 內的產物</td></tr>
-  <tr><td><code>dcap help</code></td><td>顯示說明</td></tr>
+  <tr><th>來源</th><th>說明</th></tr>
+  <tr><td>內建</td><td><code>c</code>（<code>gcc -std=c11 -lm -lpthread</code>）/ <code>cpp</code>（<code>g++ -std=c++20</code>），以 <code>#embed</code> 編進執行檔，永遠可用</td></tr>
+  <tr><td>具名外部</td><td>設了 <code>DCAP_TEMPLATES</code> 時，c/cpp 以外裸名去 <code>$DCAP_TEMPLATES/&lt;名&gt;</code> 找</td></tr>
+  <tr><td>路徑式</td><td><code>&lt;template&gt;</code> 開頭是 <code>.</code> 或 <code>/</code>（<code>./x</code>、<code>../x</code>、<code>/abs/y</code>）→ 相對 cwd 或絕對路徑；<code>a/b</code> 這種不以 <code>.</code>/<code>/</code> 開頭的當裸名</td></tr>
 </table>
+<p>合法模板 = 該目錄底下有 <code>Makefile</code> 或 <code>makefile</code>。</p>
 
 <h2>特點</h2>
 <table>
+  <tr><td>定位</td><td>POSIX-only（以 Linux 為主），<strong>已放棄跨平台</strong></td></tr>
   <tr><td>只依賴</td><td>gcc/g++ + git + make（<strong>不用 CMake</strong>）</td></tr>
-  <tr><td>跨平台</td><td>保留 UNIX 慣例字串，執行期 <code>#ifdef _WIN32</code> + <code>std::filesystem</code> 偵測</td></tr>
-  <tr><td>模板即真檔</td><td>範本存於 <code>templates/</code>，以 C++20 <code>#embed</code> 編譯期嵌入</td></tr>
-  <tr><td>可攜產物</td><td>dcap 與產生的專案皆 <code>-static</code> 靜態連結</td></tr>
-  <tr><td>共用 lib</td><td>環境變數 <code>DCAP_HOME</code>（預設 <code>~/dev/dcap</code>、<code>C:/dev/dcap</code>）</td></tr>
+  <tr><td>內建模板即真檔</td><td>範本存於 <code>templates/</code>，以 C++20 <code>#embed</code> 編譯期嵌入</td></tr>
+  <tr><td>產生的專案</td><td>用 <code>make</code> / <code>make run</code> / <code>make clean</code> 自行建置；輸出 <code>bin/&lt;name&gt;</code>（無 <code>.exe</code>）</td></tr>
+  <tr><td>include</td><td><code>INCLUDES := -I.</code>（已移除 <code>DCAP_HOME</code>）；C 模板連結 <code>-lm -lpthread</code></td></tr>
 </table>
 
 <h2>下一步</h2>
 <p>
-  安裝、指令細節與疑難排解見 <a href="usage.html">使用指南</a>；
-  模組結構、<code>#embed</code> 嵌入機制與跨平台設計見 <a href="architecture.html">設計說明</a>。
+  建置、安裝、模板來源與疑難排解見 <a href="usage.html">使用指南</a>；
+  模組結構、<code>#embed</code> 嵌入機制與模板解析見 <a href="architecture.html">設計說明</a>。
 </p>
 
 <footer>dcap — 產生的 HTML 文件。原始 Markdown 見 <code>docs/</code>。</footer>

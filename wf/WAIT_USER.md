@@ -10,5 +10,4 @@
 
 ## 待使用者項
 
-- **讓 `dcap` 全域可用**：把 `C:\code\mine\dcap\bin` 加入 PATH，或複製 `bin\dcap.exe` 到已在 PATH 的目錄（如 `C:\dev\mingw64\bin`）。UNIX 可跑 `sudo ./install.sh`。
-- **（可選）為 dcap 本體建立 git 倉庫**：目前專案根尚未 `git init`（尚未被要求）。需要版控時自行 `git init` 並首次 commit。
+- **讓 `dcap` 全域可用**：自行把本 repo 的 `bin/` 加入 PATH。在 `~/.bashrc` / `~/.zshrc` 加入 `export PATH="/絕對路徑/dcap/bin:$PATH"`（用絕對路徑）。Windows 使用者請自行在 Git Bash / MinGW 環境裡想辦法。

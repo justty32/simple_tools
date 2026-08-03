@@ -9,7 +9,7 @@
 - **語言/技術棧**：C++20，倚賴標準庫 `std::filesystem`（路徑/檔案操作）與 `std::system`（呼叫外部指令）。
 - **單檔行數門檻**：每個原始碼檔 **≤150 行**（與 [DEV-GUIDE](../../DEV-GUIDE.md) 觸發 A 一致）；超過就按領域拆成新模組（**多模組**設計，一檔一職）。
 - **跨平台**：原始碼保留 UNIX 慣例字串（路徑、指令），執行期用 `#ifdef _WIN32` 偵測平台差異；不引入 cmake，建置一律走 `mingw32-make`（Windows）/ `make`（UNIX）。
-- **共用 lib 路徑**：透過環境變數 `DCAP_HOME` 定位（預設 UNIX `~/dev/dcap`、Windows `C:/dev/dcap`），不要在碼裡寫死絕對路徑。
+- **include 路徑**：產生的 Makefile 的 include 就是 `-I.`（已移除 `DCAP_HOME`）；不要在碼裡寫死絕對路徑。
 - breaking change 前先全域 grep 受影響處，同一 commit 一併更新。
 
 ## 導航 index（code map）維護鏈

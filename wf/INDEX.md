@@ -1,6 +1,6 @@
 # INDEX — dcap 專案地圖
 
-整個專案的頂層導航。dcap = **輕量、跨平台（Windows/MinGW + UNIX）的 CLI 自動化建置工具，用於隨手快速建立與管理純 C 或 C++ 的腳本式小專案；提供 `new` / `new-c` / `build` 三個指令**。AGENTS.md 只放主工作流 + 指向本檔；細節從這裡分流出去。
+整個專案的頂層導航。dcap = **極簡的 POSIX/UNIX（以 Linux 為主）C / C++ 專案 scaffolder：唯一指令 `dcap <template> <name>`，把模板原樣複製成 `./<name>/`、只在 `Makefile`/`makefile` 內替換 `@NAME@`、`git init`**。AGENTS.md 只放主工作流 + 指向本檔；細節從這裡分流出去。
 
 ---
 
@@ -10,12 +10,13 @@
 
 | 路徑 | 內容 |
 |------|------|
-| `src/`（或原始碼目錄）| dcap CLI 原始碼：C++20、`std::filesystem` / `std::system`，多模組、每檔 ≤150 行；產出單一執行檔 `dcap`（Windows 為 `dcap.exe`）|
-| `Makefile` | 以 `mingw32-make`（Windows；UNIX 為 `make`）建置的建置腳本 |
+| `src/`（或原始碼目錄）| dcap CLI 原始碼：C++20、`std::filesystem` / `std::system`、`#embed` 內嵌內建模板，多模組、每檔 ≤150 行；產出單一執行檔 `bin/dcap` |
+| `Makefile` | 以 `make` 建置 dcap 本體（g++ -std=c++20）的建置腳本 |
+| `templates/` | 內建模板真檔（`cpp/`、`c/`），被 `src/builtin.cpp` 以 `#embed` 編入執行檔 |
 | `wf/workflows/` | 開發工作流（入口見 [WORKFLOWS.md](WORKFLOWS.md)）|
 | `.claude/commands/` | slash 指令（如 [`/wf-tick`](../.claude/commands/wf-tick.md) 驅動定期心跳；位於專案根 `.claude/`）|
 | `wf/inbox/` | agent 之間的**信件**收件匣（放信處，保持乾淨；使用方式見 [workflows/inbox/](workflows/inbox/README.md)。可選）|
-| [wf/plan/](plan/README.md) | dcap **設計計畫**（拆成多檔，每檔 ≤150 行）：環境/跨平台、模組拆分、指令規格、部署/驗證/風險 |
+| [wf/plan/](plan/README.md) | dcap **設計計畫**（拆成多檔，每檔 ≤150 行）：環境與設計取捨、模組拆分、指令規格、部署/驗證/風險 |
 | `docs/` | 使用者文件（含 `docs/html/`）|
 
 ## 工作流

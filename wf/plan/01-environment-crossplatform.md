@@ -1,45 +1,31 @@
-# 01 — 環境現況與跨平台取捨
+# 01 — 環境與設計取捨
 
 ← [plan 索引](README.md)
 
-## 本機環境（實測）
+## 定位取捨：POSIX-only（已確認）
 
-| 依賴 | 版本 / 路徑 | 備註 |
-|------|-------------|------|
-| gcc / g++ | 16.1.0 @ `C:/dev/mingw64/bin` | 支援 C++20 |
-| make | **只有 `mingw32-make` 4.4.1**，無 `make` | 影響 `dcap build` 與產生的 Makefile 呼叫 |
-| git | 2.54.0 | `git init` 可用 |
+dcap 定位為極簡的 **POSIX/UNIX**（以 Linux 為主）scaffolder。**已放棄跨平台**：
+
+- 不再有 `#ifdef _WIN32`、`.exe` / `mingw32-make` 偵測、`-static`、安裝腳本。
+- Windows 使用者請自行在 Git Bash / MinGW 環境裡想辦法（不提供教學）。
 
 > **不使用 CMake**（已確認）。dcap 本體用自己的 `Makefile` + g++ 建置，貼近「只用 gcc / git / make」的限制。
 
-## 跨平台策略（已確認）
+## 依賴
 
-保留 UNIX 慣例字串，於**執行期**用 `#ifdef _WIN32` + `std::filesystem` 偵測，不寫死。
+| 依賴 | 用途 | 備註 |
+|------|------|------|
+| g++ | 建置 dcap 本體 | 需支援 C++20 `#embed`（GCC 15+）|
+| make | 建置 dcap 本體與產生的專案 | 產生的 Makefile 亦用 `find`、`mkdir -p` |
+| git | 對新專案 `git init` | scaffold 最後一步 |
 
-| 項目 | UNIX | Windows/MinGW | dcap 處理 |
-|------|------|---------------|-----------|
-| make 指令 | `make` | `mingw32-make` | `dcap build`：`#ifdef _WIN32` 先試 `mingw32-make`，找不到退回 `make`；反之亦然 |
-| 產物副檔名 | `bin/<name>` | `bin/<name>.exe` | 產生的 Makefile 用 `EXE` 變數；`build` 找二進位時兩者都試 |
-| 共用 lib 路徑 | 見下方 `DCAP_HOME` | 同 | 由環境變數指定，Makefile 內做 OS 後援 |
-| 安裝路徑 | `/usr/local/bin/` | 加入 PATH | `install.sh`（UNIX）+ README 的 PATH 說明（Windows） |
-| 執行子專案二進位 | `./bin/<name>` | `bin\<name>.exe` | `build` 以 `std::filesystem` 找出實際檔案再組執行字串 |
+## include 路徑（已移除 `DCAP_HOME`）
 
-## `DCAP_HOME` 環境變數（共用 lib 根目錄）
+**產生的 Makefile** 的 include 現在就是 `INCLUDES := -I.`——已移除 `DCAP_HOME`，不再有 `-I$(DCAP_HOME)/cpp_libs`、`-I$(DCAP_HOME)/c_libs`。
 
-原規範的 `$(HOME)/.cpp_libs`、`$(HOME)/.c_libs` 改為由**環境變數 `DCAP_HOME`** 指定共用 lib 根目錄：
+- C++ 模板：`g++ -std=c++20 -I.`
+- C 模板：`gcc -std=c11 -I. ... -lm -lpthread`（數學 + 執行緒，基本款，保留）
 
-- 預設值：UNIX `~/dev/dcap`、Windows `C:/dev/dcap`。
-- C++ 專案 include：`-I. -I$(DCAP_HOME)/cpp_libs`
-- C 專案 include：`-I. -I$(DCAP_HOME)/c_libs`
+## `DCAP_TEMPLATES`（具名外部模板根目錄）
 
-產生的 Makefile 內做 OS 後援，且讓環境變數可覆蓋（`?=`）：
-
-```make
-ifeq ($(OS),Windows_NT)
-  DCAP_HOME ?= C:/dev/dcap
-else
-  DCAP_HOME ?= $(HOME)/dev/dcap
-endif
-```
-
-> 目錄不存在也無害：g++/gcc 對不存在的 `-I` 路徑只會忽略。
+用於**模板解析**：設了此環境變數時，c/cpp 以外的裸名會去 `$DCAP_TEMPLATES/<名>` 找。沒設 → 只有內建 c/cpp 可用。內建 c/cpp 以 `#embed` 編進執行檔，**不需任何環境變數**，永遠可用。

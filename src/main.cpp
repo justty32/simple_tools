@@ -1,31 +1,12 @@
-#include "commands.hpp"
-#include <iostream>
-#include <string>
-#include <vector>
+#include "scaffold.hpp"
 
+// dcap <template> <name>
+//   argv[1] = template  (c | cpp | <name in $DCAP_TEMPLATES> | path)
+//   argv[2] = new project directory name
 int main(int argc, char** argv) {
-    using namespace dcap;
-    const std::vector<std::string> args(argv + 1, argv + argc);
-    if (args.empty()) {
-        print_usage();
-        return 0;
+    if (argc < 3) {
+        dcap::print_usage();
+        return 1;
     }
-
-    const std::string& cmd = args[0];
-    const std::string arg1 = args.size() > 1 ? args[1] : std::string();
-
-    if (cmd == "new")
-        return cmd_new(arg1, Lang::Cpp);
-    if (cmd == "new-c")
-        return cmd_new(arg1, Lang::C);
-    if (cmd == "build")
-        return cmd_build();
-    if (cmd == "help" || cmd == "-h" || cmd == "--help") {
-        print_usage();
-        return 0;
-    }
-
-    std::cerr << "[dcap] unknown command: " << cmd << "\n\n";
-    print_usage();
-    return 1;
+    return dcap::scaffold(argv[1], argv[2]);
 }

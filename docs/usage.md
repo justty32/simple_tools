@@ -2,79 +2,99 @@
 
 ← [文件首頁](index.md)
 
-## 安裝
+## 建置 dcap 本體
 
 需要 g++（GCC 15+，支援 C++20 與 `#embed`）與 make。
 
 ```sh
-# UNIX / macOS
-make
-sudo ./install.sh            # 複製 bin/dcap → /usr/local/bin
-#   ./install.sh ~/bin       # 或指定其他目錄
-
-# Windows (MinGW)
-mingw32-make                 # 產出 bin\dcap.exe
+make                          # 產出 bin/dcap
 ```
 
-Windows 上把 `bin` 加入 PATH，或把 `dcap.exe` 複製到已在 PATH 上的目錄（例如 `C:\dev\mingw64\bin`）。
+不使用 CMake、不 static、無安裝腳本。
 
-## 指令
+## 安裝
 
-### `dcap new <name>` — 建立 C++ 專案
+自行把本 repo 的 `bin/` 加入 PATH（dcap 執行檔本身也是這樣用）。在 `~/.bashrc` 或 `~/.zshrc` 加入下面這行（**用絕對路徑**，因為 rc 檔載入時 `$PWD` 不會是本目錄）：
 
-在當前目錄建立 `<name>/`，內含：
+```sh
+export PATH="/絕對路徑/dcap/bin:$PATH"
+```
 
-- `Makefile`：`g++ -std=c++20 -O2 -Wall -Wextra`、`-I. -I$(DCAP_HOME)/cpp_libs`、`find` 遞迴搜尋所有 `.cpp`、靜態連結、輸出 `bin/<name>`。
-- `main.cpp`：Hello World 範本。
-- `.gitignore`（`bin/`、`build/`、`*.o`）。
-- 執行 `git init`。
+沒有 install.sh、不 copy 到系統目錄。
 
-### `dcap new-c <name>` — 建立 C 專案
+> Windows 使用者請自行在 Git Bash / MinGW 環境裡想辦法。
 
-同上，但 `gcc -std=c11`、`-I$(DCAP_HOME)/c_libs`、連結 `-lm -lpthread`、搜尋 `.c`、範本為 `main.c`。
+## 唯一指令：`dcap <template> <name>`
 
-### `dcap build` — 建置並執行
+- `<template>`：要用的模板（三種來源見下）。
+- `<name>`：要建立的新專案目錄名。
 
-1. 檢查當前目錄有 `Makefile`（沒有 → 報錯，退出碼 1）。
-2. 執行 `make -j4`（Windows：`mingw32-make -j4`）。
-3. 成功後於 `bin/` 找到產物並執行，印出結果與退出碼。
+行為：把解析到的模板目錄底下的東西全部原樣（逐位元組）複製成 `./<name>/`，複製時跳過 `.git`，只在新專案的 `Makefile`/`makefile` 內把 `@NAME@` 替換成 `<name>`（其他檔案內容與所有檔名都不變），最後對新專案執行 `git init`。
 
-### `dcap help`
+參數不足 → 印 usage 到 stderr 並回傳 1。沒有子指令、沒有 help 指令。
 
-顯示用法。無參數等同 `help`。未知指令會報錯（退出碼 1）並印用法。
+## 模板的三種來源
 
-## `DCAP_HOME`：共用函式庫根目錄
+### 內建：`c` / `cpp`
 
-產生的 Makefile 會加入 `-I$(DCAP_HOME)/cpp_libs`（C 為 `c_libs`）。`DCAP_HOME` 由環境變數指定：
+以 C++20 `#embed` 編進執行檔，永遠可用，不需任何環境變數。
 
-| 平台 | 預設 |
-|------|------|
-| UNIX / macOS | `~/dev/dcap` |
-| Windows | `C:/dev/dcap` |
+- `dcap cpp <name>` → C++：`g++ -std=c++20 -I.`、`find` 遞迴搜尋 `.cpp`、範本 `main.cpp`。
+- `dcap c <name>` → C：`gcc -std=c11 -I.`、連結 `-lm -lpthread`、搜尋 `.c`、範本 `main.c`。
 
-覆蓋：`DCAP_HOME=/opt/libs dcap build` 或 `make DCAP_HOME=/opt/libs`。把你常用的共用標頭放進 `cpp_libs/` 或 `c_libs/`，任何專案就能直接 `#include`。
+兩者都產生 `.gitignore`（`bin/`、`build/`、`*.o`）並 `git init`。
+
+### 具名外部：`$DCAP_TEMPLATES/<名>`
+
+若設了環境變數 `DCAP_TEMPLATES`，則 c/cpp 以外的裸名會去 `$DCAP_TEMPLATES/<名>` 找。沒設 → 只有 c/cpp 可用。
+
+```sh
+DCAP_TEMPLATES=~/tpls dcap web api   # 用 ~/tpls/web 模板建立 ./api
+```
+
+### 路徑式
+
+`<template>` 開頭是 `.` 或 `/`（如 `./x`、`../x`、`/abs/y`）→ 視為路徑（相對呼叫 dcap 的工作目錄 cwd 或絕對路徑）。注意像 `a/b` 這種「含 `/` 但不以 `.` 或 `/` 開頭」的**不是**路徑式，會被當裸名。
+
+```sh
+dcap ./my-template proj              # 用當前目錄下的 my-template
+```
+
+> 合法模板的判定 = 該目錄底下有 `Makefile` 或 `makefile`。找不到目錄或缺 Makefile/makefile → 報錯（退出碼 1）。
+
+## 建置 / 執行產生的專案
+
+dcap 不再包裝建置，直接用產生的 Makefile：
+
+```sh
+cd <name>
+make                                 # 編譯 → bin/<name>
+make run                             # 執行 ./bin/<name>
+make clean                           # 移除 bin/
+```
+
+多檔專案：把更多 `.cpp`（或 `.c`）放進專案目錄任何層級，`find` 會自動納入，無需改 Makefile。
+
+## include 路徑
+
+產生的 Makefile 的 include 就是 `INCLUDES := -I.`（已移除 `DCAP_HOME`，不再有 `cpp_libs`、`c_libs`）。C 模板仍連結 `-lm -lpthread`（數學 + 執行緒，基本款）。
 
 ## 範例
 
 ```sh
-dcap new hello && cd hello
-dcap build
-# [dcap] building with make -j4 ...
-# [dcap] build ok
-# [dcap] running bin/hello ...
+dcap cpp hello && cd hello
+make run
 # ----------------------------------------
 # Hello, World! (C++)
 # ----------------------------------------
-# [dcap] program exited with code 0
 ```
-
-多檔專案：把更多 `.cpp` 放進當前目錄或 `src/`，`find` 會自動納入，無需改 Makefile。
 
 ## 疑難排解
 
 | 症狀 | 原因 / 解法 |
 |------|-------------|
-| `dcap.exe` 一啟動就退出、無輸出 | 若不是 `-static` 版：缺 MinGW DLL。用本專案 Makefile 重建即為靜態。 |
-| Windows 上 `find: ...` 或找不到原始碼 | `mingw32-make` 用到了 `cmd.exe` 而非 Git 的 `sh`。在 Git Bash 執行，或把 `C:\Program Files\Git\usr\bin` 放到 PATH 前段。 |
-| `dcap build` 找不到 `make` | 確認 `make`（UNIX）或 `mingw32-make`（Windows）在 PATH 上。 |
+| `dcap` 找不到 | 尚未把本 repo 的 `bin/` 加入 PATH；用絕對路徑加到 `~/.bashrc` / `~/.zshrc`。 |
+| `error: template not found` | 裸名非 c/cpp 且未設 `DCAP_TEMPLATES`，或路徑打錯。 |
+| `error: not a template (no Makefile)` | 該目錄底下沒有 `Makefile` 或 `makefile`；模板必須含其一。 |
+| 建置產生的專案找不到 `make` | 確認 `make` 在 PATH 上。 |
 | 想換編譯器 | `make CXX=clang++`（C++）或 `make CC=clang`（C）；明確指定會覆蓋預設。 |

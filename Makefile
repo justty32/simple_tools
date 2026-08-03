@@ -1,33 +1,20 @@
-# Build dcap itself. No CMake - just g++ (C++20) + make.
-# On Windows use `mingw32-make`; on UNIX use `make`.
+# Build dcap itself. No CMake — just g++ (C++20) + make. POSIX-oriented.
 ifeq ($(origin CXX),default)
   CXX := g++
 endif
 CXXFLAGS := -std=c++20 -O2 -Wall -Wextra
-# Static-link libstdc++/libgcc/winpthread so dcap runs without MinGW on PATH.
-LDFLAGS  := -static
 SRC      := $(wildcard src/*.cpp)
-
-ifeq ($(OS),Windows_NT)
-  EXE := .exe
-else
-  EXE :=
-endif
-
-BIN := bin/dcap$(EXE)
+BIN      := bin/dcap
+# templates/ files are #embed-ed by src/builtin_*.cpp, so they are build inputs.
+TEMPLATE_FILES := $(shell find templates -type f)
 
 all: $(BIN)
 
-# templates/ files are #embed-ed by src/templates.cpp, so they are real
-# prerequisites of the build.
-$(BIN): $(SRC) $(wildcard templates/*/* templates/*)
+$(BIN): $(SRC) $(TEMPLATE_FILES)
 	@mkdir -p bin
-	$(CXX) $(CXXFLAGS) $(SRC) -o $@ $(LDFLAGS)
-
-install: all
-	cp $(BIN) /usr/local/bin/
+	$(CXX) $(CXXFLAGS) $(SRC) -o $@
 
 clean:
 	rm -rf bin
 
-.PHONY: all install clean
+.PHONY: all clean
