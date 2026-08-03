@@ -22,17 +22,35 @@ endif()
 # subdirectories are fine. CONFIGURE_DEPENDS re-checks the glob on every build,
 # so a newly added file is picked up without re-configuring by hand.
 file(GLOB_RECURSE SOURCES CONFIGURE_DEPENDS src/*.cpp)
-add_library(main SHARED ${SOURCES})
-target_include_directories(main PUBLIC include)
-target_compile_features(main PUBLIC cxx_std_20)
-target_compile_options(main PRIVATE -Wall -Wextra)
-target_compile_definitions(main PRIVATE DCAP_INTERP="${DCAP_INTERP}")
+
+# The target is named after the project, not `main`, so that two projects can
+# be composed without a target-name clash. The file it produces is `main`.
+add_library(@NAME@ SHARED ${SOURCES})
+target_include_directories(@NAME@ PUBLIC include)
+target_compile_features(@NAME@ PUBLIC cxx_std_20)
+target_compile_options(@NAME@ PRIVATE -Wall -Wextra)
+target_compile_definitions(@NAME@ PRIVATE DCAP_INTERP="${DCAP_INTERP}")
 
 # -e makes it runnable; -soname makes it linkable as -l@NAME@. NO_SONAME stops
 # CMake emitting a soname of its own; PREFIX/SUFFIX make the file plain `main`.
-target_link_options(main PRIVATE -Wl,-e,dcap_main -Wl,-soname,lib@NAME@.so)
-set_target_properties(main PROPERTIES PREFIX "" SUFFIX "" NO_SONAME TRUE)
+target_link_options(@NAME@ PRIVATE -Wl,-e,dcap_main -Wl,-soname,lib@NAME@.so)
+set_target_properties(@NAME@ PROPERTIES
+  OUTPUT_NAME main PREFIX "" SUFFIX "" NO_SONAME TRUE
+  LIBRARY_OUTPUT_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
 
-# So that -L<builddir> -l@NAME@ resolves to the very same file.
-add_custom_command(TARGET main POST_BUILD
-  COMMAND ${CMAKE_COMMAND} -E create_symlink main lib@NAME@.so)
+# The artifact sits in the project root, so ./main runs it and another project
+# can point straight at <this dir>/lib@NAME@.so. The symlink is what makes the
+# soname resolvable, both at link time and at run time.
+add_custom_command(TARGET @NAME@ POST_BUILD
+  COMMAND ${CMAKE_COMMAND} -E create_symlink main lib@NAME@.so
+  WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
+
+# --- Using another dcap project that lives in some local folder -------------
+# They are just directories; no git, no install, no find_package. Point at the
+# artifact by path and add its include/ (a relative path works too):
+#
+#   target_include_directories(@NAME@ PRIVATE /path/to/AAA/include)
+#   target_link_libraries(@NAME@ PRIVATE /path/to/AAA/libAAA.so)
+#
+# CMake puts AAA's directory in this project's RPATH, so ./main just runs.
+# Build AAA first — nothing here knows how to build it for you.

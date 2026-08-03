@@ -67,7 +67,7 @@ export PATH="/絕對路徑/dcap-2/bin:$PATH"
 ```sh
 dcap cpp hello                              # 用內建 cpp 模板建立 ./hello（並 git init）
 cd hello && cmake -B build && cmake --build build
-./build/main                                # → 2 + 3 = 5
+./main                                      # → 2 + 3 = 5
 
 dcap c mytool                               # 內建 C 模板
 dcap ./my-template proj                     # 用當前目錄下的 my-template（需含 CMakeLists.txt）
@@ -76,17 +76,32 @@ DCAP_TEMPLATES=~/tpls dcap web api          # 用 ~/tpls/web 模板
 
 ## 產生的專案：一個檔案，三種用法
 
-`cmake --build build` 出來的是**單一產物** `build/main`，它同時是可執行檔與 shared library：
+`cmake --build build` 出來的是**單一產物**，而且就落在**專案根目錄**（不是 `build/` 裡），所以 build 完直接 `./main`：
 
 ```sh
-./build/main                                        # 直接執行
-g++ yours.cpp -Iinclude -Lbuild -l<name> -o yours   # 當函式庫連結
-dlopen("/path/to/build/main", RTLD_NOW)             # 或動態載入
+./main                                              # 直接執行
+g++ yours.cpp -Iinclude -L<proj> -l<name> -o yours  # 當函式庫連結
+dlopen("/path/to/<proj>/main", RTLD_NOW)            # 或動態載入
 ```
 
-作法是把它以 `-shared -fPIC` 連結成 .so（`add_library(main SHARED ...)` 加上 `PREFIX ""` `SUFFIX ""` 讓檔名就是 `main`），再內嵌一個 `.interp` 段指向系統的 dynamic loader（PT_INTERP，CMake 用 `readelf -p .interp /bin/sh` 自動偵測，glibc/musl 皆可），並用 `-Wl,-e,dcap_main` 指定進入點、`-Wl,-soname,lib<name>.so` 讓它能被連結（`NO_SONAME TRUE` 是為了擋掉 CMake 自己那份 soname）。build 後順手做一個 `build/lib<name>.so → main` 的 symlink，`-l<name>` 才找得到。
+作法是把它以 `-shared -fPIC` 連結成 .so（`add_library` 的 target 叫 `<name>`，靠 `OUTPUT_NAME main` 加上 `PREFIX ""` `SUFFIX ""` 讓檔名就是 `main`；`LIBRARY_OUTPUT_DIRECTORY` 指到專案根），再內嵌一個 `.interp` 段指向系統的 dynamic loader（PT_INTERP，CMake 用 `readelf -p .interp /bin/sh` 自動偵測，glibc/musl 皆可），並用 `-Wl,-e,dcap_main` 指定進入點、`-Wl,-soname,lib<name>.so` 讓它能被連結（`NO_SONAME TRUE` 是為了擋掉 CMake 自己那份 soname）。build 後順手做一個 `lib<name>.so → main` 的 symlink，soname 才解得開——**連結時和執行時都需要它**。
+
+target 名字用 `<name>` 而不是 `main`，是為了兩個專案組在一起時不會撞 target 名。
 
 偵測失敗時：`cmake -B build -DDCAP_INTERP=/lib64/ld-linux-x86-64.so.2`。
+
+### 引用另一個本地 dcap 專案
+
+專案就是資料夾——沒有 git、沒有 install、不用 `find_package`。在**用**的那邊（BBB）CMakeLists 尾巴加兩行，直接指檔案路徑：
+
+```cmake
+target_include_directories(BBB PRIVATE /path/to/AAA/include)
+target_link_libraries(BBB PRIVATE /path/to/AAA/libAAA.so)
+```
+
+相對路徑（`../AAA/include`）也可以。CMake 會自動把 AAA 的目錄寫進 BBB 的 RUNPATH，所以 `./main` 在任何 cwd 都直接跑，不需要 `LD_LIBRARY_PATH`。前提是**先把 AAA build 起來**——BBB 這邊不會幫你建 AAA。
+
+`libAAA.so` 就是 AAA 根目錄那個指向 `main` 的 symlink；也可以直接指 `/path/to/AAA/main`，但那樣連結出來的 `DT_NEEDED` 仍然是 soname `libAAA.so`，執行時照樣要找得到那個 symlink，所以指 symlink 比較不會誤會。
 
 ### 專案佈局與指令
 
@@ -99,7 +114,7 @@ cmake -B build -DCMAKE_BUILD_TYPE=Debug     # 預設是 Release
 要安裝就自己來（就一個檔加一個 symlink）：
 
 ```sh
-install -Dm755 build/main ~/.local/lib/lib<name>.so
+install -Dm755 main ~/.local/lib/lib<name>.so
 ln -sf ../lib/lib<name>.so ~/.local/bin/<name>
 ```
 

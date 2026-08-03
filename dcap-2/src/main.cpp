@@ -167,6 +167,7 @@ int main(int argc, char** argv) {
         say("warning: git init failed");
     else
         say("git repository initialized");
-    say("next: cd " + name + " && cmake -B build && cmake --build build");
+    say("next: cd " + name +
+        " && cmake -B build && cmake --build build && ./main");
     return 0;
 }
