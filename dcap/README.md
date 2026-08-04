@@ -124,35 +124,13 @@ AAA 被這樣引用時**只會建它的 library**，不會建它自己那個 `bi
 cmake -B build -DCMAKE_BUILD_TYPE=Debug     # 預設是 Release
 ```
 
-### 安裝
-
-有 install rule，用 CMake 原生的指令，不需要 `sudo` 也不需要腳本：
-
-```sh
-cmake --install build --prefix ~/.local     # 不給 --prefix 就是 CMake 預設的 /usr/local
-```
-
-裝出來的東西（`GNUInstallDirs`，所以跟專案自己的佈局一樣）：
-
-```
-~/.local/bin/<name>              執行檔
-~/.local/lib/lib<name>.so        library（Windows 是 bin\<name>.dll + lib\ 的 import library）
-~/.local/include/…               include/ 底下的東西原樣複製過去
-```
-
-裝好的執行檔**不需要 `LD_LIBRARY_PATH`**：模板給它設了相對的 `INSTALL_RPATH`（`$ORIGIN/../lib`，macOS 是 `@loader_path/../lib`），所以整個 prefix 搬到別的地方也還是能跑。
-
-用 `add_subdirectory` 引用進來的專案**會跟著一起裝**（它的 library 和 headers），不然裝出來的執行檔會找不到東西可以載入。注意 headers 是**平鋪**進 `<prefix>/include/`，所以兩個專案如果有同名的標頭（比如都留著模板附的 `lib.hpp`），後裝的會蓋掉先裝的——要一起安裝就把標頭改成不會撞的名字。
-
-in-source build（`cmake .`）的話 build 目錄就是專案根：`cmake --install . --prefix ~/.local`。
-
 ### 第三方函式庫
 
 模板**不管**這件事，是刻意的：CMake 原生就處理得夠好，多寫任何一段都只是猜你要哪一種。GitHub 上抓的用 `FetchContent` 或 `add_subdirectory`，apt / brew 裝的用 `find_package` 或 `pkg_check_modules`，自己在 CMakeLists 加就好。
 
 ## 平台
 
-**Linux / macOS / Windows。** 產生的專案裡沒有任何 ELF 專屬的東西了：檔名、匯出符號（`WINDOWS_EXPORT_ALL_SYMBOLS`）、執行時找得到 library（Linux/macOS 是 RUNPATH，Windows 是 build 後把被引用專案的 dll 複製到 `bin/`）都交給 CMake。本體本身（`std::filesystem` + `#embed`）也沒有平台包袱。
+**Linux / macOS / Windows。** 產生的 `CMakeLists.txt` 要求 CMake 3.21+（`PROJECT_IS_TOP_LEVEL` 和 `TARGET_RUNTIME_DLLS` 都是 3.21 才有的；建置 dcap 本體本身只需 CMake 3.20+）。產生的專案裡沒有任何 ELF 專屬的東西了：檔名、匯出符號（`WINDOWS_EXPORT_ALL_SYMBOLS`）、執行時找得到 library（Linux/macOS 是 RUNPATH，Windows 是 build 後把被引用專案的 dll 複製到 `bin/`）都交給 CMake。本體本身（`std::filesystem` + `#embed`）也沒有平台包袱。
 
 一個 caveat：模板把輸出目錄寫死成 `bin/` 和 `lib/`，所以請用**單組態產生器**（Ninja、Unix Makefiles、MinGW Makefiles）。Visual Studio 這種多組態產生器會在後面再加一層，變成 `bin/Release/`。
 

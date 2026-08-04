@@ -33,16 +33,6 @@ set_target_properties(@NAME@ PROPERTIES
   ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/lib
   RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/bin)
 
-# Installing is optional and off to the side of the normal build:
-#   cmake --install build --prefix ~/.local
-# GNUInstallDirs supplies bin/ lib/ include/, which is the layout this project
-# already uses. These two rules sit outside the top-level guard below on
-# purpose: a project pulled in with add_subdirectory has to install its library
-# and headers too, or the installed executable has nothing to load.
-include(GNUInstallDirs)
-install(TARGETS @NAME@)
-install(DIRECTORY include/ DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
-
 # Only when this project is the one being built: a project that pulls this one
 # in with add_subdirectory wants the library, not this executable.
 if(PROJECT_IS_TOP_LEVEL)
@@ -51,15 +41,6 @@ if(PROJECT_IS_TOP_LEVEL)
   set_target_properties(@NAME@_main PROPERTIES
     OUTPUT_NAME @NAME@
     RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/bin)
-
-  # Once installed, the executable is no longer next to its build-tree library,
-  # so it needs a relative rpath to the installed one. $ORIGIN is how ELF spells
-  # "my own directory" and @loader_path is the Mach-O spelling; the one that
-  # does not apply is just a path that is not there. Windows needs neither — the
-  # .dll installs into bin/, right beside the executable.
-  set_target_properties(@NAME@_main PROPERTIES INSTALL_RPATH
-    "$ORIGIN/../${CMAKE_INSTALL_LIBDIR};@loader_path/../${CMAKE_INSTALL_LIBDIR}")
-  install(TARGETS @NAME@_main)
 
   # Windows has no RPATH. This project's own .dll is already in bin/, but a
   # linked-in project's .dll sits in that project's bin/, where the loader will
