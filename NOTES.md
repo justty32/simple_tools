@@ -47,6 +47,14 @@
 - **執行檔改叫 `<name>`（不再是 `main`）**。dcap-2 叫 `main` 是因為那個檔同時是 `.so`、不能叫 `lib<name>.so`；拆開又分目錄之後這個理由沒了，`bin/demo` + `lib/libdemo.so` 一看就是一對。注意**執行檔的 target 仍叫 `<name>_main`**，因為 library target 已經佔用了 `<name>`——只有 `OUTPUT_NAME` 是 `<name>`。
 - 附帶好處：模板的 `.gitignore` 從一長串副檔名（`*.so` `*.dll` `*.dylib` `*.a` `*.lib` `*.exp` `*.pdb`…）縮成 `bin/` + `lib/`。
 
+**install target：使用者要求加回來（2026-08-04）。** 這一條**推翻了繼承自 dcap-2 的「沒有 install target」**——那是「完全的精簡」砍掉的東西之一，這次是使用者明確要的，不是有人手滑加回去的。做法刻意壓到最小：`include(GNUInstallDirs)` + `install(TARGETS)` + `install(DIRECTORY include/)`，沒有 export set、沒有 `<name>Config.cmake`、沒有版本檔——跨專案引用走的是 `add_subdirectory`，本來就不需要 `find_package`。三個實作細節別當成多餘：
+
+- **library 和 headers 的 install rule 放在 `if(PROJECT_IS_TOP_LEVEL)` 外面**，執行檔的放裡面。被 `add_subdirectory` 引用進來的專案必須跟著裝，不然裝出去的執行檔載不到它的 library。
+- **`INSTALL_RPATH` 寫成相對路徑**（`$ORIGIN/../${CMAKE_INSTALL_LIBDIR}`），裝好的執行檔才不用 `LD_LIBRARY_PATH`，整個 prefix 也才能整包搬走。CMake 預設會把 build-tree RPATH 剝掉、install RPATH 留空，不設就是壞的。
+- 那個字串同時塞 `$ORIGIN` 和 `@loader_path` 兩種寫法（ELF 一種、Mach-O 一種），**是為了不寫 `if(APPLE)`**；不適用的那個只是個不存在的路徑，無害。Windows 兩個都不需要，dll 本來就跟執行檔一起裝進 `bin/`。
+
+已知銳角（README 有寫）：headers 是平鋪進 `<prefix>/include/`，兩個組在一起的專案若有同名標頭（例如都留著模板的 `lib.hpp`）會互相覆蓋。不打算為此加 per-project 子目錄——那會讓單一專案的 `#include "lib.hpp"` 也要改。
+
 實作上這幾樣別當成多餘：
 
 - **`if(PROJECT_IS_TOP_LEVEL)`** 包住執行檔 —— AAA 被 `add_subdirectory` 進來時只該建 library，不該建它自己的 `main`。

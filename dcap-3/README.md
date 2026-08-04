@@ -103,7 +103,7 @@ library target 的名字就是 `<name>`（不是 `lib` 之類的通名），執�
 
 ### 引用另一個本地 dcap 專案
 
-專案就是資料夾——沒有 git、沒有 install、不用 `find_package`。在**用**的那邊（BBB）CMakeLists 尾巴加兩行，直接指路徑：
+專案就是資料夾——不必先安裝、不用 `find_package`。在**用**的那邊（BBB）CMakeLists 尾巴加兩行，直接指路徑：
 
 ```cmake
 add_subdirectory(/path/to/AAA AAA-build)
@@ -118,18 +118,33 @@ AAA 被這樣引用時**只會建它的 library**，不會建它自己那個 `bi
 
 ### 專案佈局與指令
 
-`include/` 放公開標頭、`src/` 放原始碼。`src/` 底下的檔案是 glob 進去的，而且帶 `CONFIGURE_DEPENDS`，所以**新增原始碼直接 `cmake --build build` 就會編進去**，不用手動重跑 configure、也不用改 CMakeLists。**沒有 test/、沒有 fmt、沒有 install target**——debug/release 用 CMake 原生的：
+`include/` 放公開標頭、`src/` 放原始碼。`src/` 底下的檔案是 glob 進去的，而且帶 `CONFIGURE_DEPENDS`，所以**新增原始碼直接 `cmake --build build` 就會編進去**，不用手動重跑 configure、也不用改 CMakeLists。**沒有 test/、沒有 fmt**——debug/release 用 CMake 原生的：
 
 ```sh
 cmake -B build -DCMAKE_BUILD_TYPE=Debug     # 預設是 Release
 ```
 
-要安裝就自己來——專案佈局本來就跟安裝目的地同構，兩行 copy：
+### 安裝
+
+有 install rule，用 CMake 原生的指令，不需要 `sudo` 也不需要腳本：
 
 ```sh
-install -Dm755 lib/lib<name>.so ~/.local/lib/lib<name>.so
-install -Dm755 bin/<name>       ~/.local/bin/<name>
+cmake --install build --prefix ~/.local     # 不給 --prefix 就是 CMake 預設的 /usr/local
 ```
+
+裝出來的東西（`GNUInstallDirs`，所以跟專案自己的佈局一樣）：
+
+```
+~/.local/bin/<name>              執行檔
+~/.local/lib/lib<name>.so        library（Windows 是 bin\<name>.dll + lib\ 的 import library）
+~/.local/include/…               include/ 底下的東西原樣複製過去
+```
+
+裝好的執行檔**不需要 `LD_LIBRARY_PATH`**：模板給它設了相對的 `INSTALL_RPATH`（`$ORIGIN/../lib`，macOS 是 `@loader_path/../lib`），所以整個 prefix 搬到別的地方也還是能跑。
+
+用 `add_subdirectory` 引用進來的專案**會跟著一起裝**（它的 library 和 headers），不然裝出來的執行檔會找不到東西可以載入。注意 headers 是**平鋪**進 `<prefix>/include/`，所以兩個專案如果有同名的標頭（比如都留著模板附的 `lib.hpp`），後裝的會蓋掉先裝的——要一起安裝就把標頭改成不會撞的名字。
+
+in-source build（`cmake .`）的話 build 目錄就是專案根：`cmake --install . --prefix ~/.local`。
 
 ### 第三方函式庫
 
