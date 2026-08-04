@@ -1,22 +1,29 @@
 #pragma once
+#include <cstddef>
 #include <string>
+#include <string_view>
 
-// Built-in templates are embedded into the dcap binary via #embed, so they work
-// regardless of install location and with no env setup. Which templates exist
-// is decided at build time by scanning templates/ (tools/gen-embed.sh): every
-// directory in there containing a Makefile becomes one. Nothing in the C++
-// names a particular template. A same-named entry in $DCAP_TEMPLATES overrides
-// a built-in (handled in scaffold).
+// Built-in templates are embedded into the dcap binary with #embed, so they
+// work regardless of install location and with no env setup. The registry in
+// builtin.cpp is written out by hand — one #embed per file — so adding a file
+// to a template means adding an entry there.
 namespace dcap {
 
-bool is_builtin(const std::string& name);
+struct File {
+    std::string_view path; // relative to the template root
+    std::string_view data;
+};
 
-// Built-in names for usage text, e.g. "c | cpp".
+struct Template {
+    std::string_view name;
+    const File* files;
+    std::size_t count;
+};
+
+// Null if there is no built-in template by that name.
+const Template* find_builtin(std::string_view name);
+
+// Built-in names for the usage text, e.g. "c | cpp".
 std::string builtin_names();
-
-// Write the built-in template <name> into <dest>, creating whatever
-// subdirectories its files need. @NAME@ in the Makefile is patched by the
-// caller. False on unknown name / write error.
-bool write_builtin(const std::string& name, const std::string& dest);
 
 } // namespace dcap

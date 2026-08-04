@@ -1,8 +1,10 @@
 # dcap
 
-極簡的 **POSIX/UNIX**（以 Linux 為主）C / C++ 專案 scaffolder。把一個模板複製成新專案、替換 `@NAME@`、並 `git init`。只依賴 **gcc/g++ + git + make + sh**（不使用 CMake）。
+極簡的 C / C++ 專案 scaffolder。把一個模板複製成新專案、替換 `@NAME@`、並 `git init`。
 
-> Windows 使用者請自行在 Git Bash / MinGW 環境裡想辦法；本工具不再做任何 Windows 專屬處理。
+產生的專案是**兩個檔**：`bin/<name>` 是執行檔，`lib/` 底下是 shared library。進入點就是普通的 `int main()`，平台是 Linux / macOS / Windows 都能跑。
+
+本體：沒有任何 shell 腳本（內嵌檔案在 C++ 裡一個個手寫 `#embed`）、用 CMake、沒有 clang-format、沒有 agent 工作流、模板只留必要的檔。
 
 ## 唯一指令
 
@@ -10,45 +12,53 @@
 dcap <template> <name>
 ```
 
-- `<template>`：路徑式模板、具名外部模板、或內建模板（目前是 `c` / `cpp`，永遠可用）。
+- `<template>`：路徑式模板、具名外部模板、或內建模板（`c` / `cpp`，永遠可用）。
 - `<name>`：要建立的新專案目錄名。
-- 行為：把解析到的模板目錄底下的東西全部原樣（逐位元組）複製成 `./<name>/`，只在新專案的 `Makefile`/`makefile` 內把 `@NAME@` 替換成 `<name>`（其他檔案內容與所有檔名都不變），再對新專案執行 `git init`。
+- 行為：把解析到的模板目錄底下的東西全部原樣（逐位元組）複製成 `./<name>/`，只在新專案的 `CMakeLists.txt` 內把 `@NAME@` 替換成 `<name>`（其他檔案內容與所有檔名都不變），再對新專案執行 `git init`。
 - 參數不足 → 印 usage 到 stderr 並回傳 1。`<name>` 已存在 → 報錯，不覆蓋。沒有子指令、沒有 help 指令。
 
 ## 模板來源（`argv[1]` 的解析順序）
 
-1. **路徑式**：`argv[1]` 開頭是 `.` 或 `/`（如 `./x`、`../x`、`/abs/y`）→ 視為路徑（相對呼叫 dcap 的工作目錄 cwd 或絕對路徑）。注意像 `a/b` 這種「含 `/` 但不以 `.` 或 `/` 開頭」的**不是**路徑式，會被當裸名。
+1. **路徑式**：`argv[1]` 開頭是 `.` 或 `/`（如 `./x`、`../x`、`/abs/y`）→ 視為路徑。注意像 `a/b` 這種「含 `/` 但不以 `.` 或 `/` 開頭」的**不是**路徑式，會被當裸名。
 2. **具名外部**：設了環境變數 `DCAP_TEMPLATES` 時，裸名會先去 `$DCAP_TEMPLATES/<名>` 找；找到就用它，因此在那裡放一個與內建同名的模板會**蓋掉那個內建模板**。
-3. **內建**：以 C++20 `#embed` 編進執行檔，永遠可用，不需任何環境變數。目前是 `c` 與 `cpp`；跑 `dcap` 不帶參數會列出實際有哪些。
+3. **內建**：以 C++20 `#embed` 編進執行檔，永遠可用，不需任何環境變數。
 
-合法模板的判定 = 該目錄底下有 `Makefile` 或 `makefile`。找不到目錄或缺 Makefile/makefile → 報錯。
+合法模板的判定 = 該目錄底下有 **`CMakeLists.txt`**。找不到目錄或缺 `CMakeLists.txt` → 報錯。
 
 ### 自己加一個內建模板
 
-在 `templates/` 底下建一個目錄就好，C++ 完全不用動：
+**沒有掃目錄的產生器**，要動 C++。`#embed` 是 preprocessor directive，包不進 macro，所以每個檔案都得自己一段。在 [`src/builtin.cpp`](src/builtin.cpp) 加一個 namespace，每個檔一個 `#embed` 區塊 + 一筆 `kFiles`，再往 `kTemplates` 加一列：
 
-```sh
-mkdir -p templates/clib/src templates/clib/include
-$EDITOR templates/clib/Makefile      # 裡面用 @NAME@ 當專案名佔位符
-make                                 # 重建 dcap
-dcap clib mylib                      # 就能用了
+```cpp
+namespace tpl_clib {
+constexpr unsigned char cmakelists[] = {
+#embed "../templates/clib/CMakeLists.txt"
+, 0};
+const File kFiles[] = {
+    {"CMakeLists.txt", bytes(cmakelists, sizeof cmakelists - 1)},
+};
+}  // namespace tpl_clib
 ```
 
-判定規則跟外部模板同一條（要有 `Makefile`／`makefile`），沒有的話 build 時會印一行 `gen-embed: skipping ...` 並跳過。目錄名即模板名，底下可以有任意層數的子目錄。
+`#embed` 的路徑相對於 `builtin.cpp`。陣列尾巴那個 `0` 是為了讓空檔案也還是合法的 initialiser，長度用 `sizeof - 1` 取，所以那個 0 不會混進內容。用 `unsigned char` 是因為模板檔是 UTF-8，超過 127 的位元組塞不進 `char`。
+
+不想動 C++ 就走 `DCAP_TEMPLATES` 外部模板，行為完全一樣。
 
 ## 建置 dcap 本體
 
-需要支援 C++20 `#embed` 的 g++（GCC 15+）、make 與 sh。
+需要支援 C++20 `#embed` 的編譯器（GCC 15+、Clang 19+）、CMake 3.20+。
 
 ```sh
-make                       # 產出 bin/dcap
+cmake -B build && cmake --build build      # 產出 bin/dcap
 ```
 
-build 時 `tools/gen-embed.sh` 會掃 `templates/`，把整份內建模板登錄表（有哪些模板、各自有哪些檔）產生到 `build/`——**新增模板或模板裡的檔案完全不用改 C++**。不使用 CMake、不 static、無安裝腳本。
+執行檔固定落在 `bin/`，所以 PATH 設一次就不用再改。改了 `templates/` 底下的檔會自動重建——編譯器會把 `#embed` 的檔案寫進 depfile，CMake 照著走，**不需要在 CMakeLists 裡列模板檔**。
+
+注意這是**本體**的需求。`#embed` 只有本體用到，**產生的專案不需要它**——用什麼舊編譯器建都行。
 
 ## 安裝
 
-自行把本 repo 的 `bin/` 加入 PATH（dcap 執行檔本身也是這樣用）。在 `~/.bashrc` 或 `~/.zshrc` 加入（**用絕對路徑**）：
+自行把本 repo 的 `bin/` 加入 PATH。在 `~/.bashrc` 或 `~/.zshrc` 加入（**用絕對路徑**）：
 
 ```sh
 export PATH="/絕對路徑/dcap/bin:$PATH"
@@ -59,40 +69,92 @@ export PATH="/絕對路徑/dcap/bin:$PATH"
 ## 快速上手
 
 ```sh
-make                       # 建置 dcap → bin/dcap，然後自行把 bin/ 加入 PATH
-dcap cpp hello             # 用內建 cpp 模板建立 ./hello（並 git init）
-cd hello && make run       # → 2 + 3 = 5
+dcap cpp hello                              # 用內建 cpp 模板建立 ./hello（並 git init）
+cd hello && cmake -B build && cmake --build build
+./bin/hello                                 # → 2 + 3 = 5
 
-dcap c mytool              # 內建 C 模板
-dcap ./my-template proj    # 用當前目錄下的 my-template（需含 Makefile）
-DCAP_TEMPLATES=~/tpls dcap web api   # 用 ~/tpls/web 模板
+dcap c mytool                               # 內建 C 模板
+dcap ./my-template proj                     # 用當前目錄下的 my-template（需含 CMakeLists.txt）
+DCAP_TEMPLATES=~/tpls dcap web api          # 用 ~/tpls/web 模板
 ```
 
-## 產生的專案：一個檔案，兩種身分
-
-內建模板 `make` 出來的是**單一產物** `main`，它同時是可執行檔與 shared library：
+不想要 `build/` 的話 in-source 也可以，產物位置一樣：
 
 ```sh
-./main                                   # 直接執行
-gcc yours.c -Llib -l<name> -o yours      # 當函式庫連結
-dlopen("/path/to/main", RTLD_NOW)        # 或動態載入
+cmake . && cmake --build . && ./bin/hello
 ```
 
-作法是把它以 `-shared -fPIC` 連結成 .so，再內嵌一個 `.interp` 段指向系統的 dynamic loader（PT_INTERP，Makefile 從 `/bin/sh` 自動偵測，glibc/musl 皆可），並用 `-Wl,-e,dcap_main` 指定進入點、`-Wl,-soname` 讓它能被連結。
+## 產生的專案：兩個檔
 
-專案佈局：`include/` 放公開標頭、`src/` 放**全部**原始碼（沒有命名規則）、`test/` 放測試。產生的 `Makefile` 提供 `all` / `run` / `test` / `debug` / `release` / `install` / `fmt` / `clean`；`install` 把那唯一的產物裝成 `$(PREFIX)/lib/lib<name>.so`，`$(PREFIX)/bin/<name>` 是指向它的 symlink。
+`cmake --build build` 出來的是**兩個產物**，而且都不在 `build/` 裡，是照慣例分在 `bin/` 和 `lib/`：
 
-進入點 `dcap_main` 不是普通的 `main()`：不能 return（要自己 `exit()`）、拿不到 argc/argv、且必須掛 `__attribute__((force_align_arg_pointer))`（ELF entry 的 RSP 對齊方式與一般函式差 8 bytes，否則對齊的 SSE 存取會 segfault）。細節見 [`docs/architecture.md`](docs/architecture.md)。
+| 位置 | 是什麼 |
+|---|---|
+| `bin/<name>`（Windows 是 `bin\<name>.exe`） | 執行檔，`src/main.cpp` 是它的進入點 |
+| `lib/lib<name>.so` / `.dylib`（Windows 是 `lib\` 的 import library + `bin\` 的 dll） | shared library，`src/` 其餘全部在裡面 |
 
-## include 路徑
+實際檔名交給 CMake，不用記：Linux 是 `lib/lib<name>.so`、macOS 是 `lib/lib<name>.dylib`。Windows 照該平台的慣例擺——**dll 跟執行檔一起放 `bin/`**（loader 只往那裡找），`lib/` 放 import library。
 
-產生的 Makefile 的 include 就是 `-Iinclude`（不再有 `DCAP_HOME`、`cpp_libs`、`c_libs`）。C++ 模板 `g++ -std=c++20`；C 模板 `gcc -std=c11` 並連結 `-lm -lpthread`（數學 + 執行緒，基本款）。
+執行檔連結那個 library，所以 `./bin/<name>` 在任何 cwd 都直接跑（Linux/macOS 靠 CMake 自動寫進去的 RUNPATH，Windows 靠 dll 就在旁邊）。
 
-## 文件
+**`src/main.cpp` 是唯一有特殊意義的檔名**——它只編進執行檔，不進 library。`src/` 底下其他的檔（含子目錄）全部進 library，沒有命名規則。反過來說 **`src/` 至少要有一個 `main.cpp` 以外的檔**，不然 library 沒有原始碼，CMake 會在 configure 時報 `No SOURCES given to target`。模板附的 `src/lib.cpp` 就是那個檔，別把它刪光。
 
-- 使用指南、設計說明：見 [`docs/`](docs/index.md)
-- 網頁版：[`docs/html/index.html`](docs/html/index.html)
-- 設計計畫（分層工作流內）：[`wf/plan/`](wf/plan/README.md)
+library target 的名字就是 `<name>`（不是 `lib` 之類的通名），執行檔 target 叫 `<name>_main`（它產出的**檔案**才是 `<name>`）；兩個專案組在一起時才不會撞 target 名。
+
+### 引用另一個本地 dcap 專案
+
+專案就是資料夾——不必先安裝、不用 `find_package`。在**用**的那邊（BBB）CMakeLists 尾巴加兩行，直接指路徑：
+
+```cmake
+add_subdirectory(/path/to/AAA AAA-build)
+target_link_libraries(BBB PRIVATE AAA)
+```
+
+相對路徑（`../AAA`）也可以。`add_subdirectory` 的第二個參數是 build 目錄名，因為 AAA 在 BBB 的樹外面，CMake 要求給。
+
+這樣寫的好處是三件事都自動了：AAA 的 `include/` 會跟著傳過來（不用自己加 `target_include_directories`）、library 的實際檔名交給 CMake（所以三個平台都對）、**AAA 會被一起建起來**（不必先手動 build AAA）。
+
+AAA 被這樣引用時**只會建它的 library**，不會建它自己那個 `bin/AAA`——模板裡的 `if(PROJECT_IS_TOP_LEVEL)` 擋掉了。
+
+### 專案佈局與指令
+
+`include/` 放公開標頭、`src/` 放原始碼。`src/` 底下的檔案是 glob 進去的，而且帶 `CONFIGURE_DEPENDS`，所以**新增原始碼直接 `cmake --build build` 就會編進去**，不用手動重跑 configure、也不用改 CMakeLists。**沒有 test/、沒有 fmt**——debug/release 用 CMake 原生的：
+
+```sh
+cmake -B build -DCMAKE_BUILD_TYPE=Debug     # 預設是 Release
+```
+
+### 安裝
+
+有 install rule，用 CMake 原生的指令，不需要 `sudo` 也不需要腳本：
+
+```sh
+cmake --install build --prefix ~/.local     # 不給 --prefix 就是 CMake 預設的 /usr/local
+```
+
+裝出來的東西（`GNUInstallDirs`，所以跟專案自己的佈局一樣）：
+
+```
+~/.local/bin/<name>              執行檔
+~/.local/lib/lib<name>.so        library（Windows 是 bin\<name>.dll + lib\ 的 import library）
+~/.local/include/…               include/ 底下的東西原樣複製過去
+```
+
+裝好的執行檔**不需要 `LD_LIBRARY_PATH`**：模板給它設了相對的 `INSTALL_RPATH`（`$ORIGIN/../lib`，macOS 是 `@loader_path/../lib`），所以整個 prefix 搬到別的地方也還是能跑。
+
+用 `add_subdirectory` 引用進來的專案**會跟著一起裝**（它的 library 和 headers），不然裝出來的執行檔會找不到東西可以載入。注意 headers 是**平鋪**進 `<prefix>/include/`，所以兩個專案如果有同名的標頭（比如都留著模板附的 `lib.hpp`），後裝的會蓋掉先裝的——要一起安裝就把標頭改成不會撞的名字。
+
+in-source build（`cmake .`）的話 build 目錄就是專案根：`cmake --install . --prefix ~/.local`。
+
+### 第三方函式庫
+
+模板**不管**這件事，是刻意的：CMake 原生就處理得夠好，多寫任何一段都只是猜你要哪一種。GitHub 上抓的用 `FetchContent` 或 `add_subdirectory`，apt / brew 裝的用 `find_package` 或 `pkg_check_modules`，自己在 CMakeLists 加就好。
+
+## 平台
+
+**Linux / macOS / Windows。** 產生的專案裡沒有任何 ELF 專屬的東西了：檔名、匯出符號（`WINDOWS_EXPORT_ALL_SYMBOLS`）、執行時找得到 library（Linux/macOS 是 RUNPATH，Windows 是 build 後把被引用專案的 dll 複製到 `bin/`）都交給 CMake。本體本身（`std::filesystem` + `#embed`）也沒有平台包袱。
+
+一個 caveat：模板把輸出目錄寫死成 `bin/` 和 `lib/`，所以請用**單組態產生器**（Ninja、Unix Makefiles、MinGW Makefiles）。Visual Studio 這種多組態產生器會在後面再加一層，變成 `bin/Release/`。
 
 ## 授權
 
