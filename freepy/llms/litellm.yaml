@@ -1,0 +1,90 @@
+# litellm.yaml
+# LiteLLM Proxy 設定檔
+#
+# 這份設定檔定義了三種來源的模型：
+#   1. DeepSeek 雲端 API（需要 DEEPSEEK_API_KEY）
+#   2. 遠端 Ollama @ 192.168.1.146（不需要金鑰）
+#   3. 本機 LM Studio（不需要真實金鑰，走 OpenAI 相容端點）
+#
+# 啟動方式請參考同目錄下的 start_litellm.ps1 / start_litellm.sh。
+
+model_list:
+  # ---------------------------------------------------------------------
+  # DeepSeek 雲端 API
+  # ---------------------------------------------------------------------
+  - model_name: deepseek-chat
+    litellm_params:
+      model: deepseek/deepseek-chat
+      api_key: os.environ/DEEPSEEK_API_KEY
+
+  - model_name: deepseek-reasoner
+    litellm_params:
+      model: deepseek/deepseek-reasoner
+      api_key: os.environ/DEEPSEEK_API_KEY
+
+  # ---------------------------------------------------------------------
+  # 遠端 Ollama（192.168.1.146:11434）
+  # 以下是 2026-08-05 實際偵測到的模型清單，若對方機器有增減請自行更新。
+  # Ollama 不需要 api_key。
+  # model_info 是手動宣告的能力旗標：litellm 內建的模型資料庫不認得本機模型，
+  # 不宣告的話 /model/info 一律回報 None（未知）。換模型時記得跟著改。
+  # ---------------------------------------------------------------------
+  - model_name: ollama-qwen3-32b
+    litellm_params:
+      model: ollama/qwen3:32b
+      api_base: http://192.168.1.146:11434
+    model_info:
+      supports_function_calling: true
+      supports_vision: false
+
+  - model_name: ollama-qwen2.5-14b
+    litellm_params:
+      model: ollama/qwen2.5:14b-instruct-q4_K_M
+      api_base: http://192.168.1.146:11434
+    model_info:
+      supports_function_calling: true
+      supports_vision: false
+
+  - model_name: ollama-deepseek-r1-8b
+    litellm_params:
+      model: ollama/deepseek-r1:8b
+      api_base: http://192.168.1.146:11434
+    model_info:
+      supports_function_calling: false
+      supports_vision: false
+
+  - model_name: ollama-gemma3-1b
+    litellm_params:
+      model: ollama/gemma3:1b
+      api_base: http://192.168.1.146:11434
+    model_info:
+      supports_function_calling: false
+      supports_vision: false
+
+  # ---------------------------------------------------------------------
+  # 本機 LM Studio
+  # LM Studio 會在 http://localhost:1234/v1 提供 OpenAI 相容的端點。
+  # api_key 只是佔位用的假值，LM Studio 本身不會驗證它。
+  # 請把 model 換成 LM Studio 裡目前實際載入的模型 id
+  # （在 LM Studio 的「Local Server」分頁可以看到正確的 model id）。
+  # ---------------------------------------------------------------------
+  - model_name: lm-studio-local
+    litellm_params:
+      model: lm_studio/local-model
+      api_base: http://localhost:1234/v1
+      api_key: lm-studio-dummy-key
+
+# 若要啟用 master key 驗證，請設定環境變數 LITELLM_MASTER_KEY，
+# 並取消下一行的註解（同時取消 general_settings: 這個區塊標籤的註解）。
+# 若保持整段註解狀態，即使沒有設定該環境變數，proxy 仍然可以正常啟動，
+# 不會因為變數不存在而啟動失敗。
+# general_settings:
+#   master_key: os.environ/LITELLM_MASTER_KEY
+
+litellm_settings:
+  # 遇到不支援的參數時，直接丟棄而不是丟出錯誤，增加相容性
+  drop_params: true
+  # API 呼叫失敗時的重試次數，設定保守一點避免過度重試
+  num_retries: 2
+  # 單一請求的逾時秒數（本機模型或大型推理模型可能需要較長時間）
+  request_timeout: 600
