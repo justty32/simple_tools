@@ -44,8 +44,11 @@ def json_type(annotation):
     if origin in (dict, typing.Dict):
         return "object"
 
-    if annotation in _TYPE_MAP:
-        return _TYPE_MAP[annotation]
+    try:
+        if annotation in _TYPE_MAP:
+            return _TYPE_MAP[annotation]
+    except TypeError:
+        pass  # 不能當 dict key 的怪東西（例如有人把 list 實例寫成 annotation）
 
     return "string"
 

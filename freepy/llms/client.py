@@ -65,6 +65,8 @@ class LLM:
 
     def _reject(self, model, images, tools):
         """能力不足就回傳一個 ValueError，可以用就回傳 None。明確 False 才擋，None 一律放行。"""
+        if not images and not tools:
+            return None  # 沒有要檢查的東西，就別為了純文字問答去問 proxy
         caps = self._caps_for(model)
         if images and caps["vision"] is False:
             return ValueError(f"模型 {model} 不支援圖片輸入")
