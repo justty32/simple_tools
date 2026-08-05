@@ -1,0 +1,10 @@
+# python
+.venv/
+__pycache__/
+*.py[cod]
+
+# uv 的 lock 檔要不要進版控看你，多人協作才有意義，先擋著
+uv.lock
+
+# C++（dcap）
+build/

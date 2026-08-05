@@ -1,0 +1,16 @@
+# 換行字元的規矩。在 Windows 和 Linux 之間來回開發時，這個檔案是必要的：
+# 沒有它，Windows 的 git 預設會把 checkout 出來的檔案全部轉成 CRLF，
+# 而 CRLF 的 .sh 在 Linux 上會直接爆 "bad interpreter: /usr/bin/env bash^M"。
+
+# 版控裡一律存 LF，checkout 出來也一律 LF
+* text=auto eol=lf
+
+# 這幾種是 Windows 自己的東西，讓它們保持 CRLF
+*.ps1 text eol=crlf
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# 二進位檔別碰
+*.png binary
+*.jpg binary
+*.gguf binary

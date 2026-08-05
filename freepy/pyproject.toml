@@ -1,0 +1,23 @@
+# freepy 的依賴宣告。
+#
+# 不是要打包成套件，只是讓 uv 知道這個資料夾要用哪些東西：
+# 在 freepy/ 底下跑 uv run 時，它會自己把 .venv 建好、依賴同步好，
+# 不用每次都寫 --with openai。
+#
+#     cd freepy
+#     uv run python -m llms lm-gemma-4-e4b
+#
+# python 用 uv 自己管的 3.13，不碰系統的 3.14 —— 系統 python 被 pacman 升版時
+# venv 會整個壞掉，而且 3.14 太新，不是每個套件都有現成的 wheel。
+#
+# litellm proxy 不在這裡：它是獨立的 CLI，由 start_litellm.sh 用 uv run 臨時拉起來。
+
+[project]
+name = "freepy"
+version = "0"
+requires-python = ">=3.11"
+dependencies = ["openai"]
+
+[tool.uv]
+# 這個專案本身不是套件，uv 只要裝依賴、不要試著 build 它
+package = false

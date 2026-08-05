@@ -1,0 +1,23 @@
+{
+  // 直譯器指到 freepy 的 venv（uv 建的），不是系統 python。
+  // 這行是 linux/mac 的路徑；Windows 的是 freepy\.venv\Scripts\python.exe，
+  // settings.json 沒辦法分平台寫，所以在 Windows 上第一次要自己選一次
+  // （Ctrl+Shift+P → Python: Select Interpreter）。選過的結果存在本機、不進版控，
+  // 所以兩邊各選一次就沒事了，下面的 venvPath 會讓它出現在清單裡。
+  "python.defaultInterpreterPath": "${workspaceFolder}/freepy/.venv/bin/python",
+  "python.venvPath": "${workspaceFolder}/freepy",
+
+  // llms 是 freepy/ 底下的 package，把 freepy 加進搜尋路徑，
+  // Pylance 才認得 `from llms import LLM`
+  "python.analysis.extraPaths": ["${workspaceFolder}/freepy"],
+  "python.analysis.typeCheckingMode": "basic",
+
+  "python.terminal.activateEnvironment": true,
+
+  "files.exclude": {
+    "**/__pycache__": true
+  },
+  "files.watcherExclude": {
+    "**/.venv/**": true
+  }
+}
