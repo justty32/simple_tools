@@ -3,24 +3,45 @@
 #
 # 這份設定檔定義了三種來源的模型：
 #   1. DeepSeek 雲端 API（需要 DEEPSEEK_API_KEY）
-#   2. 遠端 Ollama @ 192.168.1.146（不需要金鑰）
+#   2. 遠端 Ollama @ 192.168.1.146（不需要金鑰，只有在那台機器連得到時才會通）
 #   3. 本機 LM Studio（不需要真實金鑰，走 OpenAI 相容端點）
 #
-# 啟動方式請參考同目錄下的 start_litellm.ps1 / start_litellm.sh。
+# 連不到的來源不會影響 proxy 啟動，只有真的去呼叫它時才會失敗。
+# 啟動方式請參考同目錄下的 start_litellm.sh / start_litellm.ps1。
 
 model_list:
   # ---------------------------------------------------------------------
   # DeepSeek 雲端 API
+  # 2026-08-05 實際的 /models 只有 deepseek-v4-flash 和 deepseek-v4-pro；
+  # deepseek-chat / deepseek-reasoner 是舊名字，現在分別對應到 v4-flash 的
+  # 非思考模式和思考模式，官方仍然收，所以兩種名字都留著。
   # ---------------------------------------------------------------------
   - model_name: deepseek-chat
     litellm_params:
       model: deepseek/deepseek-chat
       api_key: os.environ/DEEPSEEK_API_KEY
+    model_info:
+      supports_function_calling: true
+      supports_vision: false
+      supports_reasoning: false
 
   - model_name: deepseek-reasoner
     litellm_params:
       model: deepseek/deepseek-reasoner
       api_key: os.environ/DEEPSEEK_API_KEY
+    model_info:
+      supports_function_calling: true
+      supports_vision: false
+      supports_reasoning: true
+
+  - model_name: deepseek-v4-pro
+    litellm_params:
+      model: deepseek/deepseek-v4-pro
+      api_key: os.environ/DEEPSEEK_API_KEY
+    model_info:
+      supports_function_calling: true
+      supports_vision: false
+      supports_reasoning: true
 
   # ---------------------------------------------------------------------
   # 遠端 Ollama（192.168.1.146:11434）
@@ -36,6 +57,7 @@ model_list:
     model_info:
       supports_function_calling: true
       supports_vision: false
+      supports_reasoning: true
 
   - model_name: ollama-qwen2.5-14b
     litellm_params:
@@ -44,6 +66,7 @@ model_list:
     model_info:
       supports_function_calling: true
       supports_vision: false
+      supports_reasoning: false
 
   - model_name: ollama-deepseek-r1-8b
     litellm_params:
@@ -52,6 +75,7 @@ model_list:
     model_info:
       supports_function_calling: false
       supports_vision: false
+      supports_reasoning: true
 
   - model_name: ollama-gemma3-1b
     litellm_params:
@@ -60,19 +84,46 @@ model_list:
     model_info:
       supports_function_calling: false
       supports_vision: false
+      supports_reasoning: false
 
   # ---------------------------------------------------------------------
   # 本機 LM Studio
-  # LM Studio 會在 http://localhost:1234/v1 提供 OpenAI 相容的端點。
+  # LM Studio 會在 http://localhost:1234/v1 提供 OpenAI 相容的端點，
   # api_key 只是佔位用的假值，LM Studio 本身不會驗證它。
-  # 請把 model 換成 LM Studio 裡目前實際載入的模型 id
-  # （在 LM Studio 的「Local Server」分頁可以看到正確的 model id）。
+  # 下面的 model id 是本機真的下載好的三個（LM Studio 的 Local Server 分頁，
+  # 或 curl http://localhost:1234/v1/models 可以確認）。
+  # 三個都有 mmproj 檔，所以是看得到圖的。
+  # LM Studio 沒載入模型時，第一次呼叫會由它自己 JIT 載入，會慢一下。
   # ---------------------------------------------------------------------
-  - model_name: lm-studio-local
+  - model_name: lm-gemma-4-12b
     litellm_params:
-      model: lm_studio/local-model
+      model: lm_studio/google/gemma-4-12b-qat
       api_base: http://localhost:1234/v1
       api_key: lm-studio-dummy-key
+    model_info:
+      supports_function_calling: true
+      supports_vision: true
+      supports_reasoning: true
+
+  - model_name: lm-gemma-4-e4b
+    litellm_params:
+      model: lm_studio/google/gemma-4-e4b
+      api_base: http://localhost:1234/v1
+      api_key: lm-studio-dummy-key
+    model_info:
+      supports_function_calling: true
+      supports_vision: true
+      supports_reasoning: true
+
+  - model_name: lm-qwen3.5-9b
+    litellm_params:
+      model: lm_studio/qwen/qwen3.5-9b
+      api_base: http://localhost:1234/v1
+      api_key: lm-studio-dummy-key
+    model_info:
+      supports_function_calling: true
+      supports_vision: true
+      supports_reasoning: true
 
 # 若要啟用 master key 驗證，請設定環境變數 LITELLM_MASTER_KEY，
 # 並取消下一行的註解（同時取消 general_settings: 這個區塊標籤的註解）。
