@@ -7,8 +7,18 @@
                 邊收邊累積，疊代到一半就可以讀
     tool_calls  模型要呼叫的工具；碎片要收完才拼得起來，所以讀它會先把串流跑完
 
+想看著模型邊想邊印，改用 parts()，它把思考和答案一起即時吐出來：
+
+    for kind, ch in handler.parts():   # kind 是 "think" 或 "answer"
+        print(ch, end="", flush=True)
+
+兩種疊代方式擇一，不要混用 —— 一般疊代會把路過的思考字元丟掉（完整的思考仍然
+留在 reasoning 裡），parts() 則兩種都給。
+
 不管是跑完、提前 close()、還是中途爆炸，已經收到的東西都會寫回對話歷史。
 """
+
+import collections
 
 from . import toolcalls
 
@@ -23,7 +33,7 @@ class StreamHandler:
         self._buffer = ""
         self._reasoning = ""
         self._tools = toolcalls.Accumulator()
-        self._queue = ""
+        self._queue = collections.deque()  # [(kind, ch)]，kind 是 "think" 或 "answer"
         self._done = False
         self.err = None
 
@@ -31,32 +41,48 @@ class StreamHandler:
         return self
 
     def __next__(self):
-        while not self._queue:
-            if self._done:
-                raise StopIteration
-            try:
-                chunk = next(self._response)
-            except StopIteration:
-                self._finish()
-                raise
-            except Exception as e:
-                self.err = e
-                self._finish()
-                raise StopIteration
-            if chunk.choices:
-                self._eat(chunk.choices[0].delta)
-        ch, self._queue = self._queue[0], self._queue[1:]
-        return ch
+        while True:
+            while not self._queue:
+                if self._done:
+                    raise StopIteration
+                self._pump()
+            kind, ch = self._queue.popleft()
+            if kind == "answer":
+                return ch
+
+    def parts(self):
+        """一次 yield 一個 (kind, ch)，kind 是 "think" 或 "answer"，兩種都即時。"""
+        while True:
+            while not self._queue:
+                if self._done:
+                    return
+                self._pump()
+            yield self._queue.popleft()
+
+    def _pump(self):
+        """從串流收一片 chunk 進佇列；收完或爆掉就收尾。"""
+        try:
+            chunk = next(self._response)
+        except StopIteration:
+            self._finish()
+            return
+        except Exception as e:
+            self.err = e
+            self._finish()
+            return
+        if chunk.choices:
+            self._eat(chunk.choices[0].delta)
 
     def _eat(self, delta):
-        """拆一片 delta：思考、工具碎片各自收好，答案的字排進待吐佇列。"""
+        """拆一片 delta：工具碎片收到 Accumulator，思考和答案的字排進佇列。"""
         thought = getattr(delta, "reasoning_content", None)
         if thought:
             self._reasoning += thought
+            self._queue.extend(("think", ch) for ch in thought)
         self._tools.feed(getattr(delta, "tool_calls", None))
         if delta.content:
             self._buffer += delta.content
-            self._queue += delta.content
+            self._queue.extend(("answer", ch) for ch in delta.content)
 
     def _drain(self):
         for _ in self:

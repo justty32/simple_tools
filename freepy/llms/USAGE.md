@@ -1,7 +1,6 @@
 # 用法
 
 先看 [README.md](README.md) 把 proxy 跑起來。這份講串流、思考、工具、圖片。
-
 共通約定：所有對外的方法都回傳 `(result, err)`，**絕不丟例外**，`err` 是 None 才看 `result`。
 
 ## 串流
@@ -17,6 +16,17 @@ print(handler.err)        # 串流中途爆掉的話在這裡，疊代本身不�
 
 `handler.text` 會把剩下的串流跑完再回傳完整文字。`with` 或 `close()` 可以提前收工，
 已經收到的部分照樣寫回歷史。
+
+**要看模型邊想邊印就用 `parts()`**，思考和答案都即時，`kind` 是 `"think"` 或 `"answer"`：
+
+```python
+for kind, ch in handler.parts():
+    print(ch, end="", flush=True)
+```
+
+兩種疊代方式**擇一，不要混用**：一般疊代會把路過的思考字元丟掉（完整思考仍留在
+`handler.reasoning`），`parts()` 則兩種都給。思考是在答案之前傳完的，所以用一般疊代時
+模型想多久畫面就靜止多久 —— 那是正常的，不是當掉。
 
 ## 思考
 
@@ -91,7 +101,6 @@ reply, err = bot.ask(tool_results=results, tools=schemas)
 
 模型要叫工具時 `ask()` 回的是 list 而不是字串，用 `isinstance(result, list)` 分辨。
 `args` 的 JSON 壞掉不會丟例外，會給空 dict 並附上 `args_raw`。
-
 串流也收得到工具，碎片會依 index 拼回同樣的形狀（讀它會先把串流跑完）：
 
 ```python
@@ -119,14 +128,10 @@ bot.ask("這是什麼顏色？", images=["red.png", "https://example.com/dog.jpg
 `None`（proxy 沒說）。
 
 只有明確 `False` 才會擋下呼叫並回一個 `ValueError`，`None` 一律放行。
-`supports_reasoning` 純粹是情報，不擋任何東西 —— 思考不是送出去的參數，是模型自己的事，
-知道它會思考才值得去讀 `last_reasoning`。
+`supports_reasoning` 純粹是情報，不擋任何東西。
 
-答案來自 proxy 的 `/model/info`，也就是 `litellm.yaml` 裡的 `model_info`
-加上 litellm 內建的模型資料庫。兩個都不完全可靠：內建資料庫不認得本機模型（一律 `None`），
-對雲端模型也可能過期 —— 例如它說 `deepseek-reasoner` 不支援 tool calling，
-但實際打過去是會叫工具的，所以 `litellm.yaml` 裡手動覆寫成 `true`。
-不確定就自己實測一次再宣告。
+答案來自 proxy 的 `/model/info`（`litellm.yaml` 的 `model_info` 加上 litellm 內建的
+資料庫），**兩個都不完全可靠，宣告前先實測** —— 理由見 NOTES.md。
 
 查到的結果會快取，改完 `litellm.yaml` 重啟 proxy 後呼叫 `LLM.clear_caps_cache()` 清掉。
 臨時要蓋掉某個判斷，建 instance 時給 `caps`：
