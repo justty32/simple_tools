@@ -15,7 +15,8 @@ FIELDS = {
     "reasoning": "supports_reasoning",
 }
 
-# {root_url: {model_name: {"tools": bool|None, "vision": ..., "reasoning": ...}}}
+# {(root_url, key): {model_name: {"tools": bool|None, "vision": ..., "reasoning": ...}}}
+# key 也要進 cache key：同一個 proxy 用不同金鑰問，看得到的模型可能不一樣
 _cache = {}
 
 
@@ -35,10 +36,10 @@ def lookup(root_url, key, model, override=None):
 
 def _table(root_url, key):
     """拿某個 proxy 的能力表；沒查過才去查（查不到的空表也算查過，不重試）。"""
-    table = _cache.get(root_url)
+    table = _cache.get((root_url, key))
     if table is None:
         table = _fetch(root_url, key)
-        _cache[root_url] = table
+        _cache[(root_url, key)] = table
     return table
 
 

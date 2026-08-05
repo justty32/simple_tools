@@ -34,7 +34,7 @@
     client.py       LLM class，對話狀態和 ask()
     stream.py       串流處理器（答案 / 思考 / tool_calls）
     toolcalls.py    tool_calls 的組裝與拆解
-    caps.py         問 proxy 模型支不支援 tool / vision
+    caps.py         問 proxy 模型支不支援 tool / vision / 思考
     content.py      url、key、圖片這些雜事
     params.py       API 呼叫參數
     func_schema.py  python 函式 → OpenAI tool schema（配 jsontypes / docstrings）
@@ -42,7 +42,6 @@
 
 from .client import LLM
 from .func_schema import to_schema, to_schemas, to_tools
-from .oneshot import ask
 from .params import Params
 from .stream import StreamHandler
 
@@ -50,7 +49,6 @@ __all__ = [
     "LLM",
     "Params",
     "StreamHandler",
-    "ask",
     "to_schema",
     "to_schemas",
     "to_tools",

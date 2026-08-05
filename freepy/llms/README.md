@@ -95,7 +95,6 @@ Params(extra={"extra_body": {"chat_template_kwargs": {...}}})  # 非標準的要
 | `caps.py` | 問 proxy 模型支不支援 tool / vision / 思考，含快取 |
 | `content.py` | url、key、圖片這些雜事，全是純函式 |
 | `params.py` | `Params`：只吐出有設定的呼叫參數 |
-| `oneshot.py` | 不記憶的一次性 `ask()` |
 | `func_schema.py` | python 函式 → OpenAI tool schema |
 | `jsontypes.py` | type annotation → JSON schema type |
 | `docstrings.py` | 從 docstring 挖描述 |

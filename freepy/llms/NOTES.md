@@ -67,6 +67,18 @@ LM Studio 那區的 yaml 用 **YAML anchor（`&lm` / `<<: *lm`）** 收掉重複
 - **`.gitattributes` 是必要的，不是潔癖**。沒有它，Windows checkout 會把 `.sh` 轉成 CRLF，回到 Linux 執行就是 `bad interpreter: /usr/bin/env bash^M`，第一次遇到會找很久。
 - PowerShell 預設擋 `.ps1`，`start_litellm.ps1` 跑不動時是 ExecutionPolicy 的問題，不是腳本錯。
 
+## ask() 裡三個踩過的雷（2026-08-05 修掉）
+
+**送出前就寫歷史，失敗要收回來。** user message 是在呼叫 API 之前就 append 進 `history` 的，早期版本失敗時沒收回去，於是歷史裡會堆一串沒人回答的問題，下次成功時整包送出（有些 API 不收連續兩則 user）。現在 `ask()` 一進來先記 `checkpoint = len(self.history)`，`except` 裡 `del self.history[checkpoint:]`。
+
+**`params.extra` 不能蓋掉 model / messages / stream。** 早期是先建 kwargs 再 `update(params)`，所以 `extra={"stream": True}` 蓋得掉 `stream=False`，但 `if stream:` 判斷用的是函式參數，結果拿串流物件去走非串流的路，噴 `'Stream' object has no attribute 'choices'`。現在順序反過來：params 先展開，這三個最後寫。
+
+**只給圖不給文字要能送。** 判斷式原本是 `if prompt is not None`，於是 `ask(images=[...])` 沒有 prompt 時圖片組好了卻沒被加進 messages，只送出一個空的 messages 陣列。現在是 `if prompt is not None or images`。
+
+還有一個**沒修、刻意留著**的：handler 拿了卻完全不碰（不疊代也不 close），assistant 訊息就不會寫進歷史、連線也不關。在 `__del__` 裡收尾會在 GC 時間點動到 `history`，比問題本身更糟，所以只在文件裡寫清楚用 `with`。
+
+**`oneshot.ask()` 拿掉了**（原本是 module 層的一次性問答）。它只轉送 `model`/`system`/`key`，`timeout`、`caps` 都被安靜吃掉，而它做的事就是 `LLM(...).ask(remember=False)` —— 少一個會騙人的入口比較好。
+
 ## 慣例
 
 - **一個檔 150 行以內**，程式和文件都算。超過就拆 —— README 超過就拆出 USAGE.md。

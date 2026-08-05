@@ -96,6 +96,7 @@ class LLM:
         params 有給的話會整包取代 self.params（不是逐欄位合併）。
         """
         self.last_reasoning = None
+        checkpoint = len(self.history)  # 失敗時要把這一輪寫進歷史的東西收回來
         try:
             effective_model = model or self.model
 
@@ -106,20 +107,20 @@ class LLM:
             messages = self._messages()
             if tool_results:
                 self._extend(messages, toolcalls.result_messages(tool_results), remember)
-            if prompt is not None:
+            if prompt is not None or images:
                 content = build_content(prompt, images)
                 self._extend(messages, [{"role": "user", "content": content}], remember)
 
-            kwargs = {
-                "model": effective_model,
-                "messages": messages,
-                "stream": stream,
-            }
+            kwargs = {}
             p = params if params is not None else self.params
             if p is not None:
                 kwargs.update(p.to_kwargs())
             if tools:
                 kwargs["tools"] = tools
+            # 這三個是這個 class 在管的東西，最後才寫，確保蓋得過 params.extra
+            kwargs["model"] = effective_model
+            kwargs["messages"] = messages
+            kwargs["stream"] = stream
 
             response = self._client.chat.completions.create(**kwargs)
 
@@ -141,4 +142,6 @@ class LLM:
             return text, None
 
         except Exception as e:
+            # 這一輪沒問成，就別在歷史裡留下沒人回答的問題
+            del self.history[checkpoint:]
             return None, e

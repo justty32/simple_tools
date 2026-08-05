@@ -140,11 +140,11 @@ bot.ask("這是什麼顏色？", images=["red.png", "https://example.com/dog.jpg
 bot = LLM(model="lm-qwen3.5-9b", caps={"tools": True, "vision": False})
 ```
 
-## 一次性問答
+## 不想留下歷史
 
-不需要記憶就用 module 層的 `ask()`，建一個用完即丟的 `LLM`：
+`remember=False`，這次的一問一答都不寫進 `history`：
 
 ```python
-from llms import ask
-reply, err = ask("http://localhost:4000", "翻譯這句", model="deepseek-chat")
+reply, err = bot.ask("翻譯這句", remember=False)
 ```
+要連 instance 都用完即丟就自己建一個，`LLM()` 很便宜。

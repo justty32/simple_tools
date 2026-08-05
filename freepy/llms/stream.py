@@ -16,6 +16,8 @@
 留在 reasoning 裡），parts() 則兩種都給。
 
 不管是跑完、提前 close()、還是中途爆炸，已經收到的東西都會寫回對話歷史。
+但 handler 拿了卻**完全不碰**（不疊代也不 close）就沒人收尾：這一輪的 assistant
+訊息不會進歷史，連線也不會關。不確定會不會讀完就用 with。
 """
 
 import collections
