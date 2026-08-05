@@ -17,123 +17,131 @@ model_list:
   # 非思考模式和思考模式，官方仍然收，所以兩種名字都留著。
   # ---------------------------------------------------------------------
   - model_name: deepseek-chat
-    litellm_params:
+    litellm_params: &ds
       model: deepseek/deepseek-chat
       api_key: os.environ/DEEPSEEK_API_KEY
-    model_info:
+    model_info: &ds_info
       supports_function_calling: true
       supports_vision: false
       supports_reasoning: false
 
   - model_name: deepseek-reasoner
     litellm_params:
+      <<: *ds
       model: deepseek/deepseek-reasoner
-      api_key: os.environ/DEEPSEEK_API_KEY
-    model_info:
-      supports_function_calling: true
-      supports_vision: false
+    model_info: &ds_info_thinking
+      <<: *ds_info
       supports_reasoning: true
 
   - model_name: deepseek-v4-pro
     litellm_params:
+      <<: *ds
       model: deepseek/deepseek-v4-pro
-      api_key: os.environ/DEEPSEEK_API_KEY
-    model_info:
-      supports_function_calling: true
-      supports_vision: false
-      supports_reasoning: true
+    model_info: *ds_info_thinking
 
   # ---------------------------------------------------------------------
-  # 遠端 Ollama（192.168.1.146:11434）
-  # 以下是 2026-08-05 實際偵測到的模型清單，若對方機器有增減請自行更新。
-  # Ollama 不需要 api_key。
-  # model_info 是手動宣告的能力旗標：litellm 內建的模型資料庫不認得本機模型，
-  # 不宣告的話 /model/info 一律回報 None（未知）。換模型時記得跟著改。
+  # 遠端 Ollama（192.168.1.146:11434，不需要 api_key）
+  # 2026-08-05 實際偵測到的清單，對方機器有增減請自行更新。
+  # model_info 是手動宣告的能力旗標：litellm 不認得本機模型，不宣告一律回報 None。
   # ---------------------------------------------------------------------
   - model_name: ollama-qwen3-32b
-    litellm_params:
+    litellm_params: &ol
       model: ollama/qwen3:32b
       api_base: http://192.168.1.146:11434
-    model_info:
+    model_info: &ol_info
       supports_function_calling: true
       supports_vision: false
       supports_reasoning: true
 
   - model_name: ollama-qwen2.5-14b
     litellm_params:
+      <<: *ol
       model: ollama/qwen2.5:14b-instruct-q4_K_M
-      api_base: http://192.168.1.146:11434
     model_info:
-      supports_function_calling: true
-      supports_vision: false
+      <<: *ol_info
       supports_reasoning: false
 
   - model_name: ollama-deepseek-r1-8b
     litellm_params:
+      <<: *ol
       model: ollama/deepseek-r1:8b
-      api_base: http://192.168.1.146:11434
     model_info:
+      <<: *ol_info
       supports_function_calling: false
-      supports_vision: false
-      supports_reasoning: true
 
   - model_name: ollama-gemma3-1b
     litellm_params:
+      <<: *ol
       model: ollama/gemma3:1b
-      api_base: http://192.168.1.146:11434
     model_info:
+      <<: *ol_info
       supports_function_calling: false
-      supports_vision: false
       supports_reasoning: false
 
   # ---------------------------------------------------------------------
-  # 本機 LM Studio
-  # LM Studio 會在 http://localhost:1234/v1 提供 OpenAI 相容的端點，
-  # api_key 只是佔位用的假值，LM Studio 本身不會驗證它。
-  # 下面的 model id 是本機真的下載好的三個（LM Studio 的 Local Server 分頁，
-  # 或 curl http://localhost:1234/v1/models 可以確認）。
-  # 三個都有 mmproj 檔，所以是看得到圖的。
-  # LM Studio 沒載入模型時，第一次呼叫會由它自己 JIT 載入，會慢一下。
+  # 本機 LM Studio（http://localhost:1234/v1，OpenAI 相容，api_key 是佔位假值）
+  # model id 用 curl http://localhost:1234/v1/models 問，不要猜。三個都有 mmproj，
+  # 所以看得到圖。沒載入模型時第一次呼叫會 JIT 載入，會慢一下。
+  #
+  # 每顆給兩個名字：本名預設會思考，`-nothink` 是同一顆模型、只是把
+  # reasoning_effort: none 焊死在設定裡。這樣「要不要想」統一成換名字，
+  # 跟 DeepSeek 的 chat / reasoner 一致，呼叫端不用記哪家用哪招。
+  # allowed_openai_params 不能少：litellm 的支援清單沒有 reasoning_effort，
+  # 配上 drop_params 會被無聲丟掉。
   # ---------------------------------------------------------------------
   - model_name: lm-gemma-4-12b
-    litellm_params:
+    litellm_params: &lm
       model: lm_studio/google/gemma-4-12b-qat
       api_base: http://localhost:1234/v1
       api_key: lm-studio-dummy-key
-    model_info:
+      allowed_openai_params: ["reasoning_effort"]
+    model_info: &lm_info
       supports_function_calling: true
       supports_vision: true
       supports_reasoning: true
+
+  - model_name: lm-gemma-4-12b-nothink
+    litellm_params:
+      <<: *lm
+      reasoning_effort: "none"
+    model_info: &lm_info_nothink
+      <<: *lm_info
+      supports_reasoning: false
 
   - model_name: lm-gemma-4-e4b
     litellm_params:
+      <<: *lm
       model: lm_studio/google/gemma-4-e4b
-      api_base: http://localhost:1234/v1
-      api_key: lm-studio-dummy-key
-    model_info:
-      supports_function_calling: true
-      supports_vision: true
-      supports_reasoning: true
+    model_info: *lm_info
+
+  - model_name: lm-gemma-4-e4b-nothink
+    litellm_params:
+      <<: *lm
+      model: lm_studio/google/gemma-4-e4b
+      reasoning_effort: "none"
+    model_info: *lm_info_nothink
 
   - model_name: lm-qwen3.5-9b
     litellm_params:
+      <<: *lm
       model: lm_studio/qwen/qwen3.5-9b
-      api_base: http://localhost:1234/v1
-      api_key: lm-studio-dummy-key
-    model_info:
-      supports_function_calling: true
-      supports_vision: true
-      supports_reasoning: true
+    model_info: *lm_info
 
-# 若要啟用 master key 驗證，請設定環境變數 LITELLM_MASTER_KEY，
-# 並取消下一行的註解（同時取消 general_settings: 這個區塊標籤的註解）。
-# 若保持整段註解狀態，即使沒有設定該環境變數，proxy 仍然可以正常啟動，
-# 不會因為變數不存在而啟動失敗。
+  - model_name: lm-qwen3.5-9b-nothink
+    litellm_params:
+      <<: *lm
+      model: lm_studio/qwen/qwen3.5-9b
+      reasoning_effort: "none"
+    model_info: *lm_info_nothink
+
+# 要 master key 驗證就設好 LITELLM_MASTER_KEY 再解開這兩行。整段註解著的話，
+# 就算沒有那個環境變數，proxy 一樣啟動得起來。
 # general_settings:
 #   master_key: os.environ/LITELLM_MASTER_KEY
 
 litellm_settings:
-  # 遇到不支援的參數時，直接丟棄而不是丟出錯誤，增加相容性
+  # 不支援的參數直接丟棄而不是報錯，增加相容性。代價是打錯字或送了 provider
+  # 不吃的欄位都不會有任何提示，要硬塞就用 allowed_openai_params（見上面 LM Studio）
   drop_params: true
   # API 呼叫失敗時的重試次數，設定保守一點避免過度重試
   num_retries: 2

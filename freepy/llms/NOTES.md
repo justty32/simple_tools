@@ -21,6 +21,19 @@ DeepSeek 和 LM Studio（qwen3.5、gemma-4）**都是**把思考放在 `message.
 
 **混合式思考模型會自己決定要不要想。** `lm-gemma-4-e4b` 連問四次同一題，三次有思考（1000+ 字）、一次完全沒有 —— 沒想的那次回應裡根本沒有 `reasoning_content` 這個 key，`last_reasoning` 就是 `None`。**這是正常的，不是管線斷了**，追這個會浪費很多時間。附帶一提，偷懶不想的那次答案也真的答錯（9.11 > 9.9）。
 
+## 開關思考：統一成「換名字」
+
+**兩家的機制不同，但 yaml 把它們包成同一種用法**，呼叫端只要換 `model` 字串：
+
+- **DeepSeek** 本來就只能換名字（`deepseek-chat` / `deepseek-reasoner` 是同一顆 v4-flash 的兩個模式）。它**不吃 `reasoning_effort`** —— 2026-08-05 實測給 `"none"` 照樣想了 92 字。
+- **LM Studio** 吃 `reasoning_effort`（直打 1234 驗過，`"none"` 思考確實消失），但要每次帶參數很煩，所以每顆模型在 yaml 裡多開一個 `-nothink` 分身，把 `reasoning_effort: "none"` 焊死在 `litellm_params` 裡。
+
+**那個會坑死人的細節**：litellm 的支援參數清單裡**沒有** `reasoning_effort`（`/model/info` 的 `supported_openai_params` 可以查），而我們開了 `drop_params: true`，所以它會被**無聲丟掉** —— 不報錯、不警告，你以為關掉了其實沒有。解法是那三個 `lm-*` 都加 `allowed_openai_params: ["reasoning_effort"]` 強制放行。這是 `drop_params: true` 的一般性代價，以後任何「參數送了沒反應」都先往這裡查。
+
+LM Studio 那區的 yaml 用 **YAML anchor（`&lm` / `<<: *lm`）** 收掉重複，順便壓在 150 行以內。`-12b-nothink` 是唯一沒有自己覆寫 `model:` 的一筆，完全靠繼承，改動那區之後要特別驗它有沒有打到正確的模型（看 LM Studio 載入了哪顆）。
+
+試過但**沒用**的兩招，別再繞回去：`chat_template_kwargs: {enable_thinking: false}`（無效，思考照舊）、prompt 尾巴加 `/no_think`（反效果，它會開始思考「什麼是 /no_think」，思考字數反而翻倍）。
+
 ## 串流的兩個坑（都是原本 llms.py 漏掉的）
 
 **tool_calls 在串流時是碎片。** `id` 和 `name` 通常只出現在第一片，`arguments` 是一小段一小段接起來的，要**依 `delta.index` 分組**才拼得回去（一次可能有多個 call 交錯）。原本的 `__next__` 只讀 `delta.content`，所以串流下的工具呼叫整包消失。

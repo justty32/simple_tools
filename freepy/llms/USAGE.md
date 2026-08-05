@@ -35,6 +35,31 @@ handler.reasoning                # 串流：邊收邊累積，疊代到一半就
 DeepSeek 和 LM Studio（qwen3.5、gemma-4）都是走 `reasoning_content` 這個欄位，
 不是把 `<think>` 塞在答案裡，所以答案拿到手就是乾淨的。
 
+### 要它想 / 不要它想
+
+**一律換模型名字**，兩家都一樣，`ask()` 本來就吃 per-call 的 `model`，
+同一段對話裡混著切沒問題：
+
+```python
+bot = LLM(model="deepseek-chat")                        # 平常不想
+bot.ask("難的題目", model="deepseek-reasoner")           # 這句想一下
+
+bot = LLM(model="lm-gemma-4-e4b")                       # 預設會想
+bot.ask("簡單的問題", model="lm-gemma-4-e4b-nothink")    # 這句不要想
+```
+
+底層其實是兩回事，只是被 `litellm.yaml` 包成同一種用法：DeepSeek 的 chat / reasoner
+是同一顆 v4-flash 的兩個模式，本來就只能靠名字切；LM Studio 那邊三顆各有一個
+`-nothink` 分身，同一顆模型，差別只是設定裡焊死了 `reasoning_effort: none`。
+
+要臨時調思考的多寡（而不是全關），LM Studio 的可以直接送參數：
+
+```python
+bot.ask("難題", params=Params(extra={"reasoning_effort": "high"}))
+```
+
+DeepSeek 不吃 `reasoning_effort`，給了也沒用，只能換名字。
+
 注意 `supports_reasoning: true` 只表示「這模型會思考」，**不表示每次都思考**。
 gemma-4-e4b 這種混合式的模型自己決定要不要想，不想的時候回應裡根本沒有
 `reasoning_content` 欄位，`last_reasoning` 就是 `None` —— 這是正常的，不是管線斷了

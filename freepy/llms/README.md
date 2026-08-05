@@ -47,6 +47,7 @@ model 名字定義在 `litellm.yaml`，`curl localhost:4000/v1/models` 可以確
 | `deepseek-reasoner` | DeepSeek 雲端 | 舊名，現在打到 v4-flash 的思考模式 |
 | `deepseek-v4-pro` | DeepSeek 雲端 | 會思考 |
 | `lm-gemma-4-12b` / `lm-gemma-4-e4b` / `lm-qwen3.5-9b` | 本機 LM Studio | 三個都看得到圖、都會思考、都叫得動工具 |
+| 上面三個各加 `-nothink` | 同一顆模型 | 關掉思考的分身，例如 `lm-gemma-4-e4b-nothink` |
 | `ollama-*` | 遠端 Ollama @ 192.168.1.146 | 只有連得到那台時才通 |
 
 LM Studio 沒載入模型時第一次呼叫會由它自己 JIT 載入，會慢一下。
@@ -71,7 +72,18 @@ reply, err = bot.ask("你好")
 - `key` 沒給就吃 `OPENAI_API_KEY`，再沒有就用 `"hello"` 頂著（本機 proxy 不檢查）
 - `system` 不佔歷史，每次送出時才補在最前面；`reset()` 清歷史不動它
 - `caps={"tools": True, "vision": False, "reasoning": True}` 可以蓋掉 proxy 回報的能力
-- `Params` 只吐出有設定的欄位，其餘交給模型自己的預設值；`extra` 直接併進 kwargs
+- `Params` 只吐出有設定的欄位，其餘交給模型自己的預設值
+
+`Params.extra` 是**直接展開成 `create()` 的參數**，所以 key 必須是 openai SDK 有的：
+
+```python
+Params(extra={"reasoning_effort": "none"})                     # OK
+Params(extra={"chat_template_kwargs": {...}})                  # TypeError
+Params(extra={"extra_body": {"chat_template_kwargs": {...}}})  # 非標準的要這樣包
+```
+
+第二行會回 `TypeError: got an unexpected keyword argument`。因為 `ask()` 不丟例外，
+它會安靜地變成 `err` —— 不看 `err` 的話你只會拿到一個 `None`，很難查。
 
 ## 檔案分工
 
