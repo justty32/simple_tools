@@ -43,11 +43,22 @@ model_list:
   # 遠端 Ollama（192.168.1.146:11434，不需要 api_key）
   # 2026-08-05 實際偵測到的清單，對方機器有增減請自行更新。
   # model_info 是手動宣告的能力旗標：litellm 不認得本機模型，不宣告一律回報 None。
+  #
+  # 2026-08-06 實測發現兩件事：
+  # 1. model 一定要用 ollama_chat/ 這個 prefix，不能用 ollama/。後者走的是舊版
+  #    /api/generate（純文字補全，工具定義得塞進文字 prompt 裡讓模型自己接龍），
+  #    thinking 也不會被解析成 reasoning_content。ollama_chat/ 才會走 /api/chat，
+  #    有原生 tool_calls 和 think 參數支援。翻船翻了老半天就是 prefix 選錯。
+  # 2. qwen3-32b / deepseek-r1-8b 標了 supports_reasoning: true，但 reasoning_effort
+  #    沒進 allowed_openai_params 白名單會被 drop_params 默默丟掉，傳不到 Ollama 的
+  #    think 參數。只有這兩顆真的支援思考的模型才給 allowed_openai_params，
+  #    qwen2.5-14b / gemma3-1b 不給，避免對不支援思考的模型誤傳這個參數。
   # ---------------------------------------------------------------------
   - model_name: ollama-qwen3-32b
-    litellm_params: &ol
-      model: ollama/qwen3:32b
-      api_base: http://192.168.1.146:11434
+    litellm_params:
+      model: ollama_chat/qwen3:32b
+      api_base: &ol_base http://192.168.1.146:11434
+      allowed_openai_params: ["reasoning_effort"]
     model_info: &ol_info
       supports_function_calling: true
       supports_vision: false
@@ -55,24 +66,25 @@ model_list:
 
   - model_name: ollama-qwen2.5-14b
     litellm_params:
-      <<: *ol
-      model: ollama/qwen2.5:14b-instruct-q4_K_M
+      model: ollama_chat/qwen2.5:14b-instruct-q4_K_M
+      api_base: *ol_base
     model_info:
       <<: *ol_info
       supports_reasoning: false
 
   - model_name: ollama-deepseek-r1-8b
     litellm_params:
-      <<: *ol
-      model: ollama/deepseek-r1:8b
+      model: ollama_chat/deepseek-r1:8b
+      api_base: *ol_base
+      allowed_openai_params: ["reasoning_effort"]
     model_info:
       <<: *ol_info
       supports_function_calling: false
 
   - model_name: ollama-gemma3-1b
     litellm_params:
-      <<: *ol
-      model: ollama/gemma3:1b
+      model: ollama_chat/gemma3:1b
+      api_base: *ol_base
     model_info:
       <<: *ol_info
       supports_function_calling: false
