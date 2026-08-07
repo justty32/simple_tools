@@ -59,9 +59,9 @@ uv run python prototypes/plan_shell.py --model deepseek-chat --root /tmp/ws "...
 
 ---
 
-## 第一輪實測撞到的東西
+## 第一輪：Windows，2026-08-07
 
-2026-08-07，`ollama-qwen3-32b`，任務「把 a.txt 移到 backup/」。翻出來的東西是對的，
+`ollama-qwen3-32b`，任務「把 a.txt 移到 backup/」。翻出來的東西是對的，
 但過程露了兩個洞：
 
 ### 1. 這套東西只服務 POSIX —— 這一輪把它定成契約了
@@ -103,3 +103,55 @@ qwen3-32b 前兩輪回的是「有 `reasoning_content`、`content` 空、也沒�
 - 模型探查過了，就把 plan 裡「先確認來源存在」那步省掉，但**註解留著** ——
   `# Confirm source file exists` 底下直接是 `mv`。這其實是它推理正確
   （已經確認過了）但沒把註解一起改。產出物會自相矛盾。
+
+---
+
+## 第二輪：WSL（真 POSIX），2026-08-07
+
+同一顆模型、同一個任務。先確認第一輪的結論成立，然後撞到一個新的、比較深的問題。
+
+### POSIX 那條修對了
+
+三次 `inspect`，三個問題三個答案，一個都沒掉：
+
+```
+[inspect] test -f a.txt && echo 'a.txt exists' || echo 'a.txt not found'
+    a.txt exists
+[inspect] test -d backup/ && echo 'backup directory exists' || ...
+    backup directory exists
+[inspect] test -f backup/a.txt && echo 'Destination file exists' || ...
+    Destination file not found
+```
+
+### 4. 翻譯和執行之間的時間差 —— 這是我們自己造成的洞
+
+同一個輸入連跑兩次，產出的計劃在**安全性上是相反的**：
+
+```sh
+# 第一次：檢查寫進計劃裡
+if [ ! -f a.txt ]; then echo "Error: a.txt not found" >&2; exit 1; fi
+if [ ! -d backup/ ]; then ... fi
+mv a.txt backup/
+
+# 第二次：規劃時檢查完，交出一個裸的 mv
+# Ensure source file exists
+mv a.txt backup/a.txt
+```
+
+第二種有 TOCTOU 問題。而且**這個洞是「翻譯與執行分離」這個設計自己挖的**：
+兩件事刻意拆開之後，中間隔多久完全不受控 —— 那份 `plan.sh` 可能三天後才被執行。
+模型在規劃當下看到 `backup/a.txt` 不存在，不代表按下執行時它還不存在。
+
+所以規則是：**`inspect` 的結論只能決定「要做什麼」，不能取代「執行當下能不能做」。**
+檢查一定要寫成 `if` / `test` 擋在 script 裡，不能只留一行註解說我確認過了
+（第 3 條那個「註解說謊」的現象，其實就是這個問題的前兆）。
+
+寫進 system prompt 之後再跑兩次，兩次都把檢查寫進 script 了。
+
+### 順帶學到的：產出不固定，是要設計的對象，不是瑕疵
+
+note 講純工具時說「只是產出結果不固定」—— 上面那兩份計劃就是它的具體長相：
+不是文字風格不同，是**一份安全、一份不安全**。
+
+這代表提示詞裡沒明講的東西，模型會在兩種做法之間隨機擺盪；要哪一種就得寫死。
+也代表這類工具沒辦法靠「跑一次看起來對」來驗收 —— 第一輪在 Windows 上也「看起來對」。
