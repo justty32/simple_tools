@@ -29,6 +29,13 @@ print(result)
 
 沒有列目錄的工具，因為 `run_shell("ls -la")` 就夠了。
 
+**`run_shell` 只服務 POSIX，非 POSIX 直接回 Error 不執行。** 模型腦子裡的 shell 就是
+POSIX，它寫的 `;`、`&&`、`test -f`、單引號都照那個來；Windows 的 cmd.exe 不認得 `;`
+是分隔符，會把後半段當成前面 `echo` 的參數吞掉，然後回 exit 0。模型問了兩件事只拿到
+一件的答案、而且不知道自己沒拿到 —— 接著就用這個殘缺的認知去規劃。
+安靜的錯比吵的錯危險，所以擋在門口，不去翻譯語法（翻不完，而且翻錯一樣是安靜的）。
+在 Windows 上開發就進 WSL。
+
 **回傳的永遠是一個字串，錯誤也是字串**，不丟例外、也不是 `llms` 那種 `(result, err)`。
 理由：回傳值會直接變成送回模型的 tool message，錯誤訊息本身就是要給模型讀的東西 ——
 它看到 `Error: file not found: x.txt` 會自己去找正確路徑，看到一個 tuple 只會困惑。

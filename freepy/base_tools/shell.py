@@ -1,4 +1,17 @@
-"""shell.py — 跑一行 shell 指令。
+"""shell.py — 跑一行 POSIX shell 指令。
+
+**只服務 POSIX。**不是懶得做相容，是因為這套東西的整個前提就是「linux 該有的都有」——
+模型腦子裡的 shell 是 POSIX，它寫出來的 `;`、`&&`、`test -f`、單引號都是 POSIX 的。
+Windows 上 `shell=True` 會走 cmd.exe，而 cmd **不認得 `;` 是分隔符**：
+
+    test -f a.txt && echo 'A' ; test -d b && echo 'B'
+
+    cmd.exe      "'A' \\n"          <- 分號後面整段被當成前面 echo 的參數吞掉
+    /bin/sh      "A\\nB\\n"
+
+回傳 exit 0，沒有任何錯誤。模型問了兩個問題只拿到一個答案，而且它不知道 ——
+然後它會拿這個殘缺的認知去規劃。安靜的錯比吵的錯危險得多，所以非 POSIX 直接擋下來，
+不去嘗試翻譯語法（翻不完的，而且翻錯一樣是安靜的）。要在 Windows 上開發就進 WSL。
 
 這是四個工具裡唯一真的危險的：模型講什麼就執行什麼，root 也擋不住 `curl | sh`。
 黑名單擋不住有心的指令組合（換個寫法就繞過去了），所以這裡不假裝有黑名單，
@@ -9,6 +22,7 @@
 預設是 None，全部放行 —— 你自己一個人跑著玩沒差，接到會自己動的 agent 上就該接。
 """
 
+import os
 import subprocess
 
 from .paths import clip, get_root
@@ -37,6 +51,12 @@ def run_shell(command: str, timeout: int = 60) -> str:
         command: 要執行的指令，就是你會在終端機打的那一行
         timeout: 最多等幾秒，逾時會殺掉並回傳已經印出來的部分
     """
+    if os.name != "posix":
+        # 擋在這裡而不是讓 cmd.exe 去猜：猜錯是安靜的，模型會拿殘缺的輸出繼續規劃
+        return (
+            f"Error: run_shell requires a POSIX shell, but this is os.name={os.name!r}. "
+            "Run under WSL or Linux."
+        )
     if not isinstance(command, str) or not command.strip():
         return "Error: command must be a non-empty string"
     try:
