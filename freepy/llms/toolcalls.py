@@ -1,8 +1,10 @@
-"""toolcalls.py — 把 tool_calls 整理成兩種形狀。
+"""toolcalls.py — 把 tool_calls 在三種形狀之間搬。
 
-一種是塞回 history 用的 assistant message（要長得跟 API 收的一模一樣），
-一種是給呼叫端用的 [{"id", "name", "args"}]。
-串流過來的是一片一片的碎片，用 Accumulator 拼回完整的呼叫。
+    raw      [(id, name, arguments_字串)]，內部用的中間形狀
+    history  塞回 history 的 assistant message（要長得跟 API 收的一模一樣）
+    entries  給呼叫端用的 [{"id", "name", "args"}]
+
+串流過來的是一片一片的碎片，用 Accumulator 拼回 raw。
 """
 
 import json
@@ -19,11 +21,26 @@ def _entry(call_id, name, arguments):
     return entry
 
 
+def entries(raw_calls) -> list:
+    """raw -> [{"id", "name", "args"}]。"""
+    return [_entry(*item) for item in raw_calls]
+
+
+def raw_from(msg) -> list:
+    """非串流回應的 message -> raw。沒有 tool_calls 就是空 list。"""
+    return [
+        (tc.id, tc.function.name, tc.function.arguments)
+        for tc in (msg.tool_calls or [])
+    ]
+
+
 def history_message(content, raw_calls) -> dict:
-    """raw_calls 是 [(id, name, arguments_字串)]，組成 API 認得的 assistant message。"""
+    """組出 API 認得的 assistant message；raw_calls 是空的就是單純一句話。"""
+    if not raw_calls:
+        return {"role": "assistant", "content": content}
     return {
         "role": "assistant",
-        "content": content,
+        "content": content or None,  # 只叫工具沒說話時，content 要是 null 不是空字串
         "tool_calls": [
             {
                 "id": call_id,
@@ -35,20 +52,6 @@ def history_message(content, raw_calls) -> dict:
     }
 
 
-def _raw(msg):
-    return [(tc.id, tc.function.name, tc.function.arguments) for tc in msg.tool_calls]
-
-
-def to_history(msg) -> dict:
-    """把帶 tool_calls 的回應轉成可以放進 history 的 assistant message。"""
-    return history_message(msg.content, _raw(msg))
-
-
-def to_calls(msg) -> list:
-    """轉成 [{"id", "name", "args"}]。"""
-    return [_entry(*item) for item in _raw(msg)]
-
-
 def result_messages(tool_results: dict) -> list:
     """把 {call_id: 執行結果} 轉成一串 role="tool" 的訊息。"""
     return [
@@ -58,7 +61,7 @@ def result_messages(tool_results: dict) -> list:
 
 
 class Accumulator:
-    """把串流回來的 tool_call 碎片依 index 拼回完整的呼叫。
+    """把串流回來的 tool_call 碎片依 index 拼回 raw。
 
     串流時 id / name 通常只在第一片出現，arguments 則是一小段一小段接起來的。
     """
@@ -86,7 +89,3 @@ class Accumulator:
     def raw(self) -> list:
         """[(id, name, arguments_字串)]，依 index 排好。"""
         return [tuple(self._parts[i]) for i in sorted(self._parts)]
-
-    def calls(self) -> list:
-        """[{"id", "name", "args"}]，形狀跟非串流的 ask() 回傳值一樣。"""
-        return [_entry(*item) for item in self.raw()]

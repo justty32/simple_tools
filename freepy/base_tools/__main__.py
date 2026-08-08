@@ -69,27 +69,27 @@ def demo_root():
 def demo_agent(model):
     """真的接上模型：叫它用工具做一件小事，看它會不會用。"""
     print(f"\n== 交給 {model} 用 ==")
-    from llms import LLM
+    from llms import LLM, Engine
 
     schemas, dispatch = base_tools.tools()
-    bot = LLM(url=URL, model=model, system="你是一個會用工具處理檔案的助手，動手做，不要只回答。")
-    if bot.supports_tools is False:
+    bot = LLM(engine=Engine(url=URL, model=model), tools=schemas,
+              system="你是一個會用工具處理檔案的助手，動手做，不要只回答。")
+    if bot.engine.supports("tools") is False:
         print("這個模型宣告不支援 tool calling，跳過")
         return
 
-    result, err = bot.ask(
-        "工作目錄裡有一個 a/b.txt，把裡面的 two 改成 TWO，然後把改完的內容讀出來給我看。",
-        tools=schemas,
+    reply = bot.ask(
+        "工作目錄裡有一個 a/b.txt，把裡面的 two 改成 TWO，然後把改完的內容讀出來給我看。"
     )
     for _ in range(8):  # 給它幾回合，別讓壞掉的模型無限打轉
-        if err or not isinstance(result, list):
+        if not reply or not reply.calls:
             break
-        for c in result:
+        for c in reply.calls:
             print(f"  -> {c['name']}({c['args']})")
-        results = {c["id"]: dispatch[c["name"]](**c["args"]) for c in result}
-        result, err = bot.ask(tool_results=results, tools=schemas)
+        results = {c["id"]: dispatch[c["name"]](**c["args"]) for c in reply.calls}
+        reply = bot.ask(tool_results=results)
 
-    print("回答:", result, "err:", err)
+    print("回答:", reply.text, "err:", reply.err)
     check("模型真的改到檔", read_file("a/b.txt"), "TWO")
 
 

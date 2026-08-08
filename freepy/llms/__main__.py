@@ -1,4 +1,4 @@
-"""__main__.py — 拿真的 proxy 跑一遍，確認記憶、串流、思考、工具都還活著。
+"""__main__.py — 拿真的 proxy 跑一遍，確認記憶、串流、思考、工具、後設都還活著。
 
     python -m llms                  # 預設 deepseek-chat
     python -m llms lm-gemma-4-e4b   # 換模型
@@ -8,6 +8,7 @@ import sys
 import typing
 
 from .client import LLM
+from .engine import Engine
 from .func_schema import to_tools
 
 URL = "http://localhost:4000"
@@ -23,50 +24,58 @@ def get_weather(city: str, unit: typing.Literal["celsius", "fahrenheit"] = "cels
     return f"{city} 晴，26 度（{unit}）"
 
 
+def bot_with(model, **kw):
+    return LLM(engine=Engine(url=URL, model=model), **kw)
+
+
 def demo_memory(model):
     print("== 對話記憶 ==")
-    bot = LLM(url=URL, model=model)
-    first, err = bot.ask("我的名字是小明，請記住。")
-    print("第一句:", first, "err:", err)
-    reply, err = bot.ask("我的名字是什麼？")
-    print("回答:", reply, "err:", err)
+    bot = bot_with(model)
+    print("第一句:", bot.ask("我的名字是小明，請記住。").text)
+    reply = bot.ask("我的名字是什麼？")
+    print("回答:", reply.text, "err:", reply.err)
 
 
 def demo_stream(model):
     print("\n== 串流 ==")
-    bot = LLM(url=URL, model=model)
-    handler, err = bot.ask("用一句話介紹台北。", stream=True)
-    if err:
-        print("err:", err)
-        return
-    for ch in handler:
+    reply = bot_with(model).ask("用一句話介紹台北。", stream=True)
+    for ch in reply:
         print(ch, end="", flush=True)
-    print("\nerr:", handler.err)
+    print("\nerr:", reply.err)
 
 
 def demo_thinking(model):
     print("\n== 思考（非串流）==")
-    bot = LLM(url=URL, model=model)
-    reply, err = bot.ask("9.11 和 9.9 哪個大？只回答數字。")
-    print("答案:", reply, "err:", err)
-    thought = bot.last_reasoning
+    reply = bot_with(model).ask("9.11 和 9.9 哪個大？只回答數字。")
+    print("答案:", reply.text, "err:", reply.err)
+    thought = reply.reasoning
     print("思考:", (thought[:120] + "…") if thought else None)
 
 
 def demo_tools(model):
     print("\n== 工具 ==")
     schemas, dispatch = to_tools(get_weather)
-    bot = LLM(url=URL, model=model)
-    if bot.supports_tools is False:
+    bot = bot_with(model, tools=schemas)
+    if bot.engine.supports("tools") is False:
         print("這個模型宣告不支援 tool calling，跳過")
         return
-    calls, err = bot.ask("台北天氣如何？", tools=schemas)
-    print("calls:", calls, "err:", err)
-    if not isinstance(calls, list):
+    reply = bot.ask("台北天氣如何？")
+    print("說了:", reply.text, "| calls:", reply.calls, "| err:", reply.err)
+    if not reply.calls:
         return
-    results = {c["id"]: dispatch[c["name"]](**c["args"]) for c in calls}
-    reply, err = bot.ask(tool_results=results, tools=schemas)
-    print("回答:", reply, "err:", err)
+    results = {c["id"]: dispatch[c["name"]](**c["args"]) for c in reply.calls}
+    print("回答:", bot.ask(tool_results=results).text)
+
+
+def demo_meta(model):
+    print("\n== 後設 ==")
+    bot = bot_with(model)
+    print("能力:", bot.engine.caps)
+    reply = bot.ask("從 1 數到 50。")
+    print("finish_reason:", reply.finish_reason, "usage:", reply.usage)
+    stream = bot.ask("再數一次。", stream=True)
+    stream.text  # 收完才有 finish_reason / usage
+    print("串流 finish_reason:", stream.finish_reason, "usage:", stream.usage)
 
 
 def main():
@@ -77,6 +86,7 @@ def main():
     demo_stream(model)
     demo_thinking(reasoner)
     demo_tools(model)
+    demo_meta(model)
 
 
 if __name__ == "__main__":

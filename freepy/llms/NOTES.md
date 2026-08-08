@@ -2,6 +2,50 @@
 
 跨 session 的決定和實測結果。**只記不看 code 看不出來的東西**；已經寫在 README／USAGE 裡的用法不重複抄。
 
+## 2026-08-08 改成 bot 模型：為什麼回傳值只剩一個 Reply
+
+原本 `ask()` 的 result 會是三種型別（`StreamHandler` / calls list / str），呼叫端得
+`isinstance` 分辨。改掉的**直接理由是它在漏東西**：模型完全可以一邊說話一邊叫工具
+（「好，我幫你查一下」＋ `get_weather(...)`），舊的 `if msg.tool_calls:` 那條路只回
+calls，那句話進了歷史但呼叫端永遠看不到，畫面上就是一片空白然後工具突然跑起來。
+串流那條反而沒這問題（`StreamHandler` 本來就同時有 `.text` 和 `.tool_calls`），
+所以是**把非串流併過去**，不是發明新東西。
+
+**`(result, err)` 收進 `reply.err` 也是收拾既有的不一致**，不是新慣例：串流的錯誤
+本來就不可能在 tuple 裡（錯誤是 `ask()` 回來之後才發生的），`StreamHandler.err`
+早就存在，等於 err 有兩個住處。`bool(reply)` 出錯時是 `False`，補回 tuple 那種
+「逼你看一眼 err」的效果。`base_tools` 那邊的工具函式**維持回傳字串**，理由沒變
+（回傳值會直接變成送回模型的 tool message）。
+
+非串流的 `Reply` 建構時就跑完 `_absorb()` + `_finish()`，所以歷史寫入的時間點跟舊版
+一樣（`ask()` 回來就寫好了）。只有串流是延後到收尾才寫，這點也沒變。
+
+### 改完自己審一遍，抓到兩個
+
+**「絕不丟例外」原本只對非串流成立。** `_pump()` 舊版只把 `next(response)` 包在 try
+裡，拆 chunk 的那幾行（`chunk.choices[0].delta.content`）是裸的。後端回了預期外的
+形狀就會直接炸到疊代的呼叫端 —— 而那正是最容易出事的路徑（本機模型經 litellm 透傳）。
+根本原因是**串流的錯誤發生在 `ask()` 回來之後，`ask()` 的 try 管不到**，所以 `Reply`
+自己得再包一層。現在拆 chunk 整段都在 try 裡，另外欄位一律用 `getattr` 取，
+`delta` 是 `None` 這種還能撐過去不算錯。
+
+**串流一個字都沒收到就斷線，會在記憶裡留下沒人回答的問題。** 非串流那條有
+`del history[checkpoint:]` 收回來，串流沒有（同樣是因為錯誤發生得太晚）。留著的後果
+是下次再問就變成連續兩則 user message，有些 API 不收。現在 `Reply` 收 `checkpoint`，
+整輪落空時自己退回去。判斷「有沒有講過話」用 `finish_reason is None` —— 正常講完但
+內容是空的不算落空，這樣才分得開「模型沒話說」和「話還沒開始就斷了」。
+
+## 新加的 caps 欄位還沒實測，先別信
+
+`tool_choice` / `parallel_tools` / `json_schema` / `caching` 這四個是照 litellm 的欄位名
+加上去的，**沒有照規矩實打過一次**，跟下面那條「宣告前先實測」是矛盾的。
+其中只有 `tool_choice` 會擋呼叫，所以萬一 litellm 又謊報 `False`，症狀會是
+`reply.err` 冒出「不支援指定 tool_choice」而你其實送得出去 —— 先用 `caps` 覆寫頂著，
+有空再一顆一顆打過。
+
+`stream_options={"include_usage": True}` 現在是串流時無條件送的。DeepSeek 上有拿到
+usage，**LM Studio / ollama 還沒驗**；不吃這個參數的後端症狀會是串流整條爆掉。
+
 ## 能力旗標是實測出來的，不要信 litellm 的內建資料庫
 
 `/model/info` 的答案有兩個來源：`litellm.yaml` 裡手寫的 `model_info`，和 litellm 自己帶的模型資料庫。**後者對雲端模型也會過期**：
@@ -82,5 +126,6 @@ LM Studio 那區的 yaml 用 **YAML anchor（`&lm` / `<<: *lm`）** 收掉重複
 ## 慣例
 
 - **一個檔 150 行以內**，程式和文件都算。超過就拆 —— README 超過就拆出 USAGE.md。
-- **沒有 test，驗證靠實跑**：proxy 起著，`cd freepy && uv run python -m llms <一般模型> <思考模型>`，四關（記憶／串流／思考／工具）都要過。碰到串流＋工具、串流＋思考這種組合，`__main__.py` 沒涵蓋，要另外手動打一次。
+- **沒有 test，驗證靠實跑**：proxy 起著，`cd freepy && uv run python -m llms <一般模型> <思考模型>`，五關（記憶／串流／思考／工具／後設）都要過。碰到串流＋工具、串流＋思考這種組合，`__main__.py` 沒涵蓋，要另外手動打一次（`try.py` 就是串流＋工具）。
+- **不連 proxy 也驗得動 `Reply`**：拿假的回應物件餵 `Reply(...)`，串流和非串流兩條路應該吐出一模一樣的 `text` / `calls` / `history`。改 `reply.py` 前先這樣掃一遍比較快。
 - 改完 `litellm.yaml` **要重啟 proxy**，程式端還要 `LLM.clear_caps_cache()` —— 能力表是照 proxy 根位址快取的，查不到的空表也算查過，不會自動重試。

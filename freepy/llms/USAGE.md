@@ -1,62 +1,74 @@
 # 用法
 
-先看 [README.md](README.md) 把 proxy 跑起來。這份講串流、思考、工具、圖片。
-共通約定：所有對外的方法都回傳 `(result, err)`，**絕不丟例外**，`err` 是 None 才看 `result`。
+先看 [README.md](README.md) 把 proxy 跑起來，那邊也有 `Reply` 的欄位表。
+這份講怎麼跟 bot 講話：串流、思考、圖片、後設。工具和能力在 [TOOLS.md](TOOLS.md)。
+
+共通約定：`ask()` 永遠回傳一個 `Reply`，**絕不丟例外**，錯誤在 `reply.err`，
+`bool(reply)` 是 `False`。
 
 ## 串流
 
-疊代 handler 一次吐一個字，只吐「答案」的字：
+`stream=True` 拿到的還是同一個 `Reply`，只是它是邊收邊填的。疊代它一次吐一個字，
+只吐「答案」的字：
 
 ```python
-handler, err = bot.ask("寫首詩", stream=True)
-for ch in handler:
+reply = bot.ask("寫首詩", stream=True)
+for ch in reply:
     print(ch, end="", flush=True)
-print(handler.err)        # 串流中途爆掉的話在這裡，疊代本身不會丟例外
+print(reply.err)          # 串流中途爆掉的話在這裡，疊代本身不會丟例外
 ```
 
-`handler.text` 會把剩下的串流跑完再回傳完整文字。`with` 或 `close()` 可以提前收工，
-已經收到的部分照樣寫回歷史。
+`reply.text` / `reply.calls` / `reply.usage` 都會先把剩下的串流收完再給你。
+`with` 或 `close()` 可以提前收工，已經收到的部分照樣寫回記憶。
 
 **要看模型邊想邊印就用 `parts()`**，思考和答案都即時，`kind` 是 `"think"` 或 `"answer"`：
 
 ```python
-for kind, ch in handler.parts():
+for kind, ch in reply.parts():
     print(ch, end="", flush=True)
 ```
 
 兩種疊代方式**擇一，不要混用**：一般疊代會把路過的思考字元丟掉（完整思考仍留在
-`handler.reasoning`），`parts()` 則兩種都給。思考是在答案之前傳完的，所以用一般疊代時
+`reply.reasoning`），`parts()` 則兩種都給。思考是在答案之前傳完的，所以用一般疊代時
 模型想多久畫面就靜止多久 —— 那是正常的，不是當掉。
+
+串流的 `Reply` 拿了卻**完全不碰**（不疊代也不 `close()`）就沒人收尾：這一輪的
+assistant 訊息不會進記憶，連線也不會關。不確定會不會讀完就用 `with`。
+
+**一個字都還沒收到就斷線（或被提前 `close()`）的話，這一輪會整個從記憶裡退掉** ——
+連你剛剛送出去的那句話一起。理由是不退的話記憶裡會留下一則沒人回答的 user message，
+下次再問就變成連續兩則 user，有些 API 直接不收。已經講出幾個字才斷的就留著半截，
+那是真的說過的話。
+
+判斷「有沒有講過話」看的是 `finish_reason`：正常講完但內容是空的（`"stop"` 加空字串）
+不算落空，不會退。
 
 ## 思考
 
-思考模型的 `reasoning_content` 不會混進答案裡，分開放：
+思考內容不會混進答案裡，串流與否都放在 `reply.reasoning`，沒想就是 `None`：
 
 ```python
-reply, err = bot.ask("9.11 和 9.9 哪個大？", model="deepseek-reasoner")
-print(bot.last_reasoning)        # 非串流：上一次的思考，沒有就是 None
-
-handler, err = bot.ask("...", stream=True)
-handler.reasoning                # 串流：邊收邊累積，疊代到一半就能讀
+reply = bot.ask("9.11 和 9.9 哪個大？")
+print(reply.text, reply.reasoning)
 ```
 
-思考內容**不寫回歷史** —— DeepSeek 這類 API 不收回傳的 `reasoning_content`。
+思考**不寫回記憶** —— DeepSeek 這類 API 不收回傳的 `reasoning_content`。
+所以 bot 記得自己說過什麼、做過什麼，但不記得自己當時為什麼那樣想。
 
 DeepSeek 和 LM Studio（qwen3.5、gemma-4）都是走 `reasoning_content` 這個欄位，
 不是把 `<think>` 塞在答案裡，所以答案拿到手就是乾淨的。
 
 ### 要它想 / 不要它想
 
-**一律換模型名字**，兩家都一樣，`ask()` 本來就吃 per-call 的 `model`，
-同一段對話裡混著切沒問題：
+**一律換模型名字**，兩家都一樣。模型是引擎的欄位，直接改：
 
 ```python
-bot = LLM(model="deepseek-chat")                        # 平常不想
-bot.ask("難的題目", model="deepseek-reasoner")           # 這句想一下
-
-bot = LLM(model="lm-gemma-4-e4b")                       # 預設會想
-bot.ask("簡單的問題", model="lm-gemma-4-e4b-nothink")    # 這句不要想
+bot.engine.model = "deepseek-reasoner"       # 這之後都會想
+bot.engine.model = "lm-gemma-4-e4b-nothink"  # 這之後都不想
 ```
+
+改引擎不動人格也不動記憶，同一段對話會用新模型接著講。整顆換掉用
+`bot.set_engine(Engine(model=..., timeout=300))`。
 
 底層其實是兩回事，只是被 `litellm.yaml` 包成同一種用法：DeepSeek 的 chat / reasoner
 是同一顆 v4-flash 的兩個模式，本來就只能靠名字切；LM Studio 那邊三顆各有一個
@@ -65,54 +77,15 @@ bot.ask("簡單的問題", model="lm-gemma-4-e4b-nothink")    # 這句不要想
 要臨時調思考的多寡（而不是全關），LM Studio 的可以直接送參數：
 
 ```python
-bot.ask("難題", params=Params(extra={"reasoning_effort": "high"}))
+bot.engine.params = Params(extra={"reasoning_effort": "high"})
 ```
 
 DeepSeek 不吃 `reasoning_effort`，給了也沒用，只能換名字。
 
-注意 `supports_reasoning: true` 只表示「這模型會思考」，**不表示每次都思考**。
+注意 `reasoning` 能力是 `True` 只表示「這模型會思考」，**不表示每次都思考**。
 gemma-4-e4b 這種混合式的模型自己決定要不要想，不想的時候回應裡根本沒有
-`reasoning_content` 欄位，`last_reasoning` 就是 `None` —— 這是正常的，不是管線斷了
+`reasoning_content` 欄位，`reply.reasoning` 就是 `None` —— 這是正常的，不是管線斷了
 （順帶一提，實測它偷懶不想的那幾次，答案也真的比較容易錯）。
-
-## 工具
-
-schema 從函式本體生出來，靠 type hints 和 docstring：
-
-```python
-from llms import LLM, to_tools
-
-def get_weather(city: str, unit: typing.Literal["celsius", "fahrenheit"] = "celsius"):
-    """查詢指定城市的天氣。
-
-    Args:
-        city: 城市名稱
-        unit: 溫度單位
-    """
-    ...
-
-schemas, dispatch = to_tools(get_weather)
-
-calls, err = bot.ask("台北天氣？", tools=schemas)
-# calls: [{"id": ..., "name": "get_weather", "args": {"city": "台北", ...}}]
-results = {c["id"]: dispatch[c["name"]](**c["args"]) for c in calls}
-reply, err = bot.ask(tool_results=results, tools=schemas)
-```
-
-模型要叫工具時 `ask()` 回的是 list 而不是字串，用 `isinstance(result, list)` 分辨。
-`args` 的 JSON 壞掉不會丟例外，會給空 dict 並附上 `args_raw`。
-串流也收得到工具，碎片會依 index 拼回同樣的形狀（讀它會先把串流跑完）：
-
-```python
-handler, err = bot.ask("台北天氣？", stream=True, tools=schemas)
-handler.tool_calls
-```
-
-工具回合的歷史會連 `tool_calls` 一起寫回去，所以第二輪送 `tool_results` 時 API 對得起來。
-
-`to_schema(fn)` 只要單一 schema，`to_schemas(*fns)` 要一串，`to_tools(*fns)` 多給一份
-name → function 對照表。Google style 的 `Args:`、Sphinx 的 `:param x:`、
-還有最寬鬆的 `name: 說明` 三種 docstring 格式都認。
 
 ## 圖片
 
@@ -120,31 +93,33 @@ name → function 對照表。Google style 的 `Args:`、Sphinx 的 `:param x:`�
 bot.ask("這是什麼顏色？", images=["red.png", "https://example.com/dog.jpg"])
 ```
 
-本機檔案會轉成 base64 data URI，http(s) 網址直接原樣送。
+本機檔案會轉成 base64 data URI，http(s) 網址直接原樣送。圖片是**按解析度計 token** 的，
+一張大圖抵得上幾千字，送之前先降解析度通常是免費的優化。
 
-## 能力檢查
-
-`supports_tools` / `supports_vision` / `supports_reasoning` 回 `True` / `False` /
-`None`（proxy 沒說）。
-
-只有明確 `False` 才會擋下呼叫並回一個 `ValueError`，`None` 一律放行。
-`supports_reasoning` 純粹是情報，不擋任何東西。
-
-答案來自 proxy 的 `/model/info`（`litellm.yaml` 的 `model_info` 加上 litellm 內建的
-資料庫），**兩個都不完全可靠，宣告前先實測** —— 理由見 NOTES.md。
-
-查到的結果會快取，改完 `litellm.yaml` 重啟 proxy 後呼叫 `LLM.clear_caps_cache()` 清掉。
-臨時要蓋掉某個判斷，建 instance 時給 `caps`：
+## 後設：這一輪發生了什麼
 
 ```python
-bot = LLM(model="lm-qwen3.5-9b", caps={"tools": True, "vision": False})
+reply.finish_reason   # "stop" 正常講完 / "length" 話被切斷 / "tool_calls"
+reply.usage           # {"prompt", "completion", "total", "cached", "reasoning"}
 ```
 
-## 不想留下歷史
+`"length"` **不是錯誤，是話講一半被 `max_tokens` 切掉了**，要不要接下去是你的決定
+（沒有「續寫」這種原語，只能自己再問一輪）。
+
+`usage["cached"]` 是命中前綴快取的部分。命中條件是**送出去的開頭一字不差**，所以
+人格和工具定義要穩定待在最前面，會變的東西（時間、路徑）往後放 —— 在 `system`
+裡塞當前時間等於把快取全砍了。這個欄位是你唯一能驗證有沒有命中的方法。
+
+串流要拿到 `usage` 得送 `stream_options={"include_usage": True}`，`engine.py` 已經
+自動開了。萬一哪個後端不吃這個參數，症狀會是串流整條爆掉，往這裡查。
+
+## 不想留下記憶
 
 `remember=False`，這次的一問一答都不寫進 `history`：
 
 ```python
-reply, err = bot.ask("翻譯這句", remember=False)
+reply = bot.ask("翻譯這句", remember=False)
 ```
-要連 instance 都用完即丟就自己建一個，`LLM()` 很便宜。
+
+要連 instance 都用完即丟就自己建一個，`LLM()` 很便宜（引擎也是，只是會多開一個
+HTTP client）。

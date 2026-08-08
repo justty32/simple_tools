@@ -8,13 +8,13 @@
     base_tools.set_root("/tmp/workspace")     # 模型只能在這底下動手腳
     schemas, dispatch = base_tools.tools()    # schema + name -> function 對照表
 
-    bot = LLM(model="deepseek-chat")
-    result, err = bot.ask("看一下這個資料夾裡有什麼", tools=schemas)
-    while isinstance(result, list):           # 模型要叫工具就照做，然後把結果送回去
-        results = {c["id"]: dispatch[c["name"]](**c["args"]) for c in result}
-        result, err = bot.ask(tool_results=results, tools=schemas)
+    bot = LLM(tools=schemas)
+    reply = bot.ask("看一下這個資料夾裡有什麼")
+    while reply.calls:                        # 模型要叫工具就照做，然後把結果送回去
+        results = {c["id"]: dispatch[c["name"]](**c["args"]) for c in reply.calls}
+        reply = bot.ask(tool_results=results)
 
-**這裡的函式回傳的永遠是一個字串，錯誤也是字串，不丟例外也不回 (result, err)。**
+**這裡的函式回傳的永遠是一個字串，錯誤也是字串，不丟例外也不回 Reply。**
 跟 llms 的慣例不同是故意的：工具的回傳值會直接變成送回模型的 tool message，
 所以錯誤訊息本身就是要給模型讀的東西 —— 它看到 "Error: file not found" 會自己去找
 正確的路徑，看到一個 tuple 只會困惑。訊息寫成英文也是同一個理由：模型看過的
@@ -40,7 +40,7 @@ ALL = (read_file, write_file, edit_file, run_shell)
 
 
 def tools():
-    """回傳 (schemas, dispatch)，直接餵給 llms 的 ask(tools=...)。需要有 llms 這個 package。"""
+    """回傳 (schemas, dispatch)，schemas 直接給 llms 的 LLM(tools=...)。需要有 llms 這個 package。"""
     from llms import to_tools
     return to_tools(*ALL)
 

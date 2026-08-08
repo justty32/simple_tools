@@ -35,7 +35,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import base_tools                                        # noqa: E402
-from llms import LLM, to_schemas                         # noqa: E402
+from llms import LLM, Engine, to_schemas                 # noqa: E402
 
 MODEL = "ollama-qwen3-32b"
 ROUNDS = 6                     # 探查幾輪還交不出計劃就放棄，免得模型原地打轉
@@ -110,22 +110,23 @@ def handle(call):
     return None
 
 
-def translate(bot, schemas, prompt):
+def translate(bot, prompt):
     """讓模型探查到它交得出計劃為止。回傳 (exit_code, 要印到 stdout 的東西)。"""
-    result, err = bot.ask(prompt, tools=schemas)
+    reply = bot.ask(prompt)
 
     for _ in range(ROUNDS):
-        if err:
-            return 1, f"llm error: {err}"
+        if not reply:
+            return 1, f"llm error: {reply.err}"
 
-        if not isinstance(result, list):
+        calls = reply.calls
+        if not calls:
             # 模型直接講話了 —— 小模型很常這樣，推它一把再給一次機會
-            note(f"[note] 模型沒用工具，回了一段話：{result}")
-            result, err = bot.ask("請用工具回答，不要直接說話。", tools=schemas)
+            note(f"[note] 模型沒用工具，回了一段話：{reply.text}")
+            reply = bot.ask("請用工具回答，不要直接說話。")
             continue
 
         results = {}
-        for call in result:
+        for call in calls:
             done = handle(call)
             if done:
                 return done
@@ -139,7 +140,7 @@ def translate(bot, schemas, prompt):
                 note("".join(f"    {line}\n" for line in out.splitlines()))
             results[call["id"]] = out
 
-        result, err = bot.ask(tool_results=results, tools=schemas)
+        reply = bot.ask(tool_results=results)
 
     return 1, f"探查了 {ROUNDS} 輪還沒交出計劃，放棄"
 
@@ -159,8 +160,9 @@ def main():
     base_tools.set_root(args.root)
     note(f"[model] {args.model}  [root] {base_tools.get_root()}")
 
-    bot = LLM(model=args.model, system=SYSTEM, timeout=300)
-    code, out = translate(bot, to_schemas(*TOOLS), prompt)
+    bot = LLM(engine=Engine(model=args.model, timeout=300),
+              system=SYSTEM, tools=to_schemas(*TOOLS))
+    code, out = translate(bot, prompt)
     print(out)
     return code
 

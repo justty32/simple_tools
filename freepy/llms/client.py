@@ -1,78 +1,57 @@
-"""client.py — LLM class：對著 OpenAI 相容 proxy 講話的精簡包裝。
+"""client.py — LLM class：一個 bot。
 
-一個 instance 就是一段對話，預設記住歷史。所有對外的方法都回傳
-(result, err) 這種 Go 風格的 tuple，絕不丟例外。
+    人格    system，排在每次送出的最前面，不佔歷史
+    記憶    history，對話記錄（含 assistant 的 tool_calls 和工具結果）
+    能力    tools，它能開口要求哪些工具 —— 但執行不歸它管
+    引擎    engine，拿什麼在想，以及那個端點做得到什麼（見 engine.py）
+
+ask() 永遠回傳一個 Reply，絕不丟例外；錯誤在 reply.err 裡，bool(reply) 會是 False。
+bot 只會說話和開口要工具，工具**是誰去跑的、跑出什麼**，由呼叫端決定後餵回來。
 """
 
-from openai import OpenAI
-
 from . import toolcalls
-from .caps import clear_cache as caps_clear, lookup as caps_lookup
-from .content import build_content, normalize_base_url, resolve_key, root_url
-from .stream import StreamHandler
+from .content import build_content
+from .engine import Engine
+from .reply import Reply
 
 
 class LLM:
-    """對著 OpenAI 相容 proxy（預設本機 LiteLLM）講話的精簡包裝，本身就是一段對話。"""
+    """一個 bot：人格 + 記憶 + 能力 + 思考引擎。"""
 
-    def __init__(self, url="http://localhost:4000", model="deepseek-chat",
-                 key=None, system=None, params=None, timeout=60, caps=None):
-        self.model = model
+    def __init__(self, engine=None, system=None, tools=None):
+        self._engine = engine or Engine()
         self.system = system
-        self.params = params
-        self.caps = caps or {}
+        self.tools = tools  # tool schema list，見 func_schema.to_schemas
         self.history = []  # 不含 system message，送出時才在最前面補上
-        self.last_reasoning = None  # 上一次非串流回答的思考內容，沒有就是 None
-        self._root_url = root_url(url)
-        self._key = resolve_key(key)
-        self._client = OpenAI(
-            base_url=normalize_base_url(url),
-            api_key=self._key,
-            timeout=timeout,
-        )
+
+    @property
+    def engine(self):
+        """目前這顆思考引擎。改 model / params 直接動它的欄位就好。"""
+        return self._engine
+
+    def set_engine(self, engine):
+        """換一顆思考引擎。人格、記憶、能力都不受影響，同一段對話接著講。"""
+        self._engine = engine
+        return self
 
     def reset(self):
-        """清空對話歷史，system prompt 不受影響。"""
+        """清空對話記憶。人格、能力、引擎都不動。"""
         self.history = []
 
-    @staticmethod
-    def clear_caps_cache():
-        """清空 model capability 的快取，改完 litellm.yaml 重啟 proxy 後可以呼叫這個強制重查。"""
-        caps_clear()
-
-    def _caps_for(self, model):
-        """回傳 {"tools", "vision", "reasoning"}，self.caps 給的值優先，其次問 proxy。"""
-        return caps_lookup(self._root_url, self._key, model, self.caps)
-
     @property
-    def supports_tools(self):
-        """這個 instance 目前的 model 支不支援 tool calling：True / False / None（不知道）。"""
-        return self._caps_for(self.model)["tools"]
+    def pending_calls(self) -> list:
+        """它要求了、但你還沒把結果餵回去的工具呼叫。沒欠就是空 list。
 
-    @property
-    def supports_vision(self):
-        """這個 instance 目前的 model 支不支援看圖：True / False / None（不知道）。"""
-        return self._caps_for(self.model)["vision"]
-
-    @property
-    def supports_reasoning(self):
-        """這個 instance 目前的 model 會不會思考：True / False / None（不知道）。
-
-        純粹是情報，不擋任何呼叫：思考不是送出去的參數，是模型自己的事。
-        會思考才值得去讀 last_reasoning / StreamHandler.reasoning。
+        欠著的時候直接再 ask() 一句話（而不是給 tool_results）會被 API 打回票：
+        帶 tool_calls 的 assistant message 後面一定要接上對應的 tool message。
         """
-        return self._caps_for(self.model)["reasoning"]
-
-    def _reject(self, model, images, tools):
-        """能力不足就回傳一個 ValueError，可以用就回傳 None。明確 False 才擋，None 一律放行。"""
-        if not images and not tools:
-            return None  # 沒有要檢查的東西，就別為了純文字問答去問 proxy
-        caps = self._caps_for(model)
-        if images and caps["vision"] is False:
-            return ValueError(f"模型 {model} 不支援圖片輸入")
-        if tools and caps["tools"] is False:
-            return ValueError(f"模型 {model} 不支援 tool calling")
-        return None
+        last = self.history[-1] if self.history else {}
+        if last.get("role") != "assistant":
+            return []
+        return toolcalls.entries(
+            (tc["id"], tc["function"]["name"], tc["function"]["arguments"])
+            for tc in last.get("tool_calls") or []
+        )
 
     def _messages(self):
         msgs = []
@@ -82,29 +61,30 @@ class LLM:
         return msgs
 
     def _extend(self, messages, extra, remember):
-        """把新訊息同時加進這次要送的 messages 和（需要的話）對話歷史。"""
+        """把新訊息同時加進這次要送的 messages 和（需要的話）對話記憶。"""
         messages.extend(extra)
         if remember:
             self.history.extend(extra)
 
-    def ask(self, prompt=None, stream=False, images=None, tools=None,
-            tool_results=None, remember=True, model=None, params=None):
-        """送出一則訊息，永遠回傳 (result, err) 這種 Go 風格的 tuple，絕不丟例外。
+    def ask(self, prompt=None, images=None, tool_results=None,
+            stream=False, remember=True, tool_choice=None):
+        """跟 bot 說一段話，拿回一個 Reply。
 
-        result 有三種：stream=True 給 StreamHandler、模型要叫工具給 calls list、
-        其餘給答案字串。思考模型的思考內容不會混進答案裡，非串流放在 self.last_reasoning，
-        串流放在 StreamHandler.reasoning。
+        說給它聽的東西有三種，可以同時給，會照 tool_results -> prompt 的順序排：
+            prompt        一段文字
+            images        本機路徑或 http(s) 網址
+            tool_results  {call_id: 執行結果}，等於跟它說「你要的工具跑出這些」
 
-        params 有給的話會整包取代 self.params（不是逐欄位合併）。
+        這回合怎麼跑：
+            stream        True 的話 Reply 是邊收邊填的，疊代它可以逐字看
+            remember      False 就不寫進 history
+            tool_choice   "auto" / "none" / "required" / {"type": "function", ...}
         """
-        self.last_reasoning = None
-        checkpoint = len(self.history)  # 失敗時要把這一輪寫進歷史的東西收回來
+        checkpoint = len(self.history)  # 失敗時要把這一輪寫進記憶的東西收回來
         try:
-            effective_model = model or self.model
-
-            err = self._reject(effective_model, images, tools)
+            err = self._engine.check(images, self.tools, tool_choice)
             if err is not None:
-                return None, err
+                return Reply(None, err=err)
 
             messages = self._messages()
             if tool_results:
@@ -113,37 +93,12 @@ class LLM:
                 content = build_content(prompt, images)
                 self._extend(messages, [{"role": "user", "content": content}], remember)
 
-            kwargs = {}
-            p = params if params is not None else self.params
-            if p is not None:
-                kwargs.update(p.to_kwargs())
-            if tools:
-                kwargs["tools"] = tools
-            # 這三個是這個 class 在管的東西，最後才寫，確保蓋得過 params.extra
-            kwargs["model"] = effective_model
-            kwargs["messages"] = messages
-            kwargs["stream"] = stream
-
-            response = self._client.chat.completions.create(**kwargs)
-
-            if stream:
-                return StreamHandler(response, self, remember), None
-
-            msg = response.choices[0].message
-            # 思考內容只留在自己手上，不寫回歷史：deepseek 這類 API 不收回傳的 reasoning_content
-            self.last_reasoning = getattr(msg, "reasoning_content", None) or None
-
-            if msg.tool_calls:
-                if remember:
-                    self.history.append(toolcalls.to_history(msg))
-                return toolcalls.to_calls(msg), None
-
-            text = msg.content or ""
-            if remember:
-                self.history.append({"role": "assistant", "content": text})
-            return text, None
+            response = self._engine.think(
+                messages, tools=self.tools, tool_choice=tool_choice, stream=stream
+            )
+            return Reply(response, self, remember, stream, checkpoint=checkpoint)
 
         except Exception as e:
-            # 這一輪沒問成，就別在歷史裡留下沒人回答的問題
+            # 這一輪沒問成，就別在記憶裡留下沒人回答的問題
             del self.history[checkpoint:]
-            return None, e
+            return Reply(None, err=e)

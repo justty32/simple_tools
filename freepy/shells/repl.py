@@ -10,7 +10,7 @@ from common import FREEPY, enter
 NAME = "Scripts/python.exe" if sys.platform == "win32" else "bin/python"
 VENV = FREEPY / ".venv" / NAME
 
-BOOT = ("import llms, base_tools; from llms import LLM, Params; "
-        "print('已就緒: llms(LLM, Params), base_tools')")
+BOOT = ("import llms, base_tools; from llms import LLM, Engine, Params; "
+        "print('已就緒: llms(LLM, Engine, Params), base_tools')")
 
 enter(str(VENV) if VENV.exists() else sys.executable, "-i", "-c", BOOT)
