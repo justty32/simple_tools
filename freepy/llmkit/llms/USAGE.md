@@ -58,6 +58,11 @@ print(reply.text, reply.reasoning)
 DeepSeek 和 LM Studio（qwen3.5、gemma-4）都是走 `reasoning_content` 這個欄位，
 不是把 `<think>` 塞在答案裡，所以答案拿到手就是乾淨的。
 
+> **`reasoning` 是 `None` 不代表壞掉。** 混合式思考模型會自己決定要不要想 ——
+> `lm-gemma-4-e4b` 連問四次同一題，三次有思考、一次完全沒有，沒想的那次回應裡
+> 根本沒有 `reasoning_content` 這個 key。**這是正常的，不是管線斷了**，
+> 追這個會浪費很多時間。（附帶一提，偷懶不想的那次答案也真的答錯。）
+
 ### 要它想 / 不要它想
 
 **一律換模型名字**，兩家都一樣。模型是引擎的欄位，直接改：
@@ -70,7 +75,7 @@ bot.engine.model = "lm-gemma-4-e4b-nothink"  # 這之後都不想
 改引擎不動人格也不動記憶，同一段對話會用新模型接著講。整顆換掉用
 `bot.set_engine(Engine(model=..., timeout=300))`。
 
-底層其實是兩回事，只是被 `litellm.yaml` 包成同一種用法：DeepSeek 的 chat / reasoner
+底層其實是兩回事，只是被 [`../proxy/`](../proxy/README.md) 的設定包成同一種用法：DeepSeek 的 chat / reasoner
 是同一顆 v4-flash 的兩個模式，本來就只能靠名字切；LM Studio 那邊三顆各有一個
 `-nothink` 分身，同一顆模型，差別只是設定裡焊死了 `reasoning_effort: none`。
 
@@ -110,8 +115,9 @@ reply.usage           # {"prompt", "completion", "total", "cached", "reasoning"}
 人格和工具定義要穩定待在最前面，會變的東西（時間、路徑）往後放 —— 在 `system`
 裡塞當前時間等於把快取全砍了。這個欄位是你唯一能驗證有沒有命中的方法。
 
-串流要拿到 `usage` 得送 `stream_options={"include_usage": True}`，`engine.py` 已經
-自動開了。萬一哪個後端不吃這個參數，症狀會是串流整條爆掉，往這裡查。
+串流要拿到 `usage` 得送 `stream_options={"include_usage": True}`，`engine.py` **無條件
+自動開**。DeepSeek 和 LM Studio 都驗過拿得到（2026-08-08）；萬一哪個後端不吃這個
+參數，症狀會是串流整條爆掉，往這裡查。
 
 ## 不想留下記憶
 

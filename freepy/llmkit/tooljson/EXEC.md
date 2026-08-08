@@ -39,8 +39,9 @@
 | `../resize`、`bin/resize` | **含有 `/`** | 相對於這份 .json |
 | `resize` | **不含 `/`** | 去 `$PATH` 找，`$PATH` 繼承呼叫端 |
 
-spec 通常住在 `.specs/` 裡，**所以 `exec` 一般是 `"../resize"` 而不是 `"./resize"`**
-—— 中心是 .json，不是工具目錄。`exec[1:]` 是參數不是路徑，不翻。
+spec 常被集中放在一個子資料夾裡（`specs/`、`.specs/` 之類），**這時 `exec` 是
+`"../resize"` 而不是 `"./resize"`** —— 中心是 .json 自己，不是工具所在的目錄。
+這是實作時真的踩到的第一個坑。`exec[1:]` 是參數不是路徑，不翻。
 
 ## argv
 
@@ -112,8 +113,8 @@ Unicode 碼位排**，沒寫當 `0`。
 **哪些結束碼算成功**，預設 `[0]`。非 0 不一定是失敗：`grep` 沒找到是 1、`diff` 有
 差異是 1、`test` 更是。不宣告的話模型會以為工具壞了，然後開始修一個沒壞的東西。
 
-- 在 `ok_exit` 裡 → 直接回輸出。
-- 不在 → 最前面加一行 `exit N`，形狀跟 `base_tools.run_shell` 一樣。
+- 在 `ok_exit` 裡 → 直接回輸出（沒輸出就回 `(no output, exit N)`）。
+- 不在 → 最前面加一行 `exit N`，再接輸出。
 
 ## cwd / timeout / limits / source
 

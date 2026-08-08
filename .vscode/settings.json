@@ -7,9 +7,12 @@
   "python.defaultInterpreterPath": "${workspaceFolder}/freepy/.venv/bin/python",
   "python.venvPath": "${workspaceFolder}/freepy",
 
-  // llms 是 freepy/ 底下的 package，把 freepy 加進搜尋路徑，
-  // Pylance 才認得 `from llms import LLM`
-  "python.analysis.extraPaths": ["${workspaceFolder}/freepy"],
+  // llms / tooljson 是 freepy/llmkit/ 底下的 package，base_tools 是 freepy/ 底下的，
+  // 兩層都要加進搜尋路徑，Pylance 才認得 `from llms import LLM`
+  "python.analysis.extraPaths": [
+    "${workspaceFolder}/freepy/llmkit",
+    "${workspaceFolder}/freepy"
+  ],
   "python.analysis.typeCheckingMode": "basic",
 
   "python.terminal.activateEnvironment": true,

@@ -31,8 +31,10 @@ import argparse
 import sys
 from pathlib import Path
 
-# 這支是直接跑的腳本，不是被 import 的 module，所以自己把 freepy/ 接上去
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+# 這支是直接跑的腳本，不是被 import 的 module，所以自己把路接上去：
+# base_tools 在 freepy/，llms 在底下那層地基 freepy/llmkit/
+FREEPY = Path(__file__).resolve().parent.parent
+sys.path[:0] = [str(FREEPY), str(FREEPY / "llmkit")]
 
 import base_tools                                        # noqa: E402
 from llms import LLM, Engine, to_schemas                 # noqa: E402

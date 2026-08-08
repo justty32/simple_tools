@@ -8,9 +8,13 @@
 
 import sys
 import tempfile
+from pathlib import Path
 
-import base_tools
-from llms import LLM, Engine
+# llms 在 llmkit/ 那層地基裡，base_tools 在這一層
+sys.path.insert(0, str(Path(__file__).resolve().parent / "llmkit"))
+
+import base_tools                          # noqa: E402
+from llms import LLM, Engine               # noqa: E402
 
 MODEL = sys.argv[1] if len(sys.argv) > 1 else "deepseek-reasoner"
 TASK = "notes.txt 裡每樣水果各幾個？把總數寫進 total.txt，然後告訴我加起來是多少。"

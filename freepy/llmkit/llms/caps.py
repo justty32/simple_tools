@@ -1,8 +1,9 @@
 """caps.py — 問 LiteLLM proxy：這個端點加這顆模型，做得到哪些事？
 
 答案有三種：True、False、None（proxy 沒說，就是不知道）。
-查到的結果以 proxy 根位址為單位快取住，改完 litellm.yaml 重啟 proxy 後
-記得呼叫 clear_cache()。查詢失敗一律吞掉當成「不知道」，絕不丟例外。
+查到的結果以 proxy 根位址為單位快取住 —— **查不到的空表也算查過**，不會自動重試，
+所以改完 proxy/litellm.yaml 重啟 proxy 後記得呼叫 clear_cache()。
+查詢失敗一律吞掉當成「不知道」，絕不丟例外。
 
 這裡列的欄位不全都會擋呼叫（擋不擋是 Engine.check() 決定的），
 沒在擋的那幾個純粹是情報：值不值得去讀 reasoning、要不要為了快取排訊息順序。

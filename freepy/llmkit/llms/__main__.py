@@ -1,7 +1,11 @@
 """__main__.py — 拿真的 proxy 跑一遍，確認記憶、串流、思考、工具、後設都還活著。
 
-    python -m llms                  # 預設 deepseek-chat
-    python -m llms lm-gemma-4-e4b   # 換模型
+    cd freepy/llmkit
+    ../proxy/start_litellm.sh &          # 這五關**要**連得到端點，不是離線測試
+    uv run python -m llms                # 預設 deepseek-chat / deepseek-reasoner
+    uv run python -m llms lm-gemma-4-e4b # 換一般模型；第二個參數換思考模型
+
+離線就驗得動的那套在隔壁：`python -m tooljson`。
 """
 
 import sys

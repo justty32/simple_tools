@@ -1,7 +1,9 @@
 """exec_type.py — `_type: "exec"` 的解析器：跑一個 linux 檔案，argv + stdin/out/err。
 
 `spec.py` 讀完 `_version` 和 `_type` 之後，把 `_extra` 其餘的鍵整包交給這裡。
-以後的 python import、http 各自是一個平行的檔案，外殼不用動。
+**它是內建的，不是特別的** —— 檔案最後一行 `register("exec", ExecBody)` 走的是跟
+第三方完全一樣的門（見 registry.py）。要加 python import、http，就照著寫一個平行的
+檔案再登記一次，外殼一行都不用動。
 
 只做解析和檢查，不跑東西 —— 真的去跑在 `invoke.py`，組 argv 在 `args.py`。
 規範見 EXEC.md，這裡是把它寫成程式。
@@ -10,6 +12,7 @@
 import os
 import shutil
 
+from .registry import register
 from .spec import fingerprint, need, resolve
 
 BINDING = ("position", "flag", "separate", "repeat")
@@ -79,3 +82,11 @@ class ExecBody:
     def source(self):
         """現在這個檔案的指紋，給產 spec 的那步寫進 `_extra.source`。"""
         return fingerprint(self.target) if self.target else None
+
+    def run(self, arguments) -> str:
+        """body 協定要求的那個方法。真的去跑在 invoke.py，這裡只轉手。"""
+        from .invoke import run_exec       # 延後 import：invoke 要用到 args，args 不用 body
+        return run_exec(self.spec, arguments)
+
+
+register("exec", ExecBody)

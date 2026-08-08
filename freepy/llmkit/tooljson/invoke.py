@@ -1,10 +1,13 @@
-"""invoke.py — spec + 模型給的 args → 真的去跑 → 一個字串。
+"""invoke.py — `_type: "exec"` 的執行端：spec + 模型給的 args → 真的去跑 → 一個字串。
 
-**永遠回一個字串，錯誤也是字串，不丟例外** —— 跟 base_tools 同一套慣例，因為回傳值
-會直接變成送回模型的 tool message。
+**這個檔是 exec 專屬的**，不是通用的執行入口。通用的入口是 `Spec.run()`，它只轉手給
+`_type` 自己的 body；`ExecBody.run()` 才會走到這裡。別的 `_type` 有自己的執行端。
+
+**永遠回一個字串，錯誤也是字串，不丟例外** —— 因為回傳值會直接變成送回模型的
+tool message。模型讀到「找不到執行檔」是能自己換一步走的，讀到例外只會整條斷掉。
 
 **不經過 shell。**argv 是一個 list，`shell=False`，所以模型給的參數值裡有 `;`、
-`$(...)`、空白都只是字元，不會被重新解析。這是這包相對於「叫模型用 run_shell」的
+`$(...)`、空白都只是字元，不會被重新解析。這是相對於「叫模型自己寫 shell 指令」的
 實質差別，不只是省 token。
 
 三件輸出上的事，都是照 spec 宣告的來：`stderr.mode` 的 `merge` 是**真的重導向**
@@ -12,20 +15,21 @@
 才在最前面加一行 `exit N`（`grep` 沒找到是 exit 1，那不是失敗）；輸出含 NUL 就
 當二進位，只回一句話而不是幾萬個替代字元。
 
-危險程度跟 run_shell 同級（跑的是任意執行檔），所以用同一招：一個守門員 hook，
+跑的是任意執行檔，危險程度跟給模型一個 shell 同級，所以留一個守門員 hook，
 預設全放行，要人工放行自己接：
 
-    exec_tools.set_approver(lambda name, argv: input(f"跑 {argv}？[y/N] ") == "y")
+    tooljson.set_approver(lambda name, argv: input(f"跑 {argv}？[y/N] ") == "y")
+
+守門員**也是 exec 專屬的**（第二個參數就是要跑的 argv）。別的 `_type` 想要放行機制
+就自己留一個，形狀由它自己決定 —— 硬湊一個通用簽章只會讓兩邊都難用。
 """
 
 import subprocess
 
 from . import args as argmod
 
-try:
-    from base_tools.paths import MAX_OUTPUT
-except ImportError:  # base_tools 不在也要能跑
-    MAX_OUTPUT = 30000
+#: 一次 tool 回傳最多塞給模型幾個字元。超過就截，截掉多少會寫在截斷處
+MAX_OUTPUT = 30000
 
 _approver = None
 
@@ -64,8 +68,8 @@ def _pipes(mode):
     return {"stdout": subprocess.PIPE, "stderr": subprocess.STDOUT}
 
 
-def run(spec, arguments):
-    """跑一次。arguments 就是模型給的那包 dict（llms 的 call["args"]）。"""
+def run_exec(spec, arguments):
+    """跑一次 exec 型的 spec。arguments 就是模型給的那包 dict（llms 的 call["args"]）。"""
     body = spec.body
     argv, stdin, err = argmod.build(spec, arguments)
     if err:
@@ -104,8 +108,13 @@ def run(spec, arguments):
 
 
 def bind(spec):
-    """包成一個 fn(**kwargs) -> str，好放進 dispatch 表給 llms 那套迴圈用。"""
+    """包成一個 fn(**kwargs) -> str，好放進 dispatch 表給 llms 那套迴圈用。
+
+    走的是 `Spec.run()` 而不是這個檔裡的 `run_exec()`，所以第三方登記的 `_type`
+    一樣 bind 得起來。
+    """
     def call(**kwargs):
-        return run(spec, kwargs)
+        return spec.run(kwargs)
     call.__name__ = spec.name
+    call.__doc__ = (spec.function.get("description") or "").strip() or None
     return call

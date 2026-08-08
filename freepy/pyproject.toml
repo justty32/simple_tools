@@ -1,11 +1,14 @@
 # freepy 的依賴宣告。
 #
 # 不是要打包成套件，只是讓 uv 知道這個資料夾要用哪些東西：
-# 在 freepy/ 底下跑 uv run 時，它會自己把 .venv 建好、依賴同步好，
-# 不用每次都寫 --with openai。
+# 在 freepy/ 或它底下任何一層跑 uv run 時，uv 會往上找到這份 pyproject，
+# 用同一個 freepy/.venv，不用每次都寫 --with openai。
 #
-#     cd freepy
-#     uv run python -m llms lm-gemma-4-e4b
+#     cd freepy         && uv run python -m base_tools
+#     cd freepy/llmkit  && uv run python -m tooljson
+#
+# 整個 freepy 只有這一份 pyproject、一個 .venv。llmkit/ 是已經定型的地基
+# （llms / proxy / tooljson），freepy 其餘的東西長在它上面 —— 所以不分家。
 #
 # python 用 uv 自己管的 3.13，不碰系統的 3.14 —— 系統 python 被 pacman 升版時
 # venv 會整個壞掉，而且 3.14 太新，不是每個套件都有現成的 wheel。

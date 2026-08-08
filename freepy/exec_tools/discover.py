@@ -1,5 +1,10 @@
 """discover.py — 從環境變數 `FREEPY_TOOLS` 掃出工具，讀出它們的 spec。
 
+> **還沒成型，長在地基上面那一層。** 格式和標準庫已經定型在 `../llmkit/tooljson/`，
+> 那邊沒有隱含的搜尋路徑：要讀哪幾份 .json 是呼叫端明講的。這個檔是「自動掃一個
+> 資料夾」那一層的草稿，定型了再搬進 llmkit。同一份 PLAN.md 裡的 `describe.py`
+> （讓 LLM 讀腳本產 spec）也還沒開始。
+
     export FREEPY_TOOLS=~/tools:~/work/bin        # os.pathsep 分隔，比照 PATH
 
 **只認 FREEPY_TOOLS，不碰 PATH。**PATH 上有幾百個東西，全部產 spec 是災難，而且模型
@@ -17,7 +22,7 @@ describe.py 的事，不是掃描的事。
 
 import os
 
-from .spec import SpecError, load_all
+from tooljson import SpecError, load_all
 
 ENV = "FREEPY_TOOLS"
 SPEC_DIR = ".specs"

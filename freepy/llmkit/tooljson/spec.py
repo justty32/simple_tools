@@ -1,6 +1,6 @@
 """spec.py — spec 的外殼：讀寫、保留鍵、把其餘的鍵轉交給對應的解析器。
 
-磁碟上長這樣（`.specs/<name>.json`）：
+磁碟上長這樣：
 
     {
       "type": "function",
@@ -13,8 +13,9 @@
 三邊各有各的嫌法，不值得賭。
 
 `_extra` 裡只有 `_version` 和 `_type` 兩個保留鍵，**這個檔只讀這兩個**，其餘一律
-交給 `_type` 指定的解析器，結果掛在 `spec.body`。目前只有 `exec_type.ExecBody`
-（跑一個 linux 檔案），之後的 python import、http 各自是一個新檔案，這裡只多一行。
+交給 `_type` 指定的解析器，結果掛在 `spec.body`；`spec.run()` 也只是轉手給它。
+**這個檔不知道有哪些 `_type`** —— 它去問 registry.py，所以第三方登記的跟內建的
+`exec` 走同一條路，這裡一行都不用改。
 
 格式規範見 FORMAT.md（外殼）和 EXEC.md（`_type: "exec"` 那套）。
 """
@@ -23,8 +24,9 @@ import hashlib
 import json
 import os
 
+from .registry import parser, types
+
 VERSION = "0.1.0"
-TYPES = ("exec",)
 
 
 class SpecError(ValueError):
@@ -54,12 +56,6 @@ def fingerprint(path):
     return {"size": stat.st_size, "mtime": int(stat.st_mtime), "sha256": digest}
 
 
-def _parser(kind):
-    """`_type` → 解析器。延後 import，免得外殼跟解析器互相 import 打結。"""
-    from .exec_type import ExecBody
-    return {"exec": ExecBody}[kind]
-
-
 class Spec:
     """一份 spec。保留鍵在這裡，`_type` 專屬的東西在 `spec.body`。"""
 
@@ -77,18 +73,24 @@ class Spec:
         # 0.x 期間 minor 就等於 major，所以認不得的版本一律拒絕，不猜
         need(extra.get("_version") == VERSION,
              f"_extra._version 是 {extra.get('_version')!r}，這支只認得 {VERSION!r}")
-        need(extra.get("_type") in TYPES,
-             f"_extra._type 是 {extra.get('_type')!r}，只認得 {list(TYPES)}")
+        make = parser(extra.get("_type"))
+        need(make is not None,
+             f"_extra._type 是 {extra.get('_type')!r}，目前登記的只有 {types()}。"
+             f"自己的執行方式用 tooljson.register() 加進來")
         self.function, self.extra, self.name = fn, extra, fn["name"]
         self.version, self.kind = extra["_version"], extra["_type"]
         self.props = (fn.get("parameters") or {}).get("properties") or {}
         self.required = (fn.get("parameters") or {}).get("required") or []
-        self.body = _parser(self.kind)(self)
+        self.body = make(self)
 
     @property
     def schema(self) -> dict:
         """剝掉 `_extra` 的乾淨 OpenAI tool，可以直接進 `LLM(tools=...)`。"""
         return {"type": "function", "function": self.function}
+
+    def run(self, arguments) -> str:
+        """跑一次，回一個字串。實際做事的是 `_type` 那邊的 body，這裡只轉手。"""
+        return self.body.run(arguments)
 
     @property
     def stale(self):
@@ -130,6 +132,11 @@ def load(path) -> Spec:
     found = load_all(path)
     need(len(found) == 1, f"{path} 裡有 {len(found)} 個 tool，用 load_all() 讀")
     return found[0]
+
+
+def run(spec, arguments) -> str:
+    """跑一次，回一個字串。跟 `spec.run(arguments)` 完全一樣，只是寫起來順一點。"""
+    return spec.run(arguments)
 
 
 def save(data, path):

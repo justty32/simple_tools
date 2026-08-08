@@ -1,14 +1,24 @@
 {
-  // F5 直接跑煙霧測試。cwd 一定要是 freepy/，`llms` 這個 package 才 import 得到。
+  // F5 直接跑煙霧測試。cwd 一定要是 freepy/llmkit，`llms` / `tooljson` 這兩個
+  // package 才 import 得到。
   "version": "0.2.0",
   "configurations": [
+    {
+      "name": "tooljson 煙霧測試（離線，不用 proxy）",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "tooljson",
+      "cwd": "${workspaceFolder}/freepy/llmkit",
+      "console": "integratedTerminal",
+      "justMyCode": false
+    },
     {
       "name": "llms 煙霧測試（DeepSeek）",
       "type": "debugpy",
       "request": "launch",
       "module": "llms",
       "args": ["deepseek-chat", "deepseek-reasoner"],
-      "cwd": "${workspaceFolder}/freepy",
+      "cwd": "${workspaceFolder}/freepy/llmkit",
       "console": "integratedTerminal",
       "justMyCode": false
     },
@@ -18,7 +28,7 @@
       "request": "launch",
       "module": "llms",
       "args": ["lm-gemma-4-e4b", "lm-qwen3.5-9b"],
-      "cwd": "${workspaceFolder}/freepy",
+      "cwd": "${workspaceFolder}/freepy/llmkit",
       "console": "integratedTerminal",
       "justMyCode": false
     },

@@ -1,13 +1,18 @@
 # exec_tools 規劃
 
-> **進度：1～4 步做完了**，離線 24 關全過。剩 `describe.py`（讓 LLM 讀檔產 spec）
-> 和帶模型的關卡。
+> **一半已經落地到 [`../../llmkit/tooljson/`](../../llmkit/tooljson/README.md)。**
+> 格式（FORMAT.md / EXEC.md）和標準庫（讀 .json、組 argv、執行）都在那邊，
+> 離線 24 關全過。
 >
-> 格式跟下面「核心資料結構」那節寫的**不一樣**了，以 [FORMAT.md](FORMAT.md)（外殼）
-> 和 [EXEC.md](EXEC.md)（`_type: "exec"`）為準。差異：攤平的 `{name, exec, ...}` 改成
-> **真正的 OpenAI tool JSON 加一個 `_extra`**（剝掉 `_extra` 就能直接餵 `LLM(tools=...)`）；
-> `_extra` 只有 `_version` / `_type` 兩個保留鍵，其餘由 `_type` 解析；`argv` 是 object
-> 加 `position` 而不是 array；一個 .json 可以裝好幾個 tool。
+> **這裡只剩沒成型的兩件**：`discover.py`（自動掃一個資料夾找工具，還在這個資料夾裡）
+> 和 `describe.py`（讓 LLM 讀腳本產 spec，還沒開始）。落地的那份**刻意沒有隱含的
+> 搜尋路徑** —— 要讀哪幾份 .json 是呼叫端明講的，掃描是上面一層的事。
+>
+> 格式跟下面「核心資料結構」那節寫的**不一樣**了，以落地的那兩份 .md 為準。差異：
+> 攤平的 `{name, exec, ...}` 改成**真正的 OpenAI tool JSON 加一個 `_extra`**（剝掉
+> `_extra` 就能直接餵 `LLM(tools=...)`）；`_extra` 只有 `_version` / `_type` 兩個保留鍵，
+> 其餘由 `_type` 解析；`argv` 是 object 加 `position` 而不是 array；
+> 一個 .json 可以裝好幾個 tool。
 
 把**外部可執行檔**變成 LLM 可以叫的 tool。
 

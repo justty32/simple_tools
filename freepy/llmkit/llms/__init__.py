@@ -1,10 +1,13 @@
-"""llms — 包一層薄薄的殼在 openai SDK 外面，對著本機的 LiteLLM proxy 講話。
+"""llms — 包一層薄薄的殼在 openai SDK 外面，預設對著本機的 LiteLLM proxy 講話。
 
 一個 LLM instance 就是一個 bot：人格（system）、記憶（history）、能力（tools）、
 思考引擎（engine）。ask() 永遠回傳一個 Reply，絕不丟例外。
 
 bot 只會說話和開口要工具 —— 工具誰去跑、跑出什麼，由你決定後餵回來。
 只做這件事：不做重試、不做 logging、不做 config 檔、不做 CLI。
+
+proxy 不是必需品，Engine(url=..., key=...) 可以直接打任何 OpenAI 相容端點；
+`../proxy/` 只是把 DeepSeek 雲端、Ollama、LM Studio 收成同一個端點的一份設定。
 
 用法：
     from llms import LLM, Engine, Params, to_tools

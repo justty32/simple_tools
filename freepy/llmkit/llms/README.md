@@ -21,47 +21,28 @@ proxy 把 DeepSeek 雲端、遠端 Ollama、本機 LM Studio 都收成同一個 
 
 ## 兩件事要先跑起來
 
-**1. LiteLLM proxy**（吃同目錄的 `litellm.yaml`，預設 4000 port）
+**1. LiteLLM proxy** —— 設定檔、啟動腳本、目前有哪些模型，全在 [`../proxy/`](../proxy/README.md)。
 
 ```bash
-./start_litellm.sh
-# 等同於
-uv run --with 'litellm[proxy]' --with 'fastapi<0.119' litellm --config litellm.yaml --port 4000
+../proxy/start_litellm.sh
 ```
 
-用 `uv run` 臨時把 litellm 拉進來，不用先裝也不用維護 venv。
-`fastapi` 釘在 0.119 以下：新版跟 `litellm[proxy]` 目前的 pydantic 相容性會出事。
-Windows 用 `start_litellm.ps1`，參數一樣是 `(config, port)`。
-
-要用 DeepSeek 就先給金鑰：`export DEEPSEEK_API_KEY=sk-...`。
-連不到的來源不會擋住 proxy 啟動，只有真的去呼叫它時才失敗。
+這個 package 預設打 `http://localhost:4000`，也就是那個 proxy。要直接打別的
+OpenAI 相容端點也行，`Engine(url=..., key=...)` 換掉就是，proxy 不是必需品。
 
 **2. 這個 package 本身**只依賴 `openai`：
 
 ```bash
-uv run --with openai python -m llms          # 跑一遍煙霧測試
-uv run --with openai python -m llms lm-gemma-4-e4b
+cd freepy/llmkit               # 這一層才 import 得到 llms
+uv run python -m llms          # 跑一遍煙霧測試
+uv run python -m llms lm-gemma-4-e4b
 ```
 
 `python -m llms` 會依序試對話記憶、串流、思考、工具、後設，五關都印出來。
 第一個參數是一般模型，第二個是思考模型（預設 `deepseek-chat` / `deepseek-reasoner`）。
 
-## 現在有哪些模型
-
-model 名字定義在 `litellm.yaml`，`curl localhost:4000/v1/models` 可以確認目前實際載入的：
-
-| 名字 | 來源 | 備註 |
-|---|---|---|
-| `deepseek-chat` | DeepSeek 雲端 | 舊名，現在打到 v4-flash 的非思考模式 |
-| `deepseek-reasoner` | DeepSeek 雲端 | 舊名，現在打到 v4-flash 的思考模式 |
-| `deepseek-v4-pro` | DeepSeek 雲端 | 會思考 |
-| `lm-gemma-4-12b` / `lm-gemma-4-e4b` / `lm-qwen3.5-9b` | 本機 LM Studio | 三個都看得到圖、都會思考、都叫得動工具 |
-| 上面三個各加 `-nothink` | 同一顆模型 | 關掉思考的分身，例如 `lm-gemma-4-e4b-nothink` |
-| `ollama-*` | 遠端 Ollama @ 192.168.1.146 | 只有連得到那台時才通 |
-
-LM Studio 沒載入模型時第一次呼叫會由它自己 JIT 載入，會慢一下。
-
-改完 `litellm.yaml` 要重啟 proxy，程式這邊則呼叫 `Engine.clear_caps_cache()` 清掉能力快取。
+改完 proxy 的設定要重啟它，程式這邊則呼叫 `Engine.clear_caps_cache()` 清掉能力快取
+—— 能力表是照 proxy 根位址快取的，查不到的空表也算查過，不會自動重試。
 
 ## 最小用法
 

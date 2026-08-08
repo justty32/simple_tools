@@ -20,7 +20,8 @@ python -m shells pi -c       # 名字後面的參數整包轉給它，這行等�
 三件事，就這樣：
 
 1. `os.chdir` 到 `freepy/`，所以不管你從哪裡叫，agent 看到的工作目錄都一樣
-2. `PYTHONPATH` 前面補上 `freepy`，`import llms` / `import base_tools` 才會通
+2. `PYTHONPATH` 前面補上 `freepy` 和隔壁的 `llmkit`，`import base_tools` /
+   `import llms` 才會通（`llms` 和 `tooljson` 已經落地到 `llmkit/`）
 3. `os.execvp` **把自己換成目標程式**，不是開子 process
 
 第三點是重點：換掉自己之後 Ctrl-C、TTY、退出碼全部直通，中間沒有人插手。

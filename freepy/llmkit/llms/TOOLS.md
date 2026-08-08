@@ -86,6 +86,19 @@ bot.ask("台北天氣？", tool_choice="required")
 name → function 對照表。Google style 的 `Args:`、Sphinx 的 `:param x:`、
 還有最寬鬆的 `name: 說明` 三種 docstring 格式都認。
 
+### 工具不一定要是 python 函式
+
+`(schemas, dispatch)` 這個形狀就是這裡的介面，誰生的無所謂。隔壁的
+[`tooljson`](../tooljson/README.md) 從 .json 生出同樣的東西（工具是外部執行檔或
+HTTP API 而不是 python 函式），兩邊混著給也可以：
+
+```python
+a, da = to_tools(get_weather)
+b, db = tooljson.tools("mytools.json")
+bot = LLM(tools=a + b)
+dispatch = {**da, **db}
+```
+
 ## 引擎的能力
 
 能力掛在引擎上，因為「能不能看圖」是端點加模型的性質，跟這個 bot 是誰無關：
@@ -110,14 +123,23 @@ bot.engine.supports("vision")      # True / False / None（proxy 沒說）
 **只有明確 `False` 才擋**（回一個 `ValueError` 進 `reply.err`），`None` 一律放行。
 不擋的那幾個純粹是情報：值不值得去讀 `reasoning`、要不要為了快取排訊息順序。
 
+**七項都是實打過才宣告的**（2026-08-08，DeepSeek 雲端 + 本機 LM Studio 兩邊各打一次），
+不是抄 litellm 的內建資料庫 —— 抄來的至少有一項是錯的：litellm 說 DeepSeek
+`supports_response_schema` 是 `True`，實際送 `response_format` 回 **400
+`This response_format type is unavailable now`**。`proxy/litellm.yaml` 已經覆寫成 `false`。
+
+`ollama-*` 那批**沒驗**（那台機器連不到），所以 yaml 裡沒宣告，一律是 `None` 放行。
+
 能力名稱打錯不會安靜地變成「不知道」：`supports("visoin")` 是 `KeyError`，
 `Engine(caps={"tool": True})` 建構時就 `ValueError`。這是刻意的 —— 安靜吃掉打錯的
-設定，就是 NOTES 裡 `drop_params` 那個坑的翻版。
+設定，就是 litellm `drop_params` 那個坑的翻版（見
+[`../proxy/README.md`](../proxy/README.md)）。
 
-答案來自 proxy 的 `/model/info`（`litellm.yaml` 的 `model_info` 加上 litellm 內建的
-資料庫），**兩個都不完全可靠，宣告前先實測** —— 理由見 [NOTES.md](NOTES.md)。
+答案來自 proxy 的 `/model/info`（`proxy/litellm.yaml` 的 `model_info` 加上 litellm
+內建的資料庫），**兩個都不完全可靠，宣告前先實測** —— 理由見
+[`../proxy/README.md`](../proxy/README.md)。
 
-查到的結果會快取，改完 `litellm.yaml` 重啟 proxy 後呼叫 `Engine.clear_caps_cache()`。
+查到的結果會快取，改完設定重啟 proxy 後要呼叫 `Engine.clear_caps_cache()`。
 臨時要蓋掉某個判斷，建引擎時給 `caps`：
 
 ```python
