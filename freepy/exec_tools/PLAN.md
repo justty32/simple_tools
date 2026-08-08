@@ -1,5 +1,14 @@
 # exec_tools 規劃
 
+> **進度：1～4 步做完了**，離線 24 關全過。剩 `describe.py`（讓 LLM 讀檔產 spec）
+> 和帶模型的關卡。
+>
+> 格式跟下面「核心資料結構」那節寫的**不一樣**了，以 [FORMAT.md](FORMAT.md)（外殼）
+> 和 [EXEC.md](EXEC.md)（`_type: "exec"`）為準。差異：攤平的 `{name, exec, ...}` 改成
+> **真正的 OpenAI tool JSON 加一個 `_extra`**（剝掉 `_extra` 就能直接餵 `LLM(tools=...)`）；
+> `_extra` 只有 `_version` / `_type` 兩個保留鍵，其餘由 `_type` 解析；`argv` 是 object
+> 加 `position` 而不是 array；一個 .json 可以裝好幾個 tool。
+
 把**外部可執行檔**變成 LLM 可以叫的 tool。
 
 `base_tools` 做的是「python 函式 → tool schema」，這一包做的是同一件事、換一個來源：
