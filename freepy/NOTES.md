@@ -9,6 +9,38 @@
 `llmkit` 定型**之前**踩出來的東西（`Reply` 為什麼長這樣、串流的坑、`ask()` 修過什麼、
 模型清單和 caps 怎麼問出來的）已經結案，收在 [NOTES-llmkit.md](NOTES-llmkit.md)。
 
+## 2026-08-09 路線：四層疊上去，順序不能顛倒
+
+要做的是一整套 agent，但**不是直接開一個檔案寫 agent**，是四層疊上去，
+每一層自己就能用、也自己驗得完：
+
+1. **proxy 開好** —— 所有模型統一成 `litellm.yaml` 的 alias，上面幾層只認 alias，
+   不知道背後是雲端、遠端 ollama 還是本機 LM Studio。
+2. **`llms` ＋ `modelcards` ＝ 基礎 bot 模型** —— `engine_for(alias)` 一行把建議參數
+   和實打過的能力套上去，`LLM` 負責一輪一個 `Reply`。**這層只會講話，不會做事。**
+3. **`tooljson` 給它能力** —— 工具是一份 JSON 而不是一段程式碼，所以「有哪些能力」
+   變成設定檔的事。到這裡 bot 會做事了，但每一輪還是人在推。
+4. **在這之上才是 agent** —— 自己決定推幾輪、什麼時候收手。
+
+順序不能顛倒的理由是**下面一層錯了，上面一層的症狀會完全看不出來源**：模型能力宣告
+錯（第 2 層）會表現成 agent 莫名其妙不叫工具（第 4 層）。這就是為什麼 caps 要實打、
+為什麼 `modelcards` 存在 —— 它是第 2 層的地基，不是附加功能。
+
+### modelcards 什麼時候能進 llmkit
+
+判準是「介面還會不會變」。現在還會，而且缺口很具體：**mode 層級的東西記不進卡。**
+已經撞到兩次：
+
+- `reasoning_effort: "none"` 才是 `-nothink` alias 真正的開關，焊在 yaml 的
+  `litellm_params` 裡，卡上沒有 —— 卡不自我完備，不經 proxy 就不對。
+- `tool_choice` 在 DeepSeek 是**跟著 mode 走**的：`deepseek-chat` 收 `"required"`，
+  `deepseek-reasoner` 直接 400。但 `verified` 是整張卡一格，記不下這個差別，
+  所以那張卡的 `tool_choice` 只好空著 —— 明明打過了卻沒地方寫。
+
+兩個是同一個形狀：**能力和 runner 旋鈕其實掛在 mode 上，卡卻只有整卡一格。**
+一個例子不夠定規則，兩個開始像了。ollama 那四顆實打完再決定要不要把 `verified`
+下放到 mode，**在那之前不搬進 llmkit** —— 搬進去就等於宣告介面定了。
+
 ## 2026-08-09 modelcards：為什麼查來的和打過的要分兩格
 
 新的一包 [`modelcards/`](modelcards/README.md)，把每顆模型的建議參數和能力記成 JSON，
