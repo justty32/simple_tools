@@ -79,6 +79,35 @@ base_tools.set_approver(None)           # 取消，全部放行（預設）
 
 真的要放生一個會自己動的 agent，就別只靠這個：跑在容器或 VM 裡才是對的答案。
 
+## 換一條路：從 tools.json 拿同一組工具
+
+同一組能力，兩種拿法：
+
+```python
+schemas, dispatch = base_tools.tools()                        # import
+schemas, dispatch = tooljson.tools("base_tools/tools.json")   # 設定檔
+```
+
+跑起來一模一樣（`root` 照樣關得住，錯誤照樣是字串）。差別不在能力，
+在**能力從哪裡來**：前者是「這支程式 import 了 base_tools」，
+後者是「這個 agent 的設定檔裡列了這四個」。
+
+後者換來三件事：可以跟別的 .json（`_type: "exec"` 的外部執行檔）混在同一份清單、
+可以不改程式就砍掉 `run_shell`、可以改描述的語氣去試模型的反應。
+用不到這三件事就用 `tools()`，不必繞。
+
+`tools.json` 是 [`specs.py`](specs.py) 產的（`_type: "python"`，見
+[tooljson 的 PYTHON.md](../llmkit/tooljson/PYTHON.md)）：
+
+```bash
+cd freepy && PYTHONPATH=llmkit uv run python -m base_tools.specs
+```
+
+**這一步只跑一次**，改了 `specs.py` 的宣告才要再跑。schema 是**手寫的**不是反射
+出來的，所以它會跟 `files.py` / `edits.py` / `shell.py` 的簽名走散 ——
+`Spec.stale` 只看得到 `specs.py` 的指紋，看不到那三個檔。改那三個檔的簽名時
+要自己跟上。
+
 ## 輸出上限
 
 單次回傳截在 30000 字元、單行截在 2000 字元（`paths.py` 的 `MAX_OUTPUT` / `MAX_LINE`），
@@ -88,8 +117,8 @@ base_tools.set_approver(None)           # 取消，全部放行（預設）
 ## 驗證
 
 ```bash
-uv run python -m base_tools                  # 21 關離線檢查，跑在臨時資料夾裡
-uv run python -m base_tools deepseek-chat    # 多一關：真的讓模型用這些工具改檔案
+PYTHONPATH=llmkit uv run python -m base_tools    # 26 關離線檢查，跑在臨時資料夾裡
+PYTHONPATH=llmkit uv run python -m base_tools deepseek-chat   # 多一關：真的讓模型用
 ```
 
 離線那部分不碰網路也不碰你的檔案，改完 code 先跑這個。
@@ -102,6 +131,7 @@ uv run python -m base_tools deepseek-chat    # 多一關：真的讓模型用這
 | `files.py` | `read_file` / `write_file` |
 | `edits.py` | `edit_file` |
 | `shell.py` | `run_shell` 和守門員 hook |
+| `specs.py` | 四份 tooljson 宣告，`python -m base_tools.specs` 產出 `tools.json` |
 | `__main__.py` | 煙霧測試 |
 
 一個檔一件事，程式和文件都在 150 行以內。

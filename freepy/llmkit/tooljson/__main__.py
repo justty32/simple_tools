@@ -212,6 +212,9 @@ def main():
         # python weather.py 這樣直接執行時 __module__ 是 "__main__"，別人 import 不到
         _check("直接執行時從檔名反推出模組名", _as_main(pkg), '"module": "mytools"'),
         _check("反推不出來就丟，不猜", _bad_module(), "反推不出"),
+        # python -m pkg.mod 的話只看檔名是不夠的，要連 package 一起收
+        _check("package 裡的也反推得出完整名字", _as_submodule(root, pkg),
+               '"module": "pytools.mytools"'),
     ]
 
     print(f"\n{sum(results)}/{len(results)} 過")
@@ -235,6 +238,21 @@ def _as_main(pkg):
     where = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     done = subprocess.run(
         [sys.executable, os.path.join(pkg, "mytools.py")],
+        capture_output=True, text=True,
+        env={**os.environ, "PYTHONPATH": where})
+    return (done.stdout or done.stderr).strip()
+
+
+def _as_submodule(root, pkg):
+    """把 pytools 變成一個真的 package，再用 `python -m pytools.mytools` 跑一次。
+
+    只看檔名的話會反推成 `"mytools"` —— 那個名字在 `root` 上 import 不到（要
+    `pytools.mytools`），而且錯得很安靜：.json 存得出來，等別的行程去讀才炸。
+    """
+    open(os.path.join(pkg, "__init__.py"), "w").close()
+    where = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    done = subprocess.run(
+        [sys.executable, "-m", "pytools.mytools"], cwd=root,
         capture_output=True, text=True,
         env={**os.environ, "PYTHONPATH": where})
     return (done.stdout or done.stderr).strip()

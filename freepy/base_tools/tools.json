@@ -1,0 +1,157 @@
+[
+  {
+    "type": "function",
+    "function": {
+      "name": "read_file",
+      "description": "讀一個文字檔，回傳的每一行前面都附上行號。",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "description": "檔案路徑，相對路徑會接在工作根目錄底下"
+          },
+          "offset": {
+            "type": "integer",
+            "description": "從第幾行開始讀，從 1 算起"
+          },
+          "limit": {
+            "type": "integer",
+            "description": "最多讀幾行，檔案很大時分次讀"
+          }
+        },
+        "required": [
+          "path"
+        ]
+      }
+    },
+    "_extra": {
+      "_version": "0.1.0",
+      "_type": "python",
+      "module": "base_tools.specs",
+      "attr": "ReadFile",
+      "path": "..",
+      "source": {
+        "size": 4529,
+        "mtime": 1786284380,
+        "sha256": "6dad8401d515d32b38b8e3c77c8bec58e6ce9b22dd68f51fa9c0a1b44eb4edec"
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "write_file",
+      "description": "把文字寫進檔案。檔案已經存在就整個覆寫，父資料夾不存在會自動建立。",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "description": "檔案路徑，相對路徑會接在工作根目錄底下"
+          },
+          "content": {
+            "type": "string",
+            "description": "要寫進去的完整內容"
+          }
+        },
+        "required": [
+          "path",
+          "content"
+        ]
+      }
+    },
+    "_extra": {
+      "_version": "0.1.0",
+      "_type": "python",
+      "module": "base_tools.specs",
+      "attr": "WriteFile",
+      "path": "..",
+      "source": {
+        "size": 4529,
+        "mtime": 1786284380,
+        "sha256": "6dad8401d515d32b38b8e3c77c8bec58e6ce9b22dd68f51fa9c0a1b44eb4edec"
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "edit_file",
+      "description": "把檔案裡的一段文字換成另一段。old 必須一字不差，包含縮排。",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "description": "檔案路徑，相對路徑會接在工作根目錄底下"
+          },
+          "old": {
+            "type": "string",
+            "description": "要被換掉的原文，預設必須在檔案中剛好出現一次"
+          },
+          "new": {
+            "type": "string",
+            "description": "要換成的新內容，給空字串就是刪掉"
+          },
+          "replace_all": {
+            "type": "boolean",
+            "description": "設成 true 才允許一次換掉全部出現的地方"
+          }
+        },
+        "required": [
+          "path",
+          "old",
+          "new"
+        ]
+      }
+    },
+    "_extra": {
+      "_version": "0.1.0",
+      "_type": "python",
+      "module": "base_tools.specs",
+      "attr": "EditFile",
+      "path": "..",
+      "source": {
+        "size": 4529,
+        "mtime": 1786284380,
+        "sha256": "6dad8401d515d32b38b8e3c77c8bec58e6ce9b22dd68f51fa9c0a1b44eb4edec"
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "run_shell",
+      "description": "在工作根目錄底下執行一行 shell 指令，回傳它的輸出和結束碼。",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "command": {
+            "type": "string",
+            "description": "要執行的指令，就是你會在終端機打的那一行"
+          },
+          "timeout": {
+            "type": "integer",
+            "description": "最多等幾秒，逾時會殺掉並回傳已經印出來的部分"
+          }
+        },
+        "required": [
+          "command"
+        ]
+      }
+    },
+    "_extra": {
+      "_version": "0.1.0",
+      "_type": "python",
+      "module": "base_tools.specs",
+      "attr": "RunShell",
+      "path": "..",
+      "source": {
+        "size": 4529,
+        "mtime": 1786284380,
+        "sha256": "6dad8401d515d32b38b8e3c77c8bec58e6ce9b22dd68f51fa9c0a1b44eb4edec"
+      }
+    }
+  }
+]

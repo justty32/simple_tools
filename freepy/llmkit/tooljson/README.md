@@ -120,7 +120,7 @@ argv 是一個 list，`shell=False`。模型給的參數值裡有 `;`、`$(...)`
 ## 驗
 
 ```bash
-python -m tooljson          # 27 關，全離線，不碰 LLM 也不用 proxy
+python -m tooljson          # 45 關，全離線，不碰 LLM 也不用 proxy
 ```
 
 臨時資料夾裡放五個假工具連 spec 一起寫出來，走完整條路：讀 .json → 組 argv →

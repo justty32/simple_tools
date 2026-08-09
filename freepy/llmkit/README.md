@@ -37,7 +37,7 @@ print(reply.text)
 
 ```bash
 cd freepy/llmkit                        # 這一層才 import 得到 llms / tooljson
-uv run python -m tooljson               # 27 關，全離線，連 openai 都用不到
+uv run python -m tooljson               # 45 關，全離線，連 openai 都用不到
 
 export DEEPSEEK_API_KEY=sk-...          # 要打 DeepSeek 才需要
 ./proxy/start_litellm.sh &              # 用別的 OpenAI 相容端點就不用起 proxy
@@ -57,7 +57,7 @@ uv run python -m llms                   # 五關：記憶／串流／思考／�
 
 | | 狀態 |
 |---|---|
-| `tooljson` 全部行為 | 27 關離線煙霧測試，每次改都跑 |
+| `tooljson` 全部行為 | 45 關離線煙霧測試，每次改都跑 |
 | `llms` 的記憶／串流／思考／工具／後設 | 對 DeepSeek 雲端和本機 LM Studio 各跑過一輪五關 |
 | `caps` 七項全部 | 兩邊各實打一次才宣告，**不抄 litellm 的內建資料庫** |
 | 串流的 `stream_options` usage | DeepSeek 和 LM Studio 都拿得到 |

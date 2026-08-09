@@ -6,6 +6,7 @@
 跑在臨時資料夾裡，不會動到你的檔案。
 """
 
+import os
 import sys
 import tempfile
 
@@ -18,8 +19,8 @@ FAILED = []
 
 
 def check(label, got, want_in):
-    """want_in 要出現在 got 裡面才算過，印一行結果。"""
-    ok = want_in in got
+    """want_in 要出現在 got 裡面才算過（給 callable 就自己判），印一行結果。"""
+    ok = want_in in got if isinstance(want_in, str) else want_in(got)
     if not ok:
         FAILED.append(label)
     print(f"[{'ok' if ok else 'FAIL'}] {label}: {got.splitlines()[0][:70] if got else '(空)'}")
@@ -66,6 +67,25 @@ def demo_root():
     check("寫也擋", write_file("/tmp/escaped.txt", "x"), "outside the workspace")
 
 
+def demo_tooljson():
+    """同一組工具，換一條路拿：從 tools.json 讀回來，看它跑不跑得動。"""
+    print("\n== 走 tooljson 那條路 ==")
+    try:
+        import tooljson
+    except ModuleNotFoundError:
+        print("找不到 tooljson（PYTHONPATH 要有 llmkit），跳過")
+        return
+    from base_tools import specs
+
+    where = os.path.join(os.path.dirname(os.path.abspath(specs.__file__)), specs.PATH)
+    schemas, dispatch = tooljson.tools(where)
+    check("四個都讀得回來", str(sorted(dispatch)), "'edit_file', 'read_file'")
+    check("schema 剝乾淨了", str(schemas[0]), lambda s: "_extra" not in s)
+    check("讀回來的真的叫得動", dispatch["write_file"](path="j.txt", content="hi\n"), "Created")
+    check("root 照樣關得住", dispatch["read_file"](path="/etc/passwd"), "outside the workspace")
+    check("宣告沒跟實作走散", str(tooljson.load_all(where)[0].stale), "False")
+
+
 def demo_agent(model):
     """真的接上模型：叫它用工具做一件小事，看它會不會用。"""
     print(f"\n== 交給 {model} 用 ==")
@@ -101,6 +121,7 @@ def main():
         demo_edit()
         demo_shell()
         demo_root()
+        demo_tooljson()
         if model:
             demo_agent(model)
     print("\n全部通過" if not FAILED else f"\n沒過的關: {FAILED}")

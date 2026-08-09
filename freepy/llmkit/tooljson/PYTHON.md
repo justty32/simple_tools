@@ -155,8 +155,12 @@ DSL，所以 `enum` / `minimum` / `items` 都照 JSON Schema 寫，不用等這�
 `weather`** —— 那是「正在被執行的那支程式」的意思，別的行程 `import` 不到它。
 照抄進 .json 就是壞檔，而且**現在存得出來，等別的程式去讀才炸**。
 
-所以 `from_tool()` 遇到 `"__main__"` 會**從檔名反推**（`weather.py` → `weather`），
+所以 `from_tool()` 遇到 `"__main__"` 會**從檔案位置反推**（`weather.py` → `weather`），
 上面那個寫在 `if __name__ == "__main__":` 裡的例子因此是對的，不用多給參數。
+
+**只看檔名是不夠的**：`python -m base_tools.specs` 的 `specs.py` 住在一個 package
+裡，正確答案是 `base_tools.specs`，反推成 `specs` 一樣是別的行程 import 不到的名字。
+所以它會一路往上收有 `__init__.py` 的資料夾，收到不是 package 為止。
 
 反推不出來的時候（class 真的定義在一個叫 `__main__.py` 的檔裡、或在 REPL 裡）
 **直接丟，不猜一個** —— 猜錯的代價是一份看起來正常、讀的時候才壞的 .json。

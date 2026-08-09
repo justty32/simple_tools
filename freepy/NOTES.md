@@ -5,9 +5,91 @@
 `llmkit/*/README.md` 裡的用法不重複抄。要給別人看的東西全在
 [`llmkit/`](llmkit/README.md)，那邊是 release 狀態。
 
+還沒決定要不要做的想法丟在 [IDEAS.md](IDEAS.md)，那邊是收件匣，這邊是決定。
 這台機器怎麼設定的（Manjaro、uv、VS Code、跨到 Windows）在 [ENV.md](ENV.md)。
 `llmkit` 定型**之前**踩出來的東西（`Reply` 為什麼長這樣、串流的坑、`ask()` 修過什麼、
 模型清單和 caps 怎麼問出來的）已經結案，收在 [NOTES-llmkit.md](NOTES-llmkit.md)。
+
+## 2026-08-09 第四層落地：`agentloop`
+
+四層疊完了。[`agentloop`](agentloop/README.md) 只有一個函式 `run()` 和一個把手
+`Handle`，但形狀是想過的：
+
+**`run()` 是 async 的，把手是同步的。** 兩件會擋住的事（模型那次 HTTP、工具本體）
+丟進 `asyncio.to_thread`，所以 event loop 不會被卡住；把手上的 `now()` / `say()` /
+`pause()` 全是普通函式，別的 coroutine、別的 thread、REPL 都問得動、按得動。
+這是「放著跑 + 另一條 routine 盯著」那個用法唯一撐得住的組合。
+
+**沒有「立刻中斷」。** 指令一律下一輪開頭生效。理由是 HTTP 和跑到一半的工具本來就
+停不下來，硬做出一個 `cancel()` 只會讓人以為工具沒跑過 —— 那比等它跑完危險。
+
+### 一個一開始寫錯、被測試抓出來的順序
+
+原本是「這一輪跑完工具 → 存著結果 → 下一輪送出去」，工具跑在迴圈**尾巴**。
+預算就是在這種時候用完的：工具跑掉了（副作用發生了），結果卻沒人送得出去。
+再叫一次 `run()` 就會**再跑一遍**。
+
+改成每一輪開頭先還上一輪欠的債，尾巴只記「欠什麼」。這樣預算用完時最後那批工具
+根本還沒跑，債留在 `bot.history` 上，同一個 bot 再叫一次就接著跑 ——
+**「接著跑」不是另外寫的功能，是把順序排對之後自己掉出來的。**
+
+### 限制分兩種擋法，這條想了最久
+
+- **預算真的沒了** → 停整個 agent（輪數、時間、token、總呼叫數、引擎）
+- **只是這支工具不能用** → **回一句話給模型**（不在白名單、單一工具用滿）
+
+第二種故意不是錯誤而是情報：模型讀到「run_shell 你已經用滿 5 次了」會換方法繼續
+做事，整條停掉的話它連想都沒機會想。這跟「工具的回傳值永遠是字串」是同一條規矩
+往上長一層。
+
+機器資源（cpu / gpu / 記憶體 / 網路 / 檔案）**沒做**，而且刻意不放進 `Limits`
+—— 規劃在 [agentloop/LIMITS.md](agentloop/LIMITS.md)。設得下去卻沒人擋的欄位比沒有
+更糟：**一個以為自己被關住的 agent，比一個沒關的危險。**
+
+### `quiet`：「不再叫工具就結束」原來是個特例
+
+「連續無工具呼叫次數上限」這條限制逼出一件事：迴圈本來的收手條件（一不叫工具就停）
+其實是 `quiet=1`。調大就會推它一把再給幾次機會 —— 也就是
+[prototypes](prototypes/README.md) 第 2 輪那個「小模型直接講一段話不動手」的解法。
+代價是它**真的**講完的那次也會被多推幾下，白燒幾輪，所以預設維持 1。
+
+### 驗證：假的回應物件餵真的 `Reply`
+
+35 關全離線。`FakeBot` 繼承真的 `LLM`，只是 `ask()` 照劇本吐 `Reply(假 response)`
+—— 所以 `history`、`pending_calls`、`calls` 全是真的那條路。NOTES 慣例那條
+「不連 proxy 也驗得動 `Reply`」原本是給 `reply.py` 用的，這次整包迴圈都靠它。
+
+## 2026-08-09 兩份只有規劃、還沒動手的東西
+
+**都還沒寫程式，是要審的東西**：
+
+- [`team_tools/PLAN.md`](team_tools/PLAN.md) —— agent 之間怎麼講話。一個團隊就是
+  一個資料夾，沒有 server。裡面比較不明顯的三條：投信靠 `os.replace()` 的原子改名；
+  「檢查有沒有信」只看檔名、「讀信」才開檔（差一個數量級的 context 成本）；
+  **不做會阻塞的 `wait_for_message`** —— 那會讓 agent 多一個「在發呆」的狀態，
+  而發呆跟當掉從外面看是一樣的。
+- [`agentloop/LIMITS.md`](agentloop/LIMITS.md) —— 機器資源那一半。重點是先寫清楚
+  「哪些擋得住、哪些擋不住」：rlimit 只管得到子行程（python 型的工具跟迴圈同一個
+  行程，設下去等於限制自己）、網路和檔案只有 netns / 容器擋得住、
+  GPU 只擋得了「哪幾張卡」不擋得了顯存。
+
+## 2026-08-09 base_tools 接進 tooljson，順手抓到 `from_tool()` 的一個安靜錯誤
+
+`base_tools/tools.json` 是 `specs.py` 產的，四個工具變成 `_type: "python"` 的 spec。
+能力從「import 清單」變成「設定檔」之後，才混得進 exec 型的外部工具。
+
+產的時候撞到：**`python -m base_tools.specs` 的 `__module__` 是 `"__main__"`，
+`from_tool()` 從檔名反推成 `"specs"` —— 錯的，應該是 `"base_tools.specs"`。**
+而且錯得很安靜：.json 存得出來，等別的行程去讀才 import 不到。
+
+`tool.py` 自己的 docstring 寫著「反推不出來就丟，**不要猜一個**」，它這裡卻猜了一個
+還猜錯。修法是一路往上收有 `__init__.py` 的資料夾（`_dotted_name()`）。
+順帶：`_source_file()` 問不到檔案時回空字串，`os.path.abspath("")` 是 cwd，
+會反推出一個假名字 —— 一起擋掉了。
+
+**這是這個 repo 第二次靠「檔案自己的 docstring」抓到 bug**（上一次是 `invoke.py`
+那句「這個檔是 exec 專屬的」）。把「為什麼這樣做」寫進程式裡，會在別人違反它的時候
+自己叫出來。
 
 ## 2026-08-09 tooljson 加第二種 `_type`：外殼一行都沒動
 
@@ -33,6 +115,7 @@
 3. **`tooljson` 給它能力** —— 工具是一份 JSON 而不是一段程式碼，所以「有哪些能力」
    變成設定檔的事。到這裡 bot 會做事了，但每一輪還是人在推。
 4. **在這之上才是 agent** —— 自己決定推幾輪、什麼時候收手。
+   （2026-08-09 落地成 [`agentloop`](agentloop/README.md)）
 
 順序不能顛倒的理由是**下面一層錯了，上面一層的症狀會完全看不出來源**：模型能力宣告
 錯（第 2 層）會表現成 agent 莫名其妙不叫工具（第 4 層）。這就是為什麼 caps 要實打、
@@ -111,7 +194,9 @@ qwen3.5-9b 標成 `vlm` 卻沒把 vision 列進 `capabilities`。所以 card 的
 
 - **一個檔 150 行以內**，程式和文件都算。超過就拆 —— README 超過就拆出 USAGE.md。
 - **沒有 test，驗證靠實跑**：`cd freepy/llmkit && uv run python -m tooljson`（離線，
-  27 關）、`cd freepy && uv run python -m modelcards`（離線，31 關）和
+  45 關）、`cd freepy && uv run python -m modelcards`（離線，31 關）、
+  `PYTHONPATH=llmkit uv run python -m base_tools`（離線，26 關）、
+  `PYTHONPATH=llmkit uv run python -m agentloop`（離線，35 關）和
   `uv run python -m llms <一般模型> <思考模型>`（要 proxy，五關）。
   串流＋工具、串流＋思考這種組合 `__main__.py` 沒涵蓋，要另外手動打一次
   （`try.py` 就是串流＋工具）。
