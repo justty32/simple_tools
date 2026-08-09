@@ -5,7 +5,8 @@
 這份是**契約**，不是某個實作的說明 —— 以後別的語言的 lib 讀同一份 JSON，要做出
 一模一樣的事，所以每條規則都是死的，實作不要自行加碼。
 
-這裡只講外殼（所有 `_type` 共通的部分）。`_type: "exec"` 的那套在 [EXEC.md](EXEC.md)。
+這裡只講外殼（所有 `_type` 共通的部分）。各 `_type` 自己那套在 [EXEC.md](EXEC.md)
+和 [PYTHON.md](PYTHON.md)。
 
 ```json
 {
@@ -55,14 +56,15 @@
 **這是一個開放集合，不是列舉。** 規範定的是外殼和交接方式，不是「總共只能有哪幾種
 執行方式」—— 那註定列不完，也不該由規範來列。
 
-有規範的只有一種：
+有規範的有兩種：
 
 | 值 | 意思 | 規範 |
 |---|---|---|
 | `"exec"` | 跑一個 linux 檔案，argv + stdin/out/err | [EXEC.md](EXEC.md) |
+| `"python"` | 叫一個 python 物件（**python 專屬**，別的語言讀到是壞檔） | [PYTHON.md](PYTHON.md) |
 
 其餘由使用者自己定義並在標準庫登記（python 版是 `tooljson.register()`）。
-python import、C++ include、HTTP API 這些都可以這樣長出來，各自是一份平行的文件，
+C++ include、HTTP API 這些都可以這樣長出來，各自是一份平行的文件，
 `_extra` 底下的鍵也各自換一套。**內建的 `exec` 沒有特權**，走的是同一道門。
 
 所以「認不認得」是**執行環境**的性質，不是檔案的性質：同一份 `_type: "http"` 的

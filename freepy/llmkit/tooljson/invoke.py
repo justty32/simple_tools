@@ -27,9 +27,7 @@ tool message。模型讀到「找不到執行檔」是能自己換一步走的�
 import subprocess
 
 from . import args as argmod
-
-#: 一次 tool 回傳最多塞給模型幾個字元。超過就截，截掉多少會寫在截斷處
-MAX_OUTPUT = 30000
+from .text import clip, decode
 
 _approver = None
 
@@ -38,25 +36,6 @@ def set_approver(fn):
     """設一個 fn(name, argv) -> bool 的守門員，回 False 就不執行。傳 None 取消。"""
     global _approver
     _approver = fn
-
-
-def _decode(raw):
-    """bytes → 給模型看的字串。含 NUL 就當二進位，不吐一堆替代字元灌爆 context。"""
-    if not raw:
-        return ""
-    if b"\x00" in raw:
-        return f"(binary output, {len(raw)} bytes, not shown)"
-    return raw.decode("utf-8", errors="replace")
-
-
-def _clip(text, where, limit=MAX_OUTPUT):
-    """太長就截，並註明省略了多少。編譯器那種重點在尾巴的用 tail。"""
-    if len(text) <= limit:
-        return text
-    cut = len(text) - limit
-    if where == "tail":
-        return f"… [truncated, {cut} earlier characters]\n{text[-limit:]}"
-    return f"{text[:limit]}\n… [truncated, {cut} more characters]"
 
 
 def _pipes(mode):
@@ -101,7 +80,7 @@ def run_exec(spec, arguments):
         return f"Error: {spec.name} failed to start: {e}"
 
     raw = done.stderr if body.stderr == "only" else done.stdout
-    text = _clip(_decode(raw).strip(), body.clip)
+    text = clip(decode(raw).strip(), body.clip)
     if done.returncode in body.ok_exit:
         return text or f"(no output, exit {done.returncode})"
     return f"exit {done.returncode}\n{text}" if text else f"exit {done.returncode} (no output)"

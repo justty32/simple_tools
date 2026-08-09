@@ -6,6 +6,7 @@
 
 - [FORMAT.md](FORMAT.md) —— 外殼，所有 `_type` 共通的部分
 - [EXEC.md](EXEC.md) —— `_type: "exec"`：跑一個 linux 檔案（argv + stdin/out/err）
+- [PYTHON.md](PYTHON.md) —— `_type: "python"`：叫一個 python 物件，配一個 `Tool` 基底類別
 
 **規範才是主體，這個 package 只是它的第一個實作。** 之後別的語言的 lib 讀同一份
 JSON，要組出一模一樣的命令列，所以那兩份 .md 裡每條規則都是死的（包括排序的
@@ -44,7 +45,7 @@ tiebreak 怎麼定），改文件比改程式重。
 
 ## `_type` 是開放的
 
-內建的只有 `"exec"`。**其他的你自己加**，不用改這個 package：
+內建的有 `"exec"` 和 `"python"`。**其他的你自己加**，不用改這個 package：
 
 ```python
 class HttpBody:
@@ -58,8 +59,8 @@ tooljson.register("http", HttpBody)
 ```
 
 登記完，`_type: "http"` 的 .json 就跟內建的平起平坐 —— `load()` 讀得懂、
-`tools()` 收得進 dispatch、`run()` 叫得動。**內建的 `exec` 沒有特權**：
-`exec_type.py` 最後一行就是 `register("exec", ExecBody)`，同一道門。
+`tools()` 收得進 dispatch、`run()` 叫得動。**內建的兩種都沒有特權**：
+`exec_type.py` 和 `python_type.py` 最後一行都是 `register(...)`，同一道門。
 
 body 只要兩樣東西：`run(args) -> str` 和 `target`（本地檔案路徑，`stale` 拿它算
 指紋，沒有就 `None`）。其餘都是那個 `_type` 自己的事 —— `ExecBody` 有 `argv` /

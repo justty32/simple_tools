@@ -14,8 +14,23 @@
     print(bot.ask(tool_results=results).text)
 
 `_extra` 裡只有 `_version` 和 `_type` 兩個保留鍵，其餘的鍵由 `_type` 決定。
-內建的 `_type` 只有 `"exec"`（跑一個 linux 檔案：argv + stdin/out/err），
-**其他的由你自己登記**：
+內建的 `_type` 有兩種：`"exec"`（跑一個 linux 檔案：argv + stdin/out/err）和
+`"python"`（叫一個 python 物件）。後者配一個 `Tool` 基底類別，自己宣告 schema、
+實作 `run()`，再存成 .json：
+
+    class Shout(tooljson.Tool):
+        name, description = "shout", "把字變大聲"
+        params = {"text": {"type": "string"}}
+        required = ["text"]
+        def run(self, text) -> str: return text.upper()
+
+    tooljson.save(tooljson.from_tool(Shout, path="../mytools.py"), "specs/shout.json")
+
+**schema 是手寫的不是反射出來的** —— description 和 enum 是寫給模型看的，簽名裡
+沒有那些資訊。只是要在同一支程式裡用自己的函式的話，`llms.to_tools(fn)` 就夠了，
+不需要這一套；這裡的價值在「能力變成一份設定檔」。
+
+**其他的 `_type` 由你自己登記**：
 
     tooljson.register("http", MyHttpBody)     # 見 registry.py
 
@@ -27,23 +42,30 @@
 程式重 —— 那兩份是契約，這裡是契約的 python 版。
 
 檔案分工：
-    spec.py       外殼：讀寫 .json、兩個保留鍵、把其餘的轉交給解析器
-    registry.py   `_type` → 解析器的註冊表，以及 body 要提供什麼
-    exec_type.py  內建的 `_type: "exec"` 解析器
-    args.py       模型給的 JSON → argv + stdin（純函式）
-    invoke.py     exec 的執行端：真的去跑 → 一個字串；守門員 hook
-    __main__.py   離線煙霧測試
+    spec.py         外殼：讀寫 .json、兩個保留鍵、把其餘的轉交給解析器
+    registry.py     `_type` → 解析器的註冊表，以及 body 要提供什麼
+    exec_type.py    內建的 `_type: "exec"` 解析器
+    args.py         模型給的 JSON → argv + stdin（純函式）
+    invoke.py       exec 的執行端：真的去跑 → 一個字串；守門員 hook
+    python_type.py  內建的 `_type: "python"` 解析器（解析和執行都在裡面，它夠小）
+    tool.py         `Tool` 基底類別 ＋ `from_tool()`：宣告一個工具、存成 .json
+    text.py         每種 `_type` 共用的收尾：解碼和裁切
+    __main__.py     離線煙霧測試
 """
 
 from . import exec_type as _exec_type  # noqa: F401  —— import 就是登記，別拿掉
+from . import python_type as _python_type  # noqa: F401  —— 同上，內建的兩種都走這道門
 from .invoke import bind, set_approver
 from .registry import register, types
 from .spec import Spec, SpecError, load, load_all, run, save
+from .tool import Tool, from_tool
 
 __all__ = [
     "Spec",
     "SpecError",
+    "Tool",
     "bind",
+    "from_tool",
     "load",
     "load_all",
     "register",
