@@ -1,0 +1,41 @@
+{
+  "_version": "0.1.0",
+  "id": "gemma-4-e4b",
+  "weights": "google/gemma-4-e4b",
+  "runner": "lm_studio",
+  "aliases": {
+    "lm-gemma-4-e4b": "think",
+    "lm-gemma-4-e4b-nothink": "nothink"
+  },
+  "context": {"v": 128000, "src": 1},
+  "modes": {
+    "think": {
+      "temperature": {"v": 1.0, "src": 1},
+      "top_p": {"v": 0.95, "src": 1},
+      "top_k": {"v": 64, "src": 1}
+    },
+    "nothink": {
+      "temperature": {"v": 1.0, "src": 1},
+      "top_p": {"v": 0.95, "src": 1},
+      "top_k": {"v": 64, "src": 1}
+    }
+  },
+  "claimed": {
+    "tools": {"v": true, "src": 1},
+    "vision": {"v": true, "src": 1},
+    "reasoning": {"v": true, "src": 1}
+  },
+  "verified": {
+    "tools": {"v": true, "on": "2026-08-09", "how": "tool_choice=\"required\" 實打，回 tool_calls"},
+    "tool_choice": {"v": true, "on": "2026-08-09", "how": "tool_choice=\"required\" 可逼出 weather 呼叫"},
+    "parallel_tools": {"v": true, "on": "2026-08-09", "how": "同一輪要求台北和高雄，回 2 個 tool_calls"},
+    "vision": {"v": true, "on": "2026-08-09", "how": "送 1x1 紅色 PNG，回答紅色"},
+    "reasoning": {"v": true, "on": "2026-08-09", "how": "parallel tools 測試回 reasoning_content"},
+    "json_schema": {"v": true, "on": "2026-08-09", "how": "用 -nothink alias 送 response_format=json_schema，回符合 schema 的 city JSON"},
+    "caching": {"v": false, "on": "2026-08-09", "how": "同一長前綴打兩次，usage 的 cache hit / miss 欄位都仍是 None"}
+  },
+  "sources": [
+    {"n": 1, "url": "https://huggingface.co/google/gemma-4-E4B-it", "kind": "official", "read": "2026-08-09"}
+  ],
+  "notes": "任務表指定 weights 是 google/gemma-4-e4b；官方 HF 頁名稱是 google/gemma-4-E4B-it。這裡照任務表填 weights，來源用官方 E4B IT 頁。\n\n官方 dense model 表列 E4B context 128K tokens，支援 Text/Image/Audio。官方 best practices 的 sampling 是跨用途標準值，沒有另外分 think / nothink，所以兩個 mode 填同一組。\n\n官方說 thinking 由 system prompt 開頭的 <|think|> token 觸發，移除 token 可關閉。官方特別說 Disabled Thinking Behavior 的空 thought block 規則不適用 E2B/E4B，所以 E4B 關閉 thinking 時不應套用 12B 的空 thought block 行為。\n\n官方宣稱 native function-calling support，但我沒找到 tool_choice / parallel tools / response JSON schema / prompt caching 的明確宣稱，所以不填。\n\n2026-08-09 實打：lm-gemma-4-e4b 的短文字問答不一定有 reasoning_content；parallel tools 那輪有，所以 reasoning 記 true。json_schema 用 think alias 時被 reasoning 吃滿 max_tokens，改用 -nothink alias 成功。"
+}

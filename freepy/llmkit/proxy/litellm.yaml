@@ -1,21 +1,10 @@
-# litellm.yaml
-# LiteLLM Proxy 設定檔
-#
-# 這份設定檔定義了三種來源的模型：
-#   1. DeepSeek 雲端 API（需要 DEEPSEEK_API_KEY）
-#   2. 遠端 Ollama @ 192.168.1.146（不需要金鑰，只有在那台機器連得到時才會通）
-#   3. 本機 LM Studio（不需要真實金鑰，走 OpenAI 相容端點）
-#
-# 連不到的來源不會影響 proxy 啟動，只有真的去呼叫它時才會失敗。
-# 啟動方式請參考同目錄下的 start_litellm.sh / start_litellm.ps1。
+# LiteLLM Proxy：DeepSeek 雲端、遠端 Ollama、本機 LM Studio。
+# 連不到的來源不擋啟動，只有真的呼叫時才失敗。
+# 啟動方式見 start_litellm.sh / start_litellm.ps1。
 
 model_list:
-  # ---------------------------------------------------------------------
   # DeepSeek 雲端 API
-  # 2026-08-05 實際的 /models 只有 deepseek-v4-flash 和 deepseek-v4-pro；
-  # deepseek-chat / deepseek-reasoner 是舊名字，現在分別對應到 v4-flash 的
-  # 非思考模式和思考模式，官方仍然收，所以兩種名字都留著。
-  # ---------------------------------------------------------------------
+  # 2026-08-05 /models 只有 v4-flash / v4-pro；chat / reasoner 是仍可用的舊名。
   - model_name: deepseek-chat
     litellm_params: &ds
       model: deepseek/deepseek-chat
@@ -26,8 +15,7 @@ model_list:
       supports_reasoning: false
       supports_tool_choice: true
       supports_parallel_function_calling: true
-      # litellm 內建資料庫說 true，但 2026-08-08 實打回 400
-      # "This response_format type is unavailable now"。又一個不能信的例子。
+      # litellm 內建資料庫說 true，但 2026-08-08 實打回 400。
       supports_response_schema: false
       supports_prompt_caching: true
 
@@ -38,6 +26,8 @@ model_list:
     model_info: &ds_info_thinking
       <<: *ds_info
       supports_reasoning: true
+      # 2026-08-09 實打：thinking mode 工具可用，但 tool_choice="required" 會 400。
+      supports_tool_choice: false
 
   - model_name: deepseek-v4-pro
     litellm_params:
@@ -45,21 +35,9 @@ model_list:
       model: deepseek/deepseek-v4-pro
     model_info: *ds_info_thinking
 
-  # ---------------------------------------------------------------------
   # 遠端 Ollama（192.168.1.146:11434，不需要 api_key）
-  # 2026-08-05 實際偵測到的清單，對方機器有增減請自行更新。
-  # model_info 是手動宣告的能力旗標：litellm 不認得本機模型，不宣告一律回報 None。
-  #
-  # 2026-08-06 實測發現兩件事：
-  # 1. model 一定要用 ollama_chat/ 這個 prefix，不能用 ollama/。後者走的是舊版
-  #    /api/generate（純文字補全，工具定義得塞進文字 prompt 裡讓模型自己接龍），
-  #    thinking 也不會被解析成 reasoning_content。ollama_chat/ 才會走 /api/chat，
-  #    有原生 tool_calls 和 think 參數支援。翻船翻了老半天就是 prefix 選錯。
-  # 2. qwen3-32b / deepseek-r1-8b 標了 supports_reasoning: true，但 reasoning_effort
-  #    沒進 allowed_openai_params 白名單會被 drop_params 默默丟掉，傳不到 Ollama 的
-  #    think 參數。只有這兩顆真的支援思考的模型才給 allowed_openai_params，
-  #    qwen2.5-14b / gemma3-1b 不給，避免對不支援思考的模型誤傳這個參數。
-  # ---------------------------------------------------------------------
+  # 本機模型 litellm 不認得，能力旗標要手填；一定用 ollama_chat/ 才走 /api/chat。
+  # qwen3-32b / deepseek-r1-8b 才放行 reasoning_effort，避免誤傳給不支援思考的模型。
   - model_name: ollama-qwen3-32b
     litellm_params:
       model: ollama_chat/qwen3:32b
@@ -96,23 +74,15 @@ model_list:
       supports_function_calling: false
       supports_reasoning: false
 
-  # ---------------------------------------------------------------------
   # 本機 LM Studio（http://localhost:1234/v1，OpenAI 相容，api_key 是佔位假值）
-  # model id 用 curl http://localhost:1234/v1/models 問，不要猜。三個都有 mmproj，
-  # 所以看得到圖。沒載入模型時第一次呼叫會 JIT 載入，會慢一下。
-  #
-  # 每顆給兩個名字：本名預設會思考，`-nothink` 是同一顆模型、只是把
-  # reasoning_effort: none 焊死在設定裡。這樣「要不要想」統一成換名字，
-  # 跟 DeepSeek 的 chat / reasoner 一致，呼叫端不用記哪家用哪招。
-  # allowed_openai_params 不能少：litellm 的支援清單沒有 reasoning_effort，
-  # 配上 drop_params 會被無聲丟掉。
-  # ---------------------------------------------------------------------
+  # 測大模型前先 lms unload 其他模型；12B JIT 失敗時用 8192 context 手動載入。
+  # -nothink 只是同模型焊死 reasoning_effort: none；allowlist 避免 drop_params 吞參數。
   - model_name: lm-gemma-4-12b
     litellm_params: &lm
       model: lm_studio/google/gemma-4-12b-qat
       api_base: http://localhost:1234/v1
       api_key: lm-studio-dummy-key
-      allowed_openai_params: ["reasoning_effort"]
+      allowed_openai_params: ["reasoning_effort", "top_k", "min_p", "repetition_penalty"]
     model_info: &lm_info
       supports_function_calling: true
       supports_vision: true
@@ -156,16 +126,12 @@ model_list:
       reasoning_effort: "none"
     model_info: *lm_info_nothink
 
-# 要 master key 驗證就設好 LITELLM_MASTER_KEY 再解開這兩行。整段註解著的話，
-# 就算沒有那個環境變數，proxy 一樣啟動得起來。
+# 要 master key 就設 LITELLM_MASTER_KEY 再解開。
 # general_settings:
 #   master_key: os.environ/LITELLM_MASTER_KEY
 
 litellm_settings:
-  # 不支援的參數直接丟棄而不是報錯，增加相容性。代價是打錯字或送了 provider
-  # 不吃的欄位都不會有任何提示，要硬塞就用 allowed_openai_params（見上面 LM Studio）
+  # 不支援參數直接丟棄；要硬塞就用 allowed_openai_params。
   drop_params: true
-  # API 呼叫失敗時的重試次數，設定保守一點避免過度重試
   num_retries: 2
-  # 單一請求的逾時秒數（本機模型或大型推理模型可能需要較長時間）
   request_timeout: 600
