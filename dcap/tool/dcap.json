@@ -1,0 +1,29 @@
+{
+  "name": "dcap",
+  "description": "建立一個新的 C/C++ 專案。把指定的模板複製成 <name> 資料夾（<name> 不能已經存在，存在就會失敗、不會覆蓋），把新專案裡 CMakeLists.txt 的 @NAME@ 換成 <name>，然後在新資料夾裡執行 git init。模板可以是內建名稱（c 或 cpp，永遠可用）、一個模板目錄的路徑（開頭是 ./、../ 或 /）、或設了 DCAP_TEMPLATES 環境變數時該目錄底下的具名模板。產生的專案本身不需要 dcap，只需要一般的 C/C++ 編譯器和 CMake。",
+  "exec": "/home/lorkhan/repo/simple_tools/dcap/bin/dcap",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "template": {
+        "type": "string",
+        "description": "要用的模板。內建可用 \"c\" 或 \"cpp\"。也可以給一個模板目錄的路徑（必須以 ./、../ 或 / 開頭，該目錄底下要有 CMakeLists.txt 才算合法模板）。若設了 DCAP_TEMPLATES 環境變數，裸名會先去該目錄下找同名模板，找到就用它、蓋掉同名的內建模板。"
+      },
+      "name": {
+        "type": "string",
+        "description": "新專案的資料夾名稱，會建立在目前工作目錄下（./<name>）。這個資料夾現在不能已經存在——已存在會直接失敗，不會覆蓋或合併。"
+      }
+    },
+    "required": ["template", "name"]
+  },
+  "argv": [
+    {"param": "template", "kind": "positional"},
+    {"param": "name", "kind": "positional"}
+  ],
+  "stdin": null,
+  "source": {
+    "size": 107824,
+    "mtime": 1786155457,
+    "sha256": "d403b69be2497c33ca6ae32f15d83368a410fe59381e969ca3719464c370aa3e"
+  }
+}

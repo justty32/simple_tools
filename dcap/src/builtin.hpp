@@ -1,5 +1,7 @@
 #pragma once
-#include <cstddef>
+#include <functional>
+#include <optional>
+#include <span>
 #include <string>
 #include <string_view>
 
@@ -16,12 +18,13 @@ struct File {
 
 struct Template {
     std::string_view name;
-    const File* files;
-    std::size_t count;
+    std::span<const File> files;
 };
 
-// Null if there is no built-in template by that name.
-const Template* find_builtin(std::string_view name);
+using TemplateRef = std::reference_wrapper<const Template>;
+
+// Empty if there is no built-in template by that name.
+std::optional<TemplateRef> find_builtin(std::string_view name);
 
 // Built-in names for the usage text, e.g. "c | cpp".
 std::string builtin_names();

@@ -46,7 +46,10 @@ const File kFiles[] = {
 
 ## 建置 dcap 本體
 
-需要支援 C++20 `#embed` 的編譯器（GCC 15+、Clang 19+）、CMake 3.20+。
+需要支援 C++23 的編譯器：本體同時用了 `#embed`（嵌內建模板）跟 `std::expected`
+（錯誤處理），兩個都要——GCC 15+、Clang 19+，而且**標準函式庫也要跟上**（編譯器
+版本夠新不代表附帶的 libstdc++/libc++ 也支援 `std::expected`）。另外要 CMake
+3.20+。
 
 ```sh
 cmake -B build && cmake --build build      # 產出 bin/dcap
@@ -54,7 +57,7 @@ cmake -B build && cmake --build build      # 產出 bin/dcap
 
 執行檔固定落在 `bin/`，所以 PATH 設一次就不用再改。改了 `templates/` 底下的檔會自動重建——編譯器會把 `#embed` 的檔案寫進 depfile，CMake 照著走，**不需要在 CMakeLists 裡列模板檔**。
 
-注意這是**本體**的需求。`#embed` 只有本體用到，**產生的專案不需要它**——用什麼舊編譯器建都行。
+注意這是**本體**的需求。`#embed` 跟 `std::expected` 只有本體用到，**產生的專案不受影響、仍然只需要 C++20**——用什麼舊編譯器建生出來的專案都行。
 
 ## 安裝
 
@@ -133,6 +136,11 @@ cmake -B build -DCMAKE_BUILD_TYPE=Debug     # 預設是 Release
 **Linux / macOS / Windows。** 產生的 `CMakeLists.txt` 要求 CMake 3.21+（`PROJECT_IS_TOP_LEVEL` 和 `TARGET_RUNTIME_DLLS` 都是 3.21 才有的；建置 dcap 本體本身只需 CMake 3.20+）。產生的專案裡沒有任何 ELF 專屬的東西了：檔名、匯出符號（`WINDOWS_EXPORT_ALL_SYMBOLS`）、執行時找得到 library（Linux/macOS 是 RUNPATH，Windows 是 build 後把被引用專案的 dll 複製到 `bin/`）都交給 CMake。本體本身（`std::filesystem` + `#embed`）也沒有平台包袱。
 
 一個 caveat：模板把輸出目錄寫死成 `bin/` 和 `lib/`，所以請用**單組態產生器**（Ninja、Unix Makefiles、MinGW Makefiles）。Visual Studio 這種多組態產生器會在後面再加一層，變成 `bin/Release/`。
+
+## 給 agent 用
+
+要把 dcap 包成 LLM 能叫的工具，看 [`tool/README.md`](tool/README.md)；機器可讀的
+規格（schema、`argv` 對應方式）在 [`tool/dcap.json`](tool/dcap.json)。
 
 ## 授權
 

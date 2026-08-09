@@ -20,6 +20,29 @@
 
 **明確的非目標：第三方相依。** CMake 原生就夠好（GitHub 抓的用 `FetchContent`／`add_subdirectory`，apt/brew 裝的用 `find_package`／`pkg_check_modules`），模板多寫任何一段都只是猜使用者要哪一種。**不要好心加。**
 
+## src/ 重構決策（2026-08-08）
+
+**沒有智慧指標，一支都沒加。** 這支程式不擁有任何 heap 上的東西：內建模板是
+`#embed` 進來的靜態陣列，其他一切都是 automatic storage + RAII（`NewDirectory`、
+`ScopedCurrentPath`）跟值語意。塞一個 `unique_ptr` 進來只是為了「看起來現代」，
+沒有東西可管，是 cargo cult，故意不加。
+
+**`std::expected<T, std::string>` 取代例外跟被忽略的 `std::error_code`。**
+例外會逼每一層呼叫路徑都要記得 catch；舊版 `read_file`/`write_file`/
+`patch_name` 用 `std::error_code` 卻沒檢查，錯誤直接被吞掉（比如樣板檔讀不到
+就悄悄寫出空檔案）。`expected` 讓錯誤變成回傳型別的一部分，呼叫端躲不掉，訊息
+還是人看得懂的字串。
+
+**順手修的兩個 bug，都是靠 RAII 守衛修的：**
+
+- **失敗留下半成品目錄**——舊版 `create_directories(name)` 之後材質化失敗，
+  目錄留在原地沒人清。`NewDirectory` 建構子建目錄、解構子清掉，成功路徑上顯式
+  呼叫 `commit()` 才會留下；它只清自己建的目錄。
+- **`git init` 的 shell 注入／跳脫**——舊版 `std::system("git -C \"" + name +
+  "\" init -q")`，`name` 裡有引號、`$`、反引號都可能被 shell 誤解。改用
+  `ScopedCurrentPath` 切換 cwd 進新專案再跑固定字面值 `git init -q`，使用者
+  給的字串完全不會進到那行命令。
+
 ## 慣例
 
 - **commit 直接進 `main`**，不開分支。**push 要先問過。**（原始出處是原版的 `AGENTS.md`，移到這裡是因為第二版之後刻意沒有 AGENTS.md。）

@@ -1,5 +1,4 @@
 #include "builtin.hpp"
-#include <iterator>
 
 // The built-in template registry, by hand. #embed is a preprocessor directive
 // and so cannot be wrapped in a macro: every file gets its own block, and the
@@ -78,17 +77,17 @@ const File kFiles[] = {
 } // namespace tpl_cpp
 
 const Template kTemplates[] = {
-    {"c", tpl_c::kFiles, std::size(tpl_c::kFiles)},
-    {"cpp", tpl_cpp::kFiles, std::size(tpl_cpp::kFiles)},
+    {"c", tpl_c::kFiles},
+    {"cpp", tpl_cpp::kFiles},
 };
 
 } // namespace
 
-const Template* find_builtin(std::string_view name) {
+std::optional<TemplateRef> find_builtin(std::string_view name) {
     for (const Template& t : kTemplates)
         if (name == t.name)
-            return &t;
-    return nullptr;
+            return t;
+    return std::nullopt;
 }
 
 std::string builtin_names() {
