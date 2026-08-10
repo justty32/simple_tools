@@ -19,13 +19,12 @@ Gate：差異能定位 field／transition；不能只印兩坨 JSON。
 
 Gate：pure vectors 100% 等價；Linux 45 類現有 case 全過；unknown type/version fail closed；parser fuzz 無 crash。
 
-## Phase 2：modelcards + identity/common values（1–2 週）
+## Phase 2：identity/common values（1–2 週）
 
-- card corpus validation／lookup／projection。
+- preset JSON 只作普通設定載入，不建立獨立 migration slice。
 - `AgentPath`、ids、permission/resource values。
-- 先整理 proxy/modelcard verified source-of-truth。
 
-Gate：31 類 card 行為等價；path property、subset、conservation laws 全過。
+Gate：preset id 能建立等價 Engine；path property、subset、conservation laws 全過。
 
 到這裡形成最小有價值 native core，合計約 **4–7 person-weeks**。若此時 dependency/build/debug 成本已大於部署收益，可在這個安全點停。
 

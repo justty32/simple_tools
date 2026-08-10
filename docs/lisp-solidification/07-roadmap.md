@@ -69,7 +69,7 @@ Gate：不同 actor 看到不同 namespace；secret 的名稱也不洩漏；snap
 
 ```text
 tooljson
-  → identity + value objects + modelcards
+  → identity + value objects
   → agentloop core
   → LLM adapter
   → communication + memory + introspection

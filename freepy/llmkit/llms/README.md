@@ -1,5 +1,19 @@
 # llms
 
+## Preset
+
+不想每次手寫 endpoint、model 和 parameters，可以直接按 id 載入：
+
+```python
+from llms import LLM, load_preset
+
+bot = LLM(load_preset("lm-qwen3.5-9b"))
+```
+
+資料只有一份 [`presets.json`](presets.json)：最外層是一個以 id 為 key 的 object，每筆
+只含 `endpoint`、`model`、`parameters`，以及可省略的 `description`。能力仍由
+`Engine` 向 proxy 查詢，不在 preset 重複維護。
+
 包一層薄薄的殼在 openai SDK 外面，對著本機的 LiteLLM proxy 講話。
 
 一個 `LLM` instance 就是一個 **bot**：
@@ -15,7 +29,8 @@ bot 只會說話和開口要工具。工具誰去跑、跑出什麼，由你決�
 proxy 把 DeepSeek 雲端、遠端 Ollama、本機 LM Studio 都收成同一個 OpenAI 相容端點，
 換模型就是換一個字串。
 
-只做這件事：不做重試、不做 logging、不做 config 檔、不做 CLI。
+只做這件事：不做重試、不做 logging、不做 CLI。preset 只是可選的 Engine 輸入，
+不承載模型知識庫或自動更新機制。
 
 串流、思考、圖片、後設這些用法在 [USAGE.md](USAGE.md)，工具和能力在 [TOOLS.md](TOOLS.md)。
 

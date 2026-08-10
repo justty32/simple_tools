@@ -64,4 +64,6 @@ file mailbox 適合第一版；team、budget、task 若進到多 process crash r
 
 ## 最終判斷
 
-值得做，但應以 `tooljson` 小切片驗證方法，再逐步擴到 identity、modelcards、agentloop 與 memory。真正隔離繼續交給 container/kernel；Janet 負責讓上層語意小、清楚、可重播、可組合。
+值得做，但應以 `tooljson` 小切片驗證方法，再逐步擴到 identity、agentloop 與 memory。
+preset 只是設定資料，不列為固化階段。真正隔離繼續交給 container/kernel；Janet 負責讓
+上層語意小、清楚、可重播、可組合。

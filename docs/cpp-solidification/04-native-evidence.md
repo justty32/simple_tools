@@ -24,7 +24,7 @@ native_probe/bin/native_probe.exe
 
 ## Python reference 的平台證據
 
-- Windows：agentloop 35/35、modelcards 31/31。
+- Windows：agentloop 35/35；preset loader 只需 JSON lookup，不再有獨立測試套件。
 - Windows：tooljson 32/45，13 個 exec case 因 POSIX fixture 不是 Win32 executable 失敗。
 - Windows：base_tools 20/26，6 個 shell case按設計拒絕非 POSIX。
 - WSL Ubuntu：tooljson 45/45、base_tools 全過。

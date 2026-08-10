@@ -80,7 +80,8 @@ ref 不是權限 token。另一個 agent 從 communication message 收到 `[資�
 
 ## 自動卸載留到第二版
 
-v1 由模型呼叫 candidates → batch unload → 需要時 load，先把可逆語意做對。之後才依 model card 的 context limit 加自動政策，例如超過 4 KB 且 N 輪未載入的 tool result。
+v1 由模型呼叫 candidates → batch unload → 需要時 load，先把可逆語意做對。自動政策所需
+的 context limit 應由 endpoint metadata 取得，不塞進 preset。
 
 自動卸載、手動載入可能更省，但在有實測前不加入隱藏行為。compact 若需要，是壓在 refs 之上的有損第二層，不取代 object store。
 

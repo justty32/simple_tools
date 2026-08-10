@@ -49,7 +49,7 @@ Lisp 固化的價值不只是語法短，而是讓系統以少量、可組合、
 ## 本次實跑摘要
 
 - freepy `agentloop`：35 個離線關卡全過。
-- freepy `modelcards`：31/31 過。
+- freepy preset loader：簡單 JSON lookup，不再有獨立 modelcards 測試套件。
 - freepy `base_tools`：檔案與 containment 過；6 個 POSIX shell 關卡在 Windows 明確失敗。
 - freepy `tooljson`：32/45 過；13 個 exec 關卡在 Windows 因測試腳本不是 Win32 executable 失敗。
 - langlab-janet：basic 與 6 個 `llm-http` 測試通過；3 個 `pi-shell` 測試在 Windows 以 access violation 結束。

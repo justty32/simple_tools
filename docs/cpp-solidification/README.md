@@ -66,11 +66,13 @@ Turn/Round · ledger · memory refs                 │
 ## 本次實證摘要
 
 - current worktree 約有 **3.35K 行 implementation Python**；含 smoke／輔助程式約 4.4K 行。`agent_runtime`、communication、team、memory、introspection、agentfs 仍是規劃，不能算已完成也不能拿來估「翻譯 LOC」。
-- Windows：`agentloop` 35/35、`modelcards` 31/31、`tooljson` 32/45、`base_tools` 20/26。後兩者失敗都落在明確的 POSIX process/shell 邊界。
+- Windows：`agentloop` 35/35、`tooljson` 32/45、`base_tools` 20/26。後兩者失敗都落在明確的 POSIX process/shell 邊界。
 - WSL Ubuntu：`tooljson` 45/45、`base_tools` 全過。
 - 本機 `dcap` 的既有 C++ scaffolder 可執行；另在 temp 以 CMake 4.3.3 + GCC 16.1.0 做了乾淨產生、configure、build、run，shared library 與 executable 成功，輸出 `2 + 3 = 5`。
 - `clang++` 不在 PATH；目前 native 基線是 MinGW GCC。正式 sanitizer／fuzz／Linux supervisor CI 仍未建立。
 
 ## 範圍
 
-本報告以目前未提交但可見的 worktree 為準，評估 `freepy` 程式、`ROADMAP.md`、各 `PLAN.md`、既有 [Janet 固化報告](../lisp-solidification/README.md) 與本 repo 的 `dcap` C++ 實證。它是架構與遷移評估，不宣稱已有 freepy native implementation。
+本報告以 2026-08-10 的 repository 快照為準，評估 `freepy` 程式、`ROADMAP.md`、各
+`PLAN.md`、既有 [Janet 固化報告](../lisp-solidification/README.md) 與本 repo 的 `dcap`
+C++ 實證。它是架構與遷移評估，不宣稱已有 freepy native implementation。

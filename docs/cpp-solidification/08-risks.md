@@ -68,13 +68,14 @@ Python reference至少保留一個 stable release；provider SDK、research、`_
 
 ### 7. 設定要不要 embed
 
-只 embed protocol version、最低安全 default與必要 recovery schema。modelcards、tool specs、policy與proxy config保留外部 versioned data；載入時驗證與hash，避免每次研究更新都重編 binary。
+只 embed protocol version、最低安全 default 與必要 recovery schema。presets、tool specs、
+policy 與 proxy config 保留外部資料，避免每次設定更新都重編 binary。
 
 ## 最終判斷
 
 **值得做 C++ vertical slice，不值得做全面 C/C++ rewrite。** 最佳長期形狀是 C++23 semantic core + Linux native supervisor，以 C ABI／versioned event與外界連接；Python與LiteLLM保留在它們最有優勢的探索、reflection與provider邊界。
 
-第一個 checkpoint 是 tooljson pure core。它若能以小 dependency、乾淨 build、shared fixtures與 fuzz穩定通過，再擴到 modelcards／identity／agentloop；若做不到，就保留 Python，這個失敗成本仍然很低。
+第一個 checkpoint 是 tooljson pure core。它若能以小 dependency、乾淨 build、shared fixtures與 fuzz穩定通過，再擴到 identity／agentloop；若做不到，就保留 Python，這個失敗成本仍然很低。
 
 ## 決策記錄建議
 

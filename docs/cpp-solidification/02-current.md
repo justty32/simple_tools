@@ -6,7 +6,7 @@
 |---|---|---:|---|
 | `llmkit/tooljson` pure／exec | spec、strict load、registry、argv、subprocess、clip | A/B | C++ core；process 為 native adapter |
 | `tooljson _type:"python"` | importlib、sys.path/sys.modules、任意 callable | D | Python sidecar；跨語言走 exec／RPC |
-| `modelcards` | versioned JSON、claimed/verified、alias、validation | A | C++ value/store core；research 留 Python |
+| `llms` presets | id → endpoint/model/parameters 的 JSON object | A | 簡單 config loader；不需獨立 subsystem |
 | `agentloop` | Round loop、budget、pending debt、pause/stop | B | C++ reducer + scheduler adapter |
 | `llmkit/llms` protocol/state | history、tool calls、stream accumulation、usage、caps | B | 可固化 value/state |
 | `llmkit/llms` transport/reflection | OpenAI SDK、HTTPS/SSE、inspect/type hints/docstring | C/D | proxy/Python adapter；schema 改顯式契約 |
@@ -29,11 +29,11 @@
 
 open registry 也要重新定義。第一版可允許 application 在 startup 註冊 C++ handler；第三方擴充優先用 process protocol。不要一開始載入任意 C++ shared object：C++ ABI、allocator、exception 與 unload lifecycle 都會變成事故面。
 
-## `modelcards`：最乾淨的 native value layer
+## `llms` presets：保持為設定，不升格成 subsystem
 
-它是版本化 JSON corpus，claimed／verified 分離，source index 與 alias 都有明確 invariant。C++ 可直接擁有 parser、validator、lookup、caps／params projection。網路研究、官方頁抓取與人工更新仍留 Python；它們不是 runtime hot path。
-
-目前 proxy 已補 Ollama 實測 capability，但 modelcard corpus 尚未同步所有 verified 值，顯示 source-of-truth 還需整理。這應在 native migration 前解決，否則 differential 只會把漂移複製成兩份。
+`llms/presets.json` 只把 id 映到 endpoint、model、parameters 和可選 description。若未來
+C++ client 需要它，只需 JSON lookup 與最小形狀檢查；capability、研究來源、alias/mode
+推導都不屬於 preset，也不值得為它建立 native value/store core。
 
 ## `agentloop`：應固化狀態，不照搬 `asyncio`
 
@@ -66,10 +66,10 @@ path resolve、root containment、bytes/text clipping、exact edit 都適合 C++
 
 ## 現有實跑
 
-| 平台 | agentloop | modelcards | tooljson | base_tools |
-|---|---:|---:|---:|---:|
-| Windows | 35/35 | 31/31 | 32/45 | 20/26 |
-| WSL Ubuntu | 未重跑 | 未重跑 | 45/45 | 全過 |
+| 平台 | agentloop | tooljson | base_tools |
+|---|---:|---:|---:|
+| Windows | 35/35 | 32/45 | 20/26 |
+| WSL Ubuntu | 未重跑 | 45/45 | 全過 |
 
 Windows 的 13 + 6 個失敗都落在 POSIX executable/shebang/shell 邊界。這些是 native port 的平台 contract 證據，不應被「修」成 Windows 上任意選一個 shell。
 

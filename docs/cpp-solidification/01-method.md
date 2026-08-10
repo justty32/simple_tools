@@ -68,7 +68,8 @@ C 和 C++ 當然都能完成這套系統；有用的問題是：
 
 ## 已實作與已規劃分開
 
-已實作：`llmkit/tooljson`、`llmkit/llms`、`modelcards`、`agentloop`、`base_tools`、`exec_tools/discover.py`、`shells`、prototypes。
+已實作：`llmkit/tooljson`、`llmkit/llms`（含簡單 preset loader）、`agentloop`、
+`base_tools`、`exec_tools/discover.py`、`shells`、prototypes。
 
 仍是設計：agent identity、communication、runtime、team、memory、introspection、agentfs、Turn control 擴充。後者只能評架構 fit，不能用文件頁數假裝 migration progress。
 

@@ -3,7 +3,7 @@
 | 模組 | 現況 | 等級 | 建議 |
 |---|---|---:|---|
 | `llmkit/tooljson` | spec、registry、`exec`／`python`、argv、clip 已實作 | A/B | 第一個 Janet slice；`python` type 留 adapter |
-| `modelcards` | JSON card、claimed/verified、alias、參數與 caps 驗證 | A | 純資料驗證與 lookup 優先固化 |
+| `llms` presets | id → endpoint/model/parameters 的 JSON object | A | 普通資料 lookup；不需獨立固化層 |
 | `agentloop` | Round loop、Limits、Handle、pause/stop、usage | B | Janet 狀態機；I/O 經 adapter，重新驗競態 |
 | `llmkit/llms` | OpenAI SDK、history、streaming、tool calls、vision | B/C | protocol/state 可固化；transport 暫留 proxy/Python |
 | `base_tools` | read/write/edit/shell、root containment | B/C | 檔案規則可移；process 與安全留 OS backend |
@@ -42,14 +42,15 @@ read/write/edit 是普通 bytes/path transformation，可固化。`Path.resolve(
 
 root containment 不是 sandbox；`run_shell` 本來就可執行工作區外的程式。是否能讀網路、看宿主檔案或耗盡資源，仍由 namespace/container/cgroup 決定。
 
-## `modelcards`
+## `llms` presets
 
-資料形狀嚴格、版本明確、claimed 與 verified 分離，最適合 Lisp data-oriented core。抓官方資料、呼叫 provider、批次研究可以繼續 Python；卡片驗證與 lookup 用 Janet。
+資料刻意只有 id、endpoint、model、parameters 和可選 description。Janet 若需要同一份
+設定，直接讀 JSON object 即可；不建立 model metadata、來源或 capability 系統。
 
 ## 實跑反映的現況
 
 - `agentloop` 35 關全過；是可信的 reference trace 來源。
-- `modelcards` 31/31；適合先做 golden fixtures。
+- preset loader 只需驗 JSON lookup 與 Engine mapping，不再有獨立測試套件。
 - `base_tools` 在 Windows 的檔案路徑關卡過，POSIX shell 關卡按設計失敗。
 - `tooljson` 的 pure validation/argv 多數過，但 exec 測試使用 POSIX 腳本，Windows 只得 32/45。
 
@@ -60,5 +61,5 @@ root containment 不是 sandbox；`run_shell` 本來就可執行工作區外的�
 - [tooljson 格式](../../freepy/llmkit/tooljson/FORMAT.md)
 - [agentloop](../../freepy/agentloop/README.md)
 - [base_tools](../../freepy/base_tools/README.md)
-- [modelcards](../../freepy/modelcards/README.md)
+- [llms presets](../../freepy/llmkit/llms/README.md#preset)
 - [exec_tools 計畫](../../freepy/exec_tools/PLAN.md)

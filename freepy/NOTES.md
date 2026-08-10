@@ -10,6 +10,18 @@
 `llmkit` 定型**之前**踩出來的東西（`Reply` 為什麼長這樣、串流的坑、`ask()` 修過什麼、
 模型清單和 caps 怎麼問出來的）已經結案，收在 [NOTES-llmkit.md](NOTES-llmkit.md)。
 
+## 2026-08-10 modelcards 退場：preset 只保留執行所需資料
+
+通勤檢視後確認原本的 modelcards 過度設計。`claimed`／`verified`、sources、weights、
+runner、alias、mode、table 與專用 research workflow 全部退出 runtime；舊檔可由 Git 歷史
+追溯，不另建 archive 副本。
+
+現在唯一資料是 [`llmkit/llms/presets.json`](llmkit/llms/presets.json)：以 id 為 key，
+每筆只含 `endpoint`、`model`、`parameters` 和可省略的 `description`。`llms.load_preset(id)`
+直接建立 `Engine`。能力仍由 proxy／`Engine.caps` 處理，不在 preset 維護第二份。
+
+以下 2026-08-09 的 modelcards 章節是被本決定取代的歷史背景，不再描述目前介面。
+
 ## 2026-08-09 第四層落地：`agentloop`
 
 四層疊完了。[`agentloop`](agentloop/README.md) 只有一個函式 `run()` 和一個把手
@@ -121,8 +133,8 @@
 
 1. **proxy 開好** —— 所有模型統一成 `litellm.yaml` 的 alias，上面幾層只認 alias，
    不知道背後是雲端、遠端 ollama 還是本機 LM Studio。
-2. **`llms` ＋ `modelcards` ＝ 基礎 bot 模型** —— `engine_for(alias)` 一行把建議參數
-   和實打過的能力套上去，`LLM` 負責一輪一個 `Reply`。**這層只會講話，不會做事。**
+2. **`llms` ＋ preset ＝ 基礎 bot 模型** —— `load_preset(id)` 一行套用 endpoint、model
+   和參數，`LLM` 負責一輪一個 `Reply`。**這層只會講話，不會做事。**
 3. **`tooljson` 給它能力** —— 工具是一份 JSON 而不是一段程式碼，所以「有哪些能力」
    變成設定檔的事。到這裡 bot 會做事了，但每一輪還是人在推。
 4. **在這之上才是 agent** —— 自己決定推幾輪、什麼時候收手。
@@ -130,7 +142,7 @@
 
 順序不能顛倒的理由是**下面一層錯了，上面一層的症狀會完全看不出來源**：模型能力宣告
 錯（第 2 層）會表現成 agent 莫名其妙不叫工具（第 4 層）。這就是為什麼 caps 要實打、
-為什麼 `modelcards` 存在 —— 它是第 2 層的地基，不是附加功能。
+preset 是第 2 層的一小份輸入資料，不是獨立研究系統。
 
 ### modelcards 什麼時候能進 llmkit
 
@@ -149,7 +161,7 @@
 
 ## 2026-08-09 modelcards：為什麼查來的和打過的要分兩格
 
-新的一包 [`modelcards/`](modelcards/README.md)，把每顆模型的建議參數和能力記成 JSON，
+當時新增 `modelcards/`，把每顆模型的建議參數和能力記成 JSON，
 資料由另一個 agent 上網查（任務書 `RESEARCH.md`）。**核心決定是 `claimed` 和
 `verified` 分開存，而且 `caps_for()` 預設只吐 `verified`。** litellm 的內建資料庫已經
 謊報過兩次（一次成 False、一次成 True），網搜來的東西沒有理由比它可信 —— 所以
@@ -205,7 +217,7 @@ qwen3.5-9b 標成 `vlm` 卻沒把 vision 列進 `capabilities`。所以 card 的
 
 - **一個檔 150 行以內**，程式和文件都算。超過就拆 —— README 超過就拆出 USAGE.md。
 - **沒有 test，驗證靠實跑**：`cd freepy/llmkit && uv run python -m tooljson`（離線，
-  45 關）、`cd freepy && uv run python -m modelcards`（離線，31 關）、
+  45 關）、
   `PYTHONPATH=llmkit uv run python -m base_tools`（離線，26 關）、
   `PYTHONPATH=llmkit uv run python -m agentloop`（離線，35 關）和
   `uv run python -m llms <一般模型> <思考模型>`（要 proxy，五關）。

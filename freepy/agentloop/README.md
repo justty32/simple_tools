@@ -5,7 +5,7 @@
 一次完整 `run()` 是一個回合（Turn）；裡面每次 `ask() → message` 是一輪（Round）。
 回合內追加指令與工具要求使用者輸入的完整語意規劃在 [TURNS.md](TURNS.md)。
 
-底下三層（[`llms`](../llmkit/llms/README.md)、[`modelcards`](../modelcards/README.md)、
+底下兩層（[`llms`](../llmkit/llms/README.md)，含可選 preset；以及
 [`tooljson`](../llmkit/tooljson/README.md)）都是「人推一輪，它動一下」。
 這一層負責**真的去執行、把結果餵回去、決定什麼時候收手**。
 

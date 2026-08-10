@@ -4,13 +4,14 @@
 思考引擎（engine）。ask() 永遠回傳一個 Reply，絕不丟例外。
 
 bot 只會說話和開口要工具 —— 工具誰去跑、跑出什麼，由你決定後餵回來。
-只做這件事：不做重試、不做 logging、不做 config 檔、不做 CLI。
+只做這件事：不做重試、不做 logging、不做 CLI。`load_preset()` 可選擇從一份很小的
+JSON object 建立 Engine。
 
 proxy 不是必需品，Engine(url=..., key=...) 可以直接打任何 OpenAI 相容端點；
 `../proxy/` 只是把 DeepSeek 雲端、Ollama、LM Studio 收成同一個端點的一份設定。
 
 用法：
-    from llms import LLM, Engine, Params, to_tools
+    from llms import LLM, Engine, Params, load_preset, to_tools
 
     bot = LLM(engine=Engine(model="deepseek-chat", params=Params(temperature=0.2)),
               system="你是個惜字如金的助手")
@@ -18,6 +19,9 @@ proxy 不是必需品，Engine(url=..., key=...) 可以直接打任何 OpenAI �
     print(reply.text, reply.finish_reason, reply.usage)
     if not reply:
         print(reply.err)
+
+    # 或從 llms/presets.json 依 id 載入 endpoint、model 和 parameters
+    bot = LLM(load_preset("deepseek-chat"))
 
     # 串流：同一個 Reply，疊代它就是逐字看它說話
     reply = bot.ask("寫首詩", stream=True)
@@ -44,6 +48,7 @@ proxy 不是必需品，Engine(url=..., key=...) 可以直接打任何 OpenAI �
     caps.py         問 proxy 這顆模型做得到哪些事
     content.py      url、key、圖片這些雜事
     params.py       Params：只吐出有設定的呼叫參數
+    presets.py      讀 presets.json，依 id 建立 Engine
     func_schema.py  python 函式 -> OpenAI tool schema（配 jsontypes / docstrings）
 """
 
@@ -51,6 +56,7 @@ from .client import LLM
 from .engine import Engine
 from .func_schema import to_schema, to_schemas, to_tools
 from .params import Params
+from .presets import load_preset
 from .reply import Reply
 
 __all__ = [
@@ -58,6 +64,7 @@ __all__ = [
     "Engine",
     "Params",
     "Reply",
+    "load_preset",
     "to_schema",
     "to_schemas",
     "to_tools",

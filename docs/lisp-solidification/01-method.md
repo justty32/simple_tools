@@ -22,7 +22,7 @@
 「已實作」只計目前有 Python 程式與離線 smoke 的部分：
 
 - `llmkit/llms`、`llmkit/tooljson`
-- `agentloop`、`base_tools`、`modelcards`
+- `agentloop`、`base_tools`、`llms` presets
 - `shells`、`exec_tools/discover.py`
 - `prototypes/plan_shell.py`、`try.py`
 
@@ -65,5 +65,8 @@
 - [freepy ROADMAP](../../freepy/ROADMAP.md)
 - [freepy IDEAS](../../freepy/IDEAS.md)
 - [freepy 工作筆記](../../freepy/NOTES.md)
-- [langlab-janet FINDINGS](../../../langlab-janet/FINDINGS.md)
-- [langlab-janet 缺口](../../../langlab-janet/MISSING.md)
+- 外部工作區的 `langlab-janet/FINDINGS.md`
+- 外部工作區的 `langlab-janet/MISSING.md`
+
+`langlab-janet` 不在本 repository 內；以上是 2026-08-10 評估時讀取的相鄰工作區材料，
+不是本文件樹內可攜的連結。
