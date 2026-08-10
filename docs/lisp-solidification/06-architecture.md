@@ -10,7 +10,7 @@
 ┌───────────────────▼────────────────────────┐
 │ Janet semantic core                       │
 │ identity · schemas · policy · state        │
-│ tool protocol · Turn/Round · memory/context│
+│ tool protocol · Round/Step · memory/context│
 └───────────────────┬────────────────────────┘
                     │ typed intents/results
 ┌───────────────────▼────────────────────────┐
@@ -29,7 +29,7 @@ Janet core 可以是主行程，也可以先作 stdio service。關鍵不是誰�
 
 - agent path canonicalization 與 segment-safe ancestry。
 - permission subset、mount downgrade、resource conservation。
-- Turn／Round／tool call 狀態轉移。
+- Round／Step／tool call 狀態轉移。
 - tooljson schema、argv decision、registry。
 - task/report lifecycle 與 idempotency rule。
 - memory address、ACL decision、context manifest。
@@ -78,11 +78,11 @@ agentfs 第一版只是 read-only projection API；等 resolver/ACL 稳定，才
 
 ## Context compiler
 
-source trace、memory object、Round manifest 分離：
+source trace、memory object、Step manifest 分離：
 
 - trace 永不因 compact 改寫。
 - memory object content-addressed、有 provenance/ACL。
-- context compiler 產生下一 Round 的 ordered working set。
+- context compiler 產生下一 Step 的 ordered working set。
 - 當前指令與未閉合 tool pairing 必須 inline。
 - link load 不提升 authority。
 

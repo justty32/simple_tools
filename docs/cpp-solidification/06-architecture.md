@@ -11,7 +11,7 @@
 ┌──────────────────────▼───────────────────────────┐
 │ C++ semantic core                                │
 │ AgentPath · ToolSpec · Policy · BudgetLedger     │
-│ TurnState · TaskState · MemoryTarget · View      │
+│ RoundState · TaskState · MemoryTarget · View      │
 └──────────────────────┬───────────────────────────┘
                        │ typed intents/results
 ┌──────────────────────▼───────────────────────────┐
@@ -31,7 +31,7 @@
 - canonical logical path 與 segment-safe ancestry。
 - schema/version/unknown-field validation。
 - permission subset、mount downgrade、resource conservation。
-- Turn／Round／tool-call debt／stop reason transition。
+- Round／Step／tool-call debt／stop reason transition。
 - task/report lifecycle 與 operation idempotency。
 - memory address、link resolution budget、context manifest。
 - actor/instance/grant-generation 綁定的 projection decision。
@@ -52,11 +52,11 @@ adapter 不自行決定授權；它驗證 intent 完整且由受信 core/supervi
 
 ```cpp
 struct Transition {
-    TurnState state;
+    RoundState state;
     std::vector<Intent> intents;
 };
 
-Result<Transition> reduce(const TurnState&, const Event&);
+Result<Transition> reduce(const RoundState&, const Event&);
 ```
 
 `Event`／`Intent` 用 closed variant 表達 core 已知操作；tool body type 的開放集合留在 registry/adapter layer。這樣 fuzz core 不需載入 plugin，新增 effect 也不會讓模型直接取得 raw function pointer。
@@ -101,9 +101,9 @@ streaming parser 需處理任意 chunk boundary、空 choices、usage-only final
 
 ## Threading model
 
-建議每個 Turn state 有單一 owner event queue；其他 thread 只 enqueue control event。這比讓 UI、timer、HTTP callback、tool worker 同時鎖一個巨大 `Handle` 更容易證明。
+建議每個 Round state 有單一 owner event queue；其他 thread 只 enqueue control event。這比讓 UI、timer、HTTP callback、tool worker 同時鎖一個巨大 `Handle` 更容易證明。
 
-completion 與 `add_instruction` 必須在同一序列化點決定：先被接受就留在本 Turn，completion 先 commit 就回 `turn already completed`。tool input request/response 以 request id correlation；stop 產 cancellation event，不能只設 atomic flag 留下 blocked worker。
+completion 與 `add_instruction` 必須在同一序列化點決定：先被接受就留在本 Round，completion 先 commit 就回 `round already completed`。tool input request/response 以 request id correlation；stop 產 cancellation event，不能只設 atomic flag 留下 blocked worker。
 
 ## 可信計算基底
 

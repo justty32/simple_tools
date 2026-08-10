@@ -38,14 +38,14 @@ print(bot.ask(tool_results=results).text)
 動作的兩種材料，可以一起給（順序是 `tool_results` 先、`prompt` 後）。
 
 `args` 的 JSON 壞掉不會丟例外，會給空 dict 並附上 `args_raw` —— 小模型和被
-`max_tokens` 切斷的輪都會這樣，**執行前記得看一眼有沒有 `args_raw`**。
+`max_tokens` 切斷的 Step都會這樣，**執行前記得看一眼有沒有 `args_raw`**。
 
-工具輪的記憶會連 `tool_calls` 一起寫回去，所以第二輪送 `tool_results` 時 API 對得
+工具 Step 的記憶會連 `tool_calls` 一起寫回去，所以第二步送 `tool_results` 時 API 對得
 起來。串流也收得到工具，碎片會依 index 拼回同樣的形狀（讀 `reply.calls` 會先把串流
 跑完）。
 
-一輪可能吐出**好幾個**呼叫，順序和成敗都由你決定；全部跑完再一次餵回去，
-`tool_results` 的 key 少一個下一輪就對不起來。
+一步可能吐出**好幾個**呼叫，順序和成敗都由你決定；全部跑完再一次餵回去，
+`tool_results` 的 key 少一個下一步就對不起來。
 
 ### 欠著的工具呼叫
 
@@ -115,7 +115,7 @@ bot.engine.supports("vision")      # True / False / None（proxy 沒說）
 | `tools` | 叫不叫得動工具 | 會 |
 | `tool_choice` | 能不能指定 `tool_choice` | 會 |
 | `vision` | 讀不讀得懂圖 | 會 |
-| `parallel_tools` | 一輪能不能吐多個呼叫 | 不會 |
+| `parallel_tools` | 一步能不能吐多個呼叫 | 不會 |
 | `reasoning` | 會不會思考 | 不會 |
 | `json_schema` | 收不收 `response_format` 的 schema | 不會 |
 | `caching` | 有沒有前綴快取 | 不會 |

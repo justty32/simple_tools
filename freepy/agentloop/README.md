@@ -2,18 +2,18 @@
 
 **一個函式，讓 bot 自己一直跑。**
 
-一次完整 `run()` 是一個回合（Turn）；裡面每次 `ask() → message` 是一輪（Round）。
-回合內追加指令與工具要求使用者輸入的完整語意規劃在 [TURNS.md](TURNS.md)。
+一次完整 `run()` 是一個回合（Round）；裡面每次 `ask() → message` 是一步（Step）。
+回合內追加指令與工具要求使用者輸入的完整語意規劃在 [ROUNDS.md](ROUNDS.md)。
 
 底下兩層（[`llms`](../llmkit/llms/README.md)，含可選 preset；以及
-[`tooljson`](../llmkit/tooljson/README.md)）都是「人推一輪，它動一下」。
+[`tooljson`](../llmkit/tooljson/README.md)）都是「人推一步，它動一下」。
 這一層負責**真的去執行、把結果餵回去、決定什麼時候收手**。
 
 ```
 模型說「我要用 read_file」
     → 這裡真的去跑
     → 結果餵回去
-    → 它再想一輪
+    → 它再想一步
     → …直到它不叫工具了，或預算用完
 ```
 
@@ -42,7 +42,7 @@ task = asyncio.create_task(agentloop.run(bot, dispatch, "整理一下這個資�
 
 while not h.done():
     await asyncio.sleep(1)
-    print(h.now())              # 第 3/12 輪，正在跑 run_shell，5 個工具，8420 tokens，31s
+    print(h.now())              # 第 3/12 步，正在跑 run_shell，5 個工具，8420 tokens，31s
     if 我看它走偏了:
         h.say("別再讀了，直接寫檔")
 ```
@@ -50,12 +50,12 @@ while not h.done():
 把手上有兩組東西：
 
 **問狀況**（都是普通函式，不用 await）：`h.now()` 一行人話、`h.done()` 收工了沒、
-`h.text` 模型最後說的話、`h.stop` 為什麼停、`h.steps` 做過的每一件事、
+`h.text` 模型最後說的話、`h.stop` 為什麼停、`h.step` 已送出的模型請求數、`h.tool_log` 做過的每一件工具工作、
 `h.calls` / `h.used` / `h.tokens` / `h.elapsed()` 花掉多少。
 
 **下指令**：`h.say("…")` 插一句話、`h.pause()` / `h.resume()`、`h.ask_stop()`。
 
-指令都是**下一輪開頭生效**，不會打斷正在跑的那一輪。
+指令都是**下一步開頭生效**，不會打斷正在跑的那一步。
 沒有「立刻中斷」——模型那次 HTTP 和跑到一半的工具都停不下來，
 假裝停得下來只會讓人以為工具沒跑過。
 
@@ -67,7 +67,7 @@ while not h.done():
 |---|---|
 | `done` | 模型不叫工具了，講完了。**正常結束** |
 | `length` | 也不叫工具了，但它是被 `max_tokens` 切斷的，不是講完 |
-| `budget` | 輪數用完，它還在叫工具 |
+| `budget` | Step 預算用完，它還在叫工具 |
 | `calls` / `time` / `tokens` | 那項預算用完 |
 | `engine` | 它掛的思考引擎不在准用清單裡 |
 | `error` | `llms` 那邊回錯，看 `h.err` |
@@ -79,38 +79,38 @@ while not h.done():
 
 ## 預算
 
-給它多少輪、多少工具、多少時間、哪些工具、哪些引擎 —— 全在
+給它多少步、多少工具、多少時間、哪些工具、哪些引擎 —— 全在
 [LIMITS.md](LIMITS.md)。那份也講**沒做的那一半**（cpu / gpu / 記憶體 / 網路 /
 能碰哪些檔案），以及為什麼那些不放進 `Limits` 裡假裝有。
 
 ```python
 agentloop.run(bot, dispatch, "…", limits=agentloop.Limits(
-    rounds=20, calls=40, per_tool={"run_shell": 5},
+    steps=20, calls=40, per_tool={"run_shell": 5},
     tools=["read_file", "run_shell"], engines=["deepseek-chat"],
     seconds=300, tokens=200_000))
 ```
 
-不給就是 `Limits()`：12 輪，其餘不限。
+不給就是 `Limits()`：12 步，其餘不限。
 
 ## 停在一半，可以接著跑
 
-輪數用完（或你喊停）的時候，最後那批工具**還沒跑**，債留在 `bot.history` 上。
+Step 預算用完（或你喊停）的時候，最後那批工具**還沒跑**，債留在 `bot.history` 上。
 同一個 bot 再叫一次就從那裡接下去，工具不會跑兩遍：
 
 ```python
-h = asyncio.run(agentloop.run(bot, dispatch, "…", limits=Limits(rounds=5)))
+h = asyncio.run(agentloop.run(bot, dispatch, "…", limits=Limits(steps=5)))
 if h.stop == "budget":
     h = asyncio.run(agentloop.run(bot, dispatch))     # 不用再給 prompt
 ```
 
-這是免費送的：迴圈每一輪都從「先還上一輪欠的工具結果」開始，
-所以「接著跑」跟平常那一輪走的是同一條路，沒有第二套程式。
+這是免費送的：迴圈每一步都從「先還上一步欠的工具結果」開始，
+所以「接著跑」跟平常那一步走的是同一條路，沒有第二套程式。
 
 ## 工具壞掉不會打斷迴圈
 
 四種壞法都會變成一句英文送回模型，讓它自己改一次再試：沒有這個工具、
 參數對不上、工具自己炸了、**args 不是合法 JSON**（小模型和被 `max_tokens`
-切斷的輪的常客）。
+切斷的 Step的常客）。
 
 判斷「參數對不對」是**先問簽名再叫**，不是叫下去接 `TypeError` ——
 不然工具內部自己丟的 `TypeError` 會被誤報成「參數對不上」，
@@ -143,7 +143,7 @@ PYTHONPATH=llmkit uv run python -m agentloop deepseek-chat    # 再多一關：�
 
 | 檔案 | |
 |---|---|
-| `loop.py` | `run()`：迴圈本身 —— 推幾輪、什麼時候收手 |
+| `loop.py` | `run()`：迴圈本身 —— 推幾步、什麼時候收手 |
 | `calling.py` | 一個 tool call → 一個字串（壞掉的四種也是字串） |
 | `handle.py` | `Handle`：外面問狀況、下指令的窗口 |
 | `limits.py` | `Limits`：這次最多能花掉多少 |

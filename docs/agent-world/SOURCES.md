@@ -57,7 +57,7 @@
 - `freepy/agentfs/LINUX-AS-LISP.md`
 - `freepy/memory_tools/PLAN.md`
 - `freepy/memory_tools/ORGANIZED-CONTEXT.md`
-- `freepy/agentloop/TURNS.md`
+- `freepy/agentloop/ROUNDS.md`
 - `docs/sandboxing/`
 
 本報告是跨層綜合；package 級實作順序仍以各 `PLAN.md` 為準。
@@ -86,7 +86,7 @@
 
 - canonical agent identity 與 per-agent mounted view 要分開。
 - path 是 symbol；session handle/fid 才是 capability。
-- Round、Turn、tick 是三個不同時間尺度。
+- Step、Round、tick 是三個不同時間尺度。
 - 九軸應同時用於 agent/tool 與 memory/context transforms。
 - organized memory 應包含可撤回 grounding 與 dependency invalidation。
 - context manifest 是 replay 的真相；compact 是重編譯 working set。

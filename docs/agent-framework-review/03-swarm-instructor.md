@@ -26,7 +26,7 @@ Swarm 的 `Agent` 只含 name、model、instructions、functions 等欄位；`Re
 - README 已明確標示 educational/experimental，production 建議改用 Agents SDK。
 - `Result` 把輸出、state mutation、handoff 混在一起；freepy 應拆成 typed transition。
 - handoff 沒有 grant/budget/ancestry 檢查，不能等同 `spawn_agent` 或 team mutation。
-- `max_turns` 的 while condition用新增 history 長度計數；tool messages 也會影響它，與 freepy 的 Round 不同。
+- `max_turns` 的 while condition用新增 history 長度計數；tool messages 也會影響它，與 freepy 的 Step 不同。
 - model 可請求 parallel tool calls，但 handler 仍用 `for` 順序執行；不要從 schema 推論並行保證。
 
 ## Instructor：輸出契約編譯器
@@ -46,7 +46,7 @@ Instructor 不是 agent framework。它把 provider client 包成：normalize re
 
 - 不直接 monkey-patch provider client；freepy 用顯式 adapter/executor。
 - 不搬 40+ mode/provider 相容矩陣；只做實際需要的 modes。
-- re-ask 每次都是真正模型呼叫。在 freepy 中每次都要增加 `round_no`、usage 與 budget，不能因外部 `create()` 只呼叫一次就隱藏。
+- re-ask 每次都是真正模型呼叫。在 freepy 中每次都要增加 `step_no`、usage 與 budget，不能因外部 `create()` 只呼叫一次就隱藏。
 - schema retry 僅能重試模型解析；有副作用的 tool mutation 不能跟著無條件重做。
 - audit/security hook 失敗要 fail closed，不能只 warning 後繼續。
 

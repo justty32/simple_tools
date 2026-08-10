@@ -4,7 +4,7 @@
 讀和下指令都是普通函式，不用 await —— 所以別的 coroutine、別的 thread、
 甚至一個 REPL 都問得動、按得動。
 
-指令都是**下一輪開頭才生效**的（`say` 是下一次送出時），不會打斷正在跑的那一輪。
+指令都是**下一步開頭才生效**的（`say` 是下一次送出時），不會打斷正在跑的那一步。
 沒有「立刻中斷」這種東西：模型那次 HTTP 呼叫和跑到一半的工具都停不下來，
 假裝停得下來只會讓人以為工具沒跑過。
 """
@@ -16,18 +16,18 @@ class Handle:
     """一個 `run()` 的把手。不傳給 `run()` 也行，它會自己生一個回給你。"""
 
     def __init__(self):
-        self.round = 0  # 模型講到第幾輪
+        self.step = 0  # 這個 Round 已經送出幾次 ask()
         self.limits = None  # 這次的預算，run() 開頭掛上來
         self.phase = "idle"  # idle / thinking / tool / paused，停了就是 stop 的值
         self.tool = None  # phase 是 "tool" 時，正在跑哪一個
         self.text = ""  # 模型最後說的那段話
-        self.steps = []  # 做過的事 [(第幾輪, 工具名, args, 結果字串)]，含被擋下來的
+        self.tool_log = []  # [(第幾步, 工具名, args, 結果字串)]，含被擋下來的
         self.calls = 0  # 真的跑掉幾個工具（被預算擋下來的不算）
         self.used = {}  # {工具名: 真的跑掉幾次}，per_tool 那條限制數的就是它
-        self.quiet = 0  # 連續幾輪沒叫工具
+        self.quiet = 0  # 連續幾步沒叫工具
         self.stop = None  # 為什麼停，還在跑就是 None（見 loop.py 那張表）
         self.err = None  # 停在 error / engine 時，出了什麼事
-        self.tokens = 0  # 累計花掉的 token，模型每輪回報的加總
+        self.tokens = 0  # 累計花掉的 token，模型每步回報的加總
         self.paused = False
         self.stopping = False
         self._say = []
@@ -45,8 +45,8 @@ class Handle:
 
     def now(self) -> str:
         """一行人話：現在在幹嘛。印給人看的，不要拿去 parse。"""
-        rounds = self.limits.rounds if self.limits else "?"
-        where = f"第 {self.round}/{rounds} 輪"
+        steps = self.limits.steps if self.limits else "?"
+        where = f"第 {self.step}/{steps} 步"
         tail = f"{self.calls} 個工具，{self.tokens} tokens，{self.elapsed():.0f}s"
         if self.stop:
             why = f"{self.stop}: {self.err}" if self.err else self.stop
@@ -61,13 +61,13 @@ class Handle:
         """插一句話給模型，下一次送出時跟著過去。可以連下好幾句，會照順序接起來。
 
         這是**改方向**用的（「別再讀了，直接寫檔」），不是聊天 —— 它跟工具結果
-        一起送，模型下一輪就看到。
+        一起送，模型下一步就看到。
         """
         if text:
             self._say.append(str(text))
 
     def pause(self):
-        """下一輪開頭停住不送出，等 `resume()`。跑到一半的那一輪會先跑完。"""
+        """下一步開頭停住不送出，等 `resume()`。跑到一半的那一步會先跑完。"""
         self.paused = True
 
     def resume(self):
@@ -83,12 +83,12 @@ class Handle:
         self.limits = limits
         self._started = time.monotonic()
 
-    def turn(self):
-        self.round += 1
+    def next_step(self):
+        self.step += 1
         self.phase, self.tool = "thinking", None
 
     def take_say(self):
-        """取走外面插的話，取走就清掉。沒有就是 None（等於這一輪不多說什麼）。"""
+        """取走外面插的話，取走就清掉。沒有就是 None（等於這一步不多說什麼）。"""
         if not self._say:
             return None
         text = "\n".join(self._say)
@@ -105,7 +105,7 @@ class Handle:
     def did(self, call, out, ran=True):
         """記一筆。`ran=False` 是被預算擋下來、根本沒跑的，不能算進用量。"""
         name = call.get("name")
-        self.steps.append((self.round, name, call.get("args"), out))
+        self.tool_log.append((self.step, name, call.get("args"), out))
         if ran:
             self.calls += 1
             self.used[name] = self.used.get(name, 0) + 1

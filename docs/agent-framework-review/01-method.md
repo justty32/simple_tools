@@ -45,10 +45,10 @@
 
 對照的是目前工作樹中的：
 
-- `freepy/agentloop/TURNS.md`：Round 是一次 ask→message；Turn 是模型啟動到主動停止。
+- `freepy/agentloop/ROUNDS.md`：Step 是一次 ask→message；Round 是模型啟動到主動停止。
 - `freepy/agent_runtime/PLAN.md`：spawn、policy derivation、instance lifecycle、sandbox。
 - `freepy/team_tools/PLAN.md`：agent path、task、grant、resource ledger。
-- `freepy/memory_tools/`：object/ref、organized context、Round manifest。
+- `freepy/memory_tools/`：object/ref、organized context、Step manifest。
 - `freepy/agentfs/PLAN.md`：只讀 synthetic filesystem projection。
 
 未實作的 `PLAN.md` 不會被誤寫成現成功能；本報告只判斷哪些外部做法能縮短正確實作路徑。

@@ -4,7 +4,7 @@
 |---|---|---:|---|
 | `llmkit/tooljson` | spec、registry、`exec`／`python`、argv、clip 已實作 | A/B | 第一個 Janet slice；`python` type 留 adapter |
 | `llms` presets | id → endpoint/model/parameters 的 JSON object | A | 普通資料 lookup；不需獨立固化層 |
-| `agentloop` | Round loop、Limits、Handle、pause/stop、usage | B | Janet 狀態機；I/O 經 adapter，重新驗競態 |
+| `agentloop` | Step loop、Limits、Handle、pause/stop、usage | B | Janet 狀態機；I/O 經 adapter，重新驗競態 |
 | `llmkit/llms` | OpenAI SDK、history、streaming、tool calls、vision | B/C | protocol/state 可固化；transport 暫留 proxy/Python |
 | `base_tools` | read/write/edit/shell、root containment | B/C | 檔案規則可移；process 與安全留 OS backend |
 | `exec_tools/discover` | `FREEPY_TOOLS`、spec scan、missing/errors | A/B | 純掃描可移；describe 的 LLM 仍是 adapter |
@@ -26,15 +26,15 @@ Janet 第一版應做：
 
 ## `agentloop`：移植語意，不移植 async 寫法
 
-目前核心很乾淨：bot 只需 `ask()`、`pending_calls`，工具是 dispatch table。Round、pending call debt、quiet、budget 與 stop reason 都能以 Janet table + state transition 表達。
+目前核心很乾淨：bot 只需 `ask()`、`pending_calls`，工具是 dispatch table。Step、pending call debt、quiet、budget 與 stop reason 都能以 Janet table + state transition 表達。
 
-但 `asyncio.to_thread`、`threading.Event` 不能機械翻譯。Janet 的 fiber/channel 是不同模型；Turn 追加指令的 completion/enqueue lock、tool-input timeout、cancel、stop 喚醒必須重新以 protocol test 定義。
+但 `asyncio.to_thread`、`threading.Event` 不能機械翻譯。Janet 的 fiber/channel 是不同模型；Round 追加指令的 completion/enqueue lock、tool-input timeout、cancel、stop 喚醒必須重新以 protocol test 定義。
 
 ## `llms`：拆成兩半
 
 適合 Janet：message/history、tool-call accumulation、finish reason、usage、rollback、capability decision。
 
-暫不適合：Python OpenAI SDK 與 provider 差異、HTTPS、SSE streaming。`langlab-janet` 已證明本機 OpenAI-compatible HTTP 與多輪 tools 可行，但 `spork/http` 沒 TLS 和串流；近期應走 LiteLLM local proxy。
+暫不適合：Python OpenAI SDK 與 provider 差異、HTTPS、SSE streaming。`langlab-janet` 已證明本機 OpenAI-compatible HTTP 與多步 tools 可行，但 `spork/http` 沒 TLS 和串流；近期應走 LiteLLM local proxy。
 
 ## `base_tools` 與 containment
 

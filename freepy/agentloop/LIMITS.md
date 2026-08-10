@@ -6,21 +6,21 @@
 
 ```python
 agentloop.run(bot, dispatch, "…", limits=agentloop.Limits(
-    rounds=20,                        # 最多講幾輪
+    steps=20,                         # 最多走幾步
     calls=40,                         # 工具總共叫幾次
     per_tool={"run_shell": 5},        # 某支工具最多幾次
     tools=["read_file", "run_shell"], # 只准用這些
     engines=["deepseek-chat"],        # 只准用這些引擎
     seconds=300, tokens=200_000,
-    quiet=1,                          # 連續幾輪不叫工具就當它講完
+    quiet=1,                          # 連續幾步不叫工具就當它講完
 ))
 ```
 
-不給就是 `Limits()`：12 輪，其餘不限。
+不給就是 `Limits()`：12 步，其餘不限。
 
 **擋法分兩種，這是這一包最重要的一個決定：**
 
-- **預算真的沒了** → 停整個 agent（輪數、時間、token、總次數、引擎）
+- **預算真的沒了** → 停整個 agent（Step、時間、token、總次數、引擎）
 - **只是這支工具不能用** → **回一句話給模型**（白名單、單一工具用滿）
 
 第二種不是錯誤，是情報。模型讀到
@@ -32,7 +32,7 @@ agentloop.run(bot, dispatch, "…", limits=agentloop.Limits(
 預設 `1`：模型一不叫工具就收工（也就是「直到它不再呼叫工具」）。
 
 調大就會**推它一把再給幾次機會**——小模型很常直接講一段「我打算這樣做」
-就不動了。代價是它**真的**講完的那次也會被多推幾下，白燒幾輪。
+就不動了。代價是它**真的**講完的那次也會被多推幾下，白燒幾步。
 
 ## 還沒做：作業系統那一層
 

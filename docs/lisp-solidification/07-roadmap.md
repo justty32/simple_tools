@@ -26,7 +26,7 @@ Gate：pure vectors 100% 等價；Linux exec vectors 全過；未知欄位 fail 
 - `AgentPath`
 - permission/resource values
 - modelcard validation/lookup
-- Turn/Round/event ids
+- Round/Step/event ids
 
 Gate：path property tests、subset laws、reserve/refund conservation、card corpus 全過。
 
@@ -48,7 +48,7 @@ Gate：fake OpenAI backend、multi-tool、malformed args、truncation、usage、
 
 1. file mailbox schema + fake storage。
 2. memory object/address/resolver。
-3. Round context manifest。
+3. Step context manifest。
 4. effective-state introspection。
 
 Gate：100 封並發、crash replay、cycle/bytes/depth limit、ACL 不洩漏、同 manifest 可重建。

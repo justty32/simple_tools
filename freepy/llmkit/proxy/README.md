@@ -99,7 +99,7 @@ LM Studio 那區用 **YAML anchor**（`&lm` / `<<: *lm`）收掉重複。`-12b-n
 | | DeepSeek | LM Studio |
 |---|---|---|
 | `tool_choice`（`"required"` 真的逼得出呼叫） | ✓ | ✓ |
-| `parallel_function_calling`（一輪吐 2 個 call） | ✓ | ✓ |
+| `parallel_function_calling`（一步吐 2 個 call） | ✓ | ✓ |
 | `response_schema` | ✗ 400 | ✓ |
 | `prompt_caching`（`usage.cached` 真的有數字） | ✓ 512 | ✗ 一直是 None |
 
@@ -111,7 +111,7 @@ LM Studio 那區用 **YAML anchor**（`&lm` / `<<: *lm`）收掉重複。`-12b-n
 | `reasoning_effort: "none"` | ✓ | 不適用 | ✓ | 不適用 |
 | function calling | ✓ | ✓ | ✗ | ✗ |
 | `tool_choice: "required"` | ✗ 無聲忽略 | ✗ 無聲忽略 | 不適用 | 不適用 |
-| parallel function calling | ✓（一輪 2 calls） | ✓（一輪 2 calls） | ✗ | ✗ |
+| parallel function calling | ✓（一步 2 calls） | ✓（一步 2 calls） | ✗ | ✗ |
 | JSON schema | ✓ | ✓ | ✓ | ✓ |
 | prompt caching 指標 | ✗ | ✗ | ✗ | ✗ |
 

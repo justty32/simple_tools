@@ -7,7 +7,8 @@ README／docstring 為準。
 
 | 文件 | 性質 | 用途 |
 |---|---|---|
-| [Agent World](agent-world/README.md) | 設計底圖 | path、namespace、memory、Turn／Round 與安全邊界 |
+| [Agent Machine](../freepy/agent_machine/README.md) | 實作規格 | 慢速機率求值、OS 資源管理、Plan 9／Lisp 與里程碑 |
+| [Agent World](agent-world/README.md) | 設計底圖 | path、namespace、memory、Round／Step 與安全邊界 |
 | [Agent framework 調查](agent-framework-review/README.md) | 參考研究 | 比較七套框架並擷取可採用的設計切片 |
 | [Sandboxing](sandboxing/README.md) | 安全研究 | 現有邊界、容器隔離與落地建議 |
 

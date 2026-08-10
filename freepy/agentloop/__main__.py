@@ -87,24 +87,24 @@ TOOLS = {
 def basics():
     print("\n== 一來一回 ==")
     h = go(FakeBot(_response("不用工具，直接答")))
-    _check("不叫工具就收工", f"{h.stop} {h.round} {h.text}", "done 1 不用工具")
+    _check("不叫工具就收工", f"{h.stop} {h.step} {h.text}", "done 1 不用工具")
 
     h = go(FakeBot(_wants(("a", "ok", "{}")), _response("做完了，報告完畢")))
-    _check("叫了工具就跑，結果餵回去", f"{h.stop} {h.round} {h.steps[0][3]}", "done 2 做完了")
+    _check("叫了工具就跑，結果餵回去", f"{h.stop} {h.step} {h.tool_log[0][3]}", "done 2 做完了")
     _check("模型最後那句話留著", h.text, "報告完畢")
     _check("token 有累加", str(h.tokens), "20")
 
     bot = FakeBot(_wants(("a", "ok", "{}"), ("b", "one_arg", '{"x": 7}')),
                   _response("兩個都收到了"))
     h = go(bot)
-    _check("一輪兩個工具都跑，一個都不漏", str(sorted(bot.asked[1][1])), "['a', 'b']")
-    _check("結果對得上 call id", h.steps[1][3], "拿到 7")
+    _check("一步兩個工具都跑，一個都不漏", str(sorted(bot.asked[1][1])), "['a', 'b']")
+    _check("結果對得上 call id", h.tool_log[1][3], "拿到 7")
 
 
 def broken():
     print("\n== 工具壞掉不會打斷迴圈 ==")
     def only(*calls):
-        return go(FakeBot(_wants(*calls), _response("知道了"))).steps[0][3]
+        return go(FakeBot(_wants(*calls), _response("知道了"))).tool_log[0][3]
 
     _check("沒這個工具", only(("a", "nope", "{}")), "no such tool: nope")
     _check("參數對不上", only(("a", "one_arg", '{"y": 1}')), "cannot take these arguments")
@@ -116,8 +116,8 @@ def broken():
 
 def budgets():
     print("\n== 預算：撞到就停 ==")
-    h = go(FakeBot(*_loop()), limits=Limits(rounds=3))
-    _check("輪數用完", f"{h.stop} {h.round}", "budget 3")
+    h = go(FakeBot(*_loop()), limits=Limits(steps=3))
+    _check("步數用完", f"{h.stop} {h.step}", "budget 3")
 
     h = go(FakeBot(*_loop()), limits=Limits(calls=2))
     _check("工具總次數用完", f"{h.stop} {h.calls}", "calls 2")
@@ -138,13 +138,13 @@ def budgets():
 def allowed():
     print("\n== 預算：這支工具現在不給用（回一句話，不停整個 agent）==")
     ran.clear()
-    h = go(FakeBot(*_loop()), limits=Limits(per_tool={"ok": 2}, rounds=6))
-    _check("指定工具用滿就擋", h.steps[-1][3], "used 2 times, which is its limit")
+    h = go(FakeBot(*_loop()), limits=Limits(per_tool={"ok": 2}, steps=6))
+    _check("指定工具用滿就擋", h.tool_log[-1][3], "used 2 times, which is its limit")
     _check("擋掉的不算進用量", f"{h.used} {len(ran)}", "{'ok': 2} 2")
 
-    h = go(FakeBot(*_loop()), limits=Limits(tools=["one_arg"], rounds=2))
-    _check("不在白名單就擋", h.steps[0][3], "not available for this task")
-    _check("白名單擋掉的一樣有回話", str(len(h.steps[0][3]) > 0), "True")
+    h = go(FakeBot(*_loop()), limits=Limits(tools=["one_arg"], steps=2))
+    _check("不在白名單就擋", h.tool_log[0][3], "not available for this task")
+    _check("白名單擋掉的一樣有回話", str(len(h.tool_log[0][3]) > 0), "True")
 
     bot = FakeBot(*_loop())
     bot.engine.model = "lm-qwen3.5-9b"
@@ -160,11 +160,11 @@ def quiet():
     _check("不叫工具會被推一把", str(bot.asked[1][0]), "用工具動手")
     _check("推完就動手了", f"{h.stop} {h.calls}", "done 1")
     # quiet 調大的代價：它**真的**講完的那次也會被多推兩下才收工
-    _check("講完了也照推，多燒兩輪", f"{h.round} {h.quiet}", "5 3")
+    _check("講完了也照推，多燒兩步", f"{h.step} {h.quiet}", "5 3")
 
     h = go(FakeBot(*[_response(f"第 {i} 次講廢話") for i in range(5)]),
            limits=Limits(quiet=3))
-    _check("推不動就放棄", f"{h.stop} {h.round} {h.quiet}", "done 3 3")
+    _check("推不動就放棄", f"{h.stop} {h.step} {h.quiet}", "done 3 3")
 
 
 async def _steering():
@@ -201,19 +201,19 @@ def steering():
     _check("跑工具的時候問得到在跑哪個", " ".join(seen), "正在跑 wait")
     _check("暫停中看得出來", paused, "暫停中")
     _check("插的話真的送到模型那邊", str(bot.asked[1][0]), "順便看一下 b.txt")
-    _check("放行之後跑完", f"{h.stop} {h.round}", "done 3")
+    _check("放行之後跑完", f"{h.stop} {h.step}", "done 3")
 
     handle = agentloop.Handle()
     tools = {**TOOLS, "ok": lambda: handle.ask_stop() or "順便喊停"}
     h = go(FakeBot(*_loop()), tools, handle=handle)
-    _check("外面喊停就收手", f"{h.stop} {h.round}", "stopped 2")
+    _check("外面喊停就收手", f"{h.stop} {h.step}", "stopped 2")
 
 
 def resuming():
     print("\n== 停在一半，接著跑 ==")
     ran.clear()
     bot = FakeBot(_wants(("a", "ok", "{}")))
-    h = go(bot, limits=Limits(rounds=1))
+    h = go(bot, limits=Limits(steps=1))
     _check("預算用完時那批工具還沒跑", f"{h.stop} {len(ran)}", "budget 0")
     _check("債留在 history 上", str([c["name"] for c in bot.pending_calls]), "['ok']")
 
@@ -236,9 +236,9 @@ def real(model):
         bot = LLM(engine=Engine(model=model), tools=schemas,
                   system="用繁體中文回答。要看檔案或改檔案就用工具，不要用猜的。")
         h = go(bot, dispatch, "notes.txt 裡的水果加起來幾個？答案寫進 total.txt。",
-               limits=Limits(rounds=8, per_tool={"run_shell": 3}))
-        for round_no, name, args, out in h.steps:
-            print(f"  [{round_no}] {name}({args}) -> {out.splitlines()[0][:60]}")
+               limits=Limits(steps=8, per_tool={"run_shell": 3}))
+        for step_no, name, args, out in h.tool_log:
+            print(f"  [{step_no}] {name}({args}) -> {out.splitlines()[0][:60]}")
         print("  ", h.now())
         _check("跑完了", str(h.stop), "done")
         _check("檔案真的寫出來了", base_tools.read_file("total.txt"), lambda s: "10" in s)

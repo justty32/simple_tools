@@ -30,7 +30,7 @@
 
 - `agent_runtime`、`communication_tools`、`team_tools`
 - `memory_tools`、`introspection_tools`、`agentfs`
-- Turn 內追加指令與 tool-input channel
+- Round 內追加指令與 tool-input channel
 - `exec_tools` 的 describe／invoke 等後續層
 
 不能把完整的 `PLAN.md` 當作已交付能力。

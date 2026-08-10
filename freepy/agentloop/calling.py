@@ -20,7 +20,7 @@ def perform(dispatch, call) -> str:
     """
     name = call.get("name") or "(unnamed)"
     args = call.get("args") or {}
-    if "args_raw" in call:  # 小模型和被 max_tokens 切斷的輪都會這樣
+    if "args_raw" in call:  # 小模型和被 max_tokens 切斷的 Step 都會這樣
         return (f"Error: the arguments for {name} are not valid JSON, so it was not run. "
                 f"Got: {call['args_raw'][:200]}")
 

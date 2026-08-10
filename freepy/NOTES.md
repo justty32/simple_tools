@@ -32,22 +32,22 @@ runner、alias、mode、table 與專用 research workflow 全部退出 runtime�
 `pause()` 全是普通函式，別的 coroutine、別的 thread、REPL 都問得動、按得動。
 這是「放著跑 + 另一條 routine 盯著」那個用法唯一撐得住的組合。
 
-**沒有「立刻中斷」。** 指令一律下一輪開頭生效。理由是 HTTP 和跑到一半的工具本來就
+**沒有「立刻中斷」。** 指令一律下一步開頭生效。理由是 HTTP 和跑到一半的工具本來就
 停不下來，硬做出一個 `cancel()` 只會讓人以為工具沒跑過 —— 那比等它跑完危險。
 
 ### 一個一開始寫錯、被測試抓出來的順序
 
-原本是「這一輪跑完工具 → 存著結果 → 下一輪送出去」，工具跑在迴圈**尾巴**。
+原本是「這一步跑完工具 → 存著結果 → 下一步送出去」，工具跑在迴圈**尾巴**。
 預算就是在這種時候用完的：工具跑掉了（副作用發生了），結果卻沒人送得出去。
 再叫一次 `run()` 就會**再跑一遍**。
 
-改成每一輪開頭先還上一輪欠的債，尾巴只記「欠什麼」。這樣預算用完時最後那批工具
+改成每一步開頭先還上一步欠的債，尾巴只記「欠什麼」。這樣預算用完時最後那批工具
 根本還沒跑，債留在 `bot.history` 上，同一個 bot 再叫一次就接著跑 ——
 **「接著跑」不是另外寫的功能，是把順序排對之後自己掉出來的。**
 
 ### 限制分兩種擋法，這條想了最久
 
-- **預算真的沒了** → 停整個 agent（輪數、時間、token、總呼叫數、引擎）
+- **預算真的沒了** → 停整個 agent（步數、時間、token、總呼叫數、引擎）
 - **只是這支工具不能用** → **回一句話給模型**（不在白名單、單一工具用滿）
 
 第二種故意不是錯誤而是情報：模型讀到「run_shell 你已經用滿 5 次了」會換方法繼續
@@ -63,7 +63,7 @@ runner、alias、mode、table 與專用 research workflow 全部退出 runtime�
 「連續無工具呼叫次數上限」這條限制逼出一件事：迴圈本來的收手條件（一不叫工具就停）
 其實是 `quiet=1`。調大就會推它一把再給幾次機會 —— 也就是
 [prototypes](prototypes/README.md) 第 2 輪那個「小模型直接講一段話不動手」的解法。
-代價是它**真的**講完的那次也會被多推幾下，白燒幾輪，所以預設維持 1。
+代價是它**真的**講完的那次也會被多推幾下，白燒幾步，所以預設維持 1。
 
 ### 驗證：假的回應物件餵真的 `Reply`
 
@@ -88,9 +88,9 @@ runner、alias、mode、table 與專用 research workflow 全部退出 runtime�
 - [`introspection_tools`](introspection_tools/PLAN.md)：唯讀回答自己在哪、能做什麼、
   預算還剩多少。
 
-[`agentloop/TURNS.md`](agentloop/TURNS.md) 固定兩層時間單位：一次 `ask() → message` 是
-一輪（Round）；模型從指令啟動、經過多輪與工具、最後主動停止是一回合（Turn）。工具
-向使用者要輸入仍是該 tool call 的內部事件，不另開一輪。
+[`agentloop/ROUNDS.md`](agentloop/ROUNDS.md) 固定兩層時間單位：一次 `ask() → message` 是
+一步（Step）；模型從指令啟動、經過多步與工具、最後主動停止是一回合（Round）。工具
+向使用者要輸入仍是該 tool call 的內部事件，不另開一步。
 
 機器資源的原規劃仍在 [`agentloop/LIMITS.md`](agentloop/LIMITS.md)：rlimit 只管得到
 子行程，網路和檔案要靠 namespace／容器，GPU 只容易限制可見裝置，不能承諾 per-process
@@ -134,10 +134,10 @@ runner、alias、mode、table 與專用 research workflow 全部退出 runtime�
 1. **proxy 開好** —— 所有模型統一成 `litellm.yaml` 的 alias，上面幾層只認 alias，
    不知道背後是雲端、遠端 ollama 還是本機 LM Studio。
 2. **`llms` ＋ preset ＝ 基礎 bot 模型** —— `load_preset(id)` 一行套用 endpoint、model
-   和參數，`LLM` 負責一輪一個 `Reply`。**這層只會講話，不會做事。**
+   和參數，`LLM` 負責一步一個 `Reply`。**這層只會講話，不會做事。**
 3. **`tooljson` 給它能力** —— 工具是一份 JSON 而不是一段程式碼，所以「有哪些能力」
-   變成設定檔的事。到這裡 bot 會做事了，但每一輪還是人在推。
-4. **在這之上才是 agent** —— 自己決定推幾輪、什麼時候收手。
+   變成設定檔的事。到這裡 bot 會做事了，但每一步還是人在推。
+4. **在這之上才是 agent** —— 自己決定推幾步、什麼時候收手。
    （2026-08-09 落地成 [`agentloop`](agentloop/README.md)）
 
 順序不能顛倒的理由是**下面一層錯了，上面一層的症狀會完全看不出來源**：模型能力宣告

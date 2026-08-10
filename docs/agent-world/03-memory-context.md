@@ -6,7 +6,7 @@
 
 1. **Source trace**：完整且不可變的 user、assistant、tool、event 紀錄。
 2. **Organized memory**：由 trace span、檔案或 agent 產物提升出的 objects、facts、relations 與 indexes。
-3. **Context view**：某個 Round 真正送入 `ask()` 的有限 working set。
+3. **Context view**：某個 Step 真正送入 `ask()` 的有限 working set。
 
 所以「把上下文段落摘成檔案」是：全文進 immutable object，model input 的縮減副本改放 link card。原始 trace 不動，tool call/result pairing 也不動。
 
@@ -15,7 +15,7 @@ trace span ──promote──> object(hash)
    │                      ├─ summary/view
    │                      ├─ provenance
    │                      └─ facts/links
-   └──────── manifest 留 source + ref ──> Round context
+   └──────── manifest 留 source + ref ──> Step context
 ```
 
 ## promotion 要保存兩樣東西
@@ -23,12 +23,12 @@ trace span ──promote──> object(hash)
 一個 6 KB 調查段落被提升後：
 
 ```markdown
-[memory:m42 · ASF sandbox 架構 · 6.1 KB · turn-18/r3]
+[memory:m42 · ASF sandbox 架構 · 6.1 KB · round-18/s3]
 摘要：host supervisor 配合 OS sandbox；agentfs 本身不是隔離層。
 需要證據或實作細節時載入：[全文](memory:m42)
 ```
 
-object 保存原 bytes；link card/summary 是可重建 view。metadata 至少有 source span、role、owner instance、Turn/Round、hash、mime、classification、readers、kind、links、summary producer 與 supersedes。
+object 保存原 bytes；link card/summary 是可重建 view。metadata 至少有 source span、role、owner instance、Round/Step、hash、mime、classification、readers、kind、links、summary producer 與 supersedes。
 
 摘要錯了不改正文。修訂摘要產生新 view/version；stable alias 可移向新版，舊 content ref 永遠仍指原 object。
 
@@ -53,7 +53,7 @@ object 保存原 bytes；link card/summary 是可重建 view。metadata 至少�
 ```text
 /self/memory/
   objects/<sha256>          immutable content
-  episodic/<turn-id>/       事件／時間 view
+  episodic/<round-id>/       事件／時間 view
   decisions/<topic>/        決策 view
   facts/<entity>/           fact heads
   procedures/<name>/        工作方法
@@ -68,12 +68,12 @@ object 保存原 bytes；link card/summary 是可重建 view。metadata 至少�
 
 ## Context manifest 是可重播的真相
 
-每個 Round 保存實際 model input 的順序：
+每個 Step 保存實際 model input 的順序：
 
 ```json
 {
-  "turn": "turn-23",
-  "round": 4,
+  "round": "round-23",
+  "step": 4,
   "blocks": [
     {"source": "system:policy", "view": "full", "pin": true},
     {"source": "user:latest", "view": "full", "pin": true},
@@ -98,7 +98,7 @@ card -> summary -> section -> full object -> source evidence
 ## Context compiler
 
 ```text
-compile(effective instructions, task, Turn state,
+compile(effective instructions, task, Round state,
         requested refs, candidates, model limit, budget)
     -> immutable manifest + model messages
 ```
@@ -107,11 +107,11 @@ compile(effective instructions, task, Turn state,
 
 1. system policy、當前 user/additional instructions 永遠 inline。
 2. 未閉合的 assistant/tool pairing 永遠 inline。
-3. 明確 pin 或本輪 `memory_load` 的 refs。
+3. 明確 pin 或本步 `memory_load` 的 refs。
 4. 近期、task-scoped、依賴圖直接需要的 working memory。
 5. 其餘相關項只放 card；無關項保持 cold。
 
-compiler 像 pager，不是任意摘要器。要有 hysteresis 防止每輪反覆 load/unload，並記錄每個 block 被 inline/card/exclude 的原因、token estimate 和 resolver generation。
+compiler 像 pager，不是任意摘要器。要有 hysteresis 防止每步反覆 load/unload，並記錄每個 block 被 inline/card/exclude 的原因、token estimate 和 resolver generation。
 
 若 relevance ranking 使用 LLM，compiler 的該階段要標 `nondeterministic` 並保存輸入、輸出和證書；較安全的 v1 先用明確 pin、recency、task link 與規則排序。
 
@@ -119,14 +119,14 @@ compiler 像 pager，不是任意摘要器。要有 hysteresis 防止每輪反�
 
 agent 沉寂時，memory objects 和 aliases 留在持久層；agent 活躍時，context 只是把其中一小部分 mount 成 working set。兩態不是兩套記憶，不需要啟動時把「整個我」塞回 prompt。
 
-agent 結束後，task-owned report/facts 可存續；instance-private scratch 依 retention 回收。transcript、Round manifest、task report、stable alias 與 pin 是 GC roots。
+agent 結束後，task-owned report/facts 可存續；instance-private scratch 依 retention 回收。transcript、Step manifest、task report、stable alias 與 pin 是 GC roots。
 
 ## 權限與 authority
 
 - 分享 link 不等於授權；list/search/load 都在 resolver 檢查 actor。
 - 無權者不能看到 title、hash、path 或「存在但 denied」的側通道。
 - source 含 secret 時，object 與 derived metadata 只能同等或更嚴格。
-- 載入的舊 user message只是「過去曾說過」，不自動成為本 Turn 新指令。
+- 載入的舊 user message只是「過去曾說過」，不自動成為本 Round 新指令。
 - web/tool/peer memory 一律是 untrusted data；只有真實 supervisor/user event 可建立 authority block。
 
 這個 authority 必須是資料模型欄位，不可只靠 Markdown 警語。

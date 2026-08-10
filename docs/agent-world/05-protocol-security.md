@@ -50,7 +50,7 @@ server 要把內容解析成既有 typed operation，重新做 scope、grant、i
 - effective permissions
 - resource used/reserved
 - task status
-- Turn/Round counter
+- Round/Step counter
 - memory object bytes
 
 可寫 `ctl` 也應使用小型固定 grammar 或 JSON schema，不把自然語言交給另一個模型猜。

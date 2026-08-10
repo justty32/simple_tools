@@ -1,7 +1,7 @@
 # freepy
 
 FreePy 是一組由小到大疊起來的 agent 元件。已完成的核心能對 OpenAI-compatible endpoint
-發出模型請求、描述並執行工具，以及讓單一 bot 自主跑完一個 Turn；多 agent、runtime、
+發出模型請求、描述並執行工具，以及讓單一 bot 自主跑完一個 Round；多 agent、runtime、
 memory 與 agentfs 仍在規劃階段。
 
 ## 目前可用
@@ -22,15 +22,17 @@ memory 與 agentfs 仍在規劃階段。
 跨 package 的實作順序以 [`ROADMAP.md`](ROADMAP.md) 為準：
 
 ```text
-agent_identity ─┬─► communication_tools ─┐
-                ├─► agent_runtime ───────┼─► team_tools
-                └────────────────────────┘
-
-memory_tools / introspection_tools / agentfs 在上述 effective state 上工作
+agent_machine：event、resource、scheduler、goal 的 userspace domain kernel
+      ├─ agentloop / llmkit：Round runner 與 endpoint
+      ├─ agent_runtime：Linux worker 與 sandbox
+      ├─ memory_tools：context pager
+      ├─ team / communication：組織與 IPC
+      └─ introspection / agentfs：effective state projection
 ```
 
-各元件細節在自己的 `PLAN.md`；[`IDEAS.md`](IDEAS.md) 只收尚未分類的新想法。跨元件的
-完整設計底圖在 [`../docs/agent-world/`](../docs/agent-world/README.md)。
+Agent Machine 的獨立規格在 [`agent_machine/`](agent_machine/README.md)；各元件細節在自己的
+`PLAN.md`。[`IDEAS.md`](IDEAS.md) 只收尚未分類的新想法，跨元件的完整設計底圖在
+[`../docs/agent-world/`](../docs/agent-world/README.md)。
 
 ## 文件角色
 
@@ -40,8 +42,8 @@ memory_tools / introspection_tools / agentfs 在上述 effective state 上工作
 - `PLAN.md`：尚未完成的規格；若與較新的定案文件衝突，以最後編輯者為準。
 - `README.md` 與程式 docstring：目前行為與使用契約。
 
-時間語彙以 [`agentloop/TURNS.md`](agentloop/TURNS.md) 為唯一來源：完整 `run()` 是 Turn，
-每次 `ask() → message` 是 Round，工具在兩個 Round 之間執行。
+時間語彙以 [`agentloop/ROUNDS.md`](agentloop/ROUNDS.md) 為唯一來源：完整 `run()` 是 Round，
+每次 `ask() → message` 是 Step，工具在兩個 Step 之間執行。
 
 ## 離線驗證
 

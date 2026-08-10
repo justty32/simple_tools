@@ -78,7 +78,7 @@ child grant ⊆ grantor effective permission
 
 資源由 `agent_runtime` 的 budget pool 實際保留，team_tools 只提供組織語意與帳本視圖：
 
-- consumable：tokens、rounds、tool calls、金額。
+- consumable：tokens、steps、tool calls、金額。
 - capacity：CPU、RAM、PID、GPU visibility、concurrency slots。
 - artifacts：workspace、memory refs、dataset 的 `ro`/`rw` 使用權。
 
@@ -125,9 +125,9 @@ reserve resources
 
 ## 回合的關係
 
-一個 task 可跨多個 Turn；一次 Turn 也可處理多筆相關 task。兩者不能用同一個 id 或計數。
+一個 task 可跨多個 Round；一次 Round 也可處理多筆相關 task。兩者不能用同一個 id 或計數。
 
-主管在下屬 Turn 進行中追加指令，應由 supervisor 經 communication/control plane 送到該 Handle 的 instruction queue；普通 mailbox 到信不會自行打斷模型。工具內部向使用者要輸入則仍屬工具呼叫，不是 task report 或新 Round。
+主管在下屬 Round 進行中追加指令，應由 supervisor 經 communication/control plane 送到該 Handle 的 instruction queue；普通 mailbox 到信不會自行打斷模型。工具內部向使用者要輸入則仍屬工具呼叫，不是 task report 或新 Step。
 
 ## 不變條件
 

@@ -11,7 +11,7 @@
 | memory | A/B | address、resolver、manifest、provenance、limits | object store、search、large bytes |
 | introspection | A/B | immutable snapshot／view projection | backend telemetry truth |
 | agentfs | B | resolver、provider、per-actor view、snapshot | FUSE/9P session、kernel mount |
-| Turn control | B | queue、correlation、phase、cancel state | blocked tool/user I/O、scheduler |
+| Round control | B | queue、correlation、phase、cancel state | blocked tool/user I/O、scheduler |
 
 ## 比 Janet 更能接 effect，不代表可以混層
 
@@ -28,7 +28,7 @@ policy/state decision → typed intent → privileged adapter → result event
 - `AgentPath`：canonical parse、保留 `.agent`、segment-safe ancestry。
 - `PermissionSet`：subset／downgrade，不接受 raw runtime argv。
 - `BudgetLedger`：reserve／commit／refund、idempotency key、守恆。
-- `TurnState`：Round、pending debt、phase、stop reason、usage。
+- `RoundState`：Step、pending debt、phase、stop reason、usage。
 - `TaskState`：合法 transition、immutable report、notification intent。
 - `MemoryTarget`：scheme、workspace-relative path、fragment、ACL context。
 - `AgentView`：actor + instance + grant generation 綁定的 read-only projection。
@@ -53,7 +53,7 @@ Windows 需要獨立 backend 與 Job Object／process tree／UTF-16 argv 測試�
 
 content-addressed bytes、hash、JSON Pointer、Markdown link/heading、cycle/depth/bytes budget 都適合 native parser/resolver。模型摘要、semantic search、embedding provider 則是 adapter。
 
-source trace、memory object 與每輪 manifest 要分開；C++ object layout 或 binary archive不能成為持久 ABI。正式格式仍是版本化 JSON/NDJSON/bytes + hash，否則升 compiler／stdlib 就失去可重播性。
+source trace、memory object 與每步 manifest 要分開；C++ object layout 或 binary archive不能成為持久 ABI。正式格式仍是版本化 JSON/NDJSON/bytes + hash，否則升 compiler／stdlib 就失去可重播性。
 
 ## Introspection／agentfs
 
@@ -65,7 +65,7 @@ source trace、memory object 與每輪 manifest 要分開；C++ object layout �
 identity + common values
   ├─ communication ─┐
   ├─ runtime ───────┼─ team
-  └─ Turn/Round ────┘
+  └─ Round/Step ────┘
 
 memory + effective snapshots → introspection → agentfs projection → mount adapter
 ```

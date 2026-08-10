@@ -8,7 +8,7 @@
 
 | tool | 語意 |
 |---|---|
-| `agent_status(target)` | state、Turn、pending causes、checkpoint、blocked/fault reason |
+| `agent_status(target)` | state、Round、pending causes、checkpoint、blocked/fault reason |
 | `list_agents(scope, state, cursor, limit)` | 有界列出授權 subtree；不提供全域 dump |
 | `assign_task(..., wake="run|standby|no")` | task＋budget＋通知＋可選 wake 的高階 saga |
 | `wake_agent(target, reason, task_id=None)` | 喚醒既有 bot／continuation；立即回 operation id |
@@ -60,13 +60,13 @@ cache 進一步如何影響 leader 選擇舊 member、乾淨 branch 或新 membe
 
 1. policy 先選合法 endpoint/model；不可為 cache hit 偷換較弱或未授權模型。
 2. 同能力 replicas 間，以 stable prefix/bot hash 做 consistent affinity；failover 仍送完整 request。
-3. Round 回 tool calls 後，保留短期 `affinity_until`。工具結果回來時，在不破壞公平性的前提下儘快排下一 Round，利用仍熱的 prefix。
+3. Step 回 tool calls 後，保留短期 `affinity_until`。工具結果回來時，在不破壞公平性的前提下儘快排下一 Step，利用仍熱的 prefix。
 4. 多個相同 model 的工作可小批分組，降低 local runner weights 換入換出；不能讓冷 model 永久 starvation。
 5. hit、miss、unknown、cached/prompt tokens、TTFT/latency 按 endpoint/model/prefix class 記 telemetry，以實測估 TTL/hit probability；不要硬編 provider TTL。
 
-不要為保 cache 主動送空 prompt／keepalive Round；那會花 token、製造 history／隱私問題。要保本機 model weights 是 endpoint operator policy，不是喚醒 bot，也不給 leader 一支 `pin_cache` tool。sleep/dormant 的明確要求永遠勝過 cache locality。
+不要為保 cache 主動送空 prompt／keepalive Step；那會花 token、製造 history／隱私問題。要保本機 model weights 是 endpoint operator policy，不是喚醒 bot，也不給 leader 一支 `pin_cache` tool。sleep/dormant 的明確要求永遠勝過 cache locality。
 
-cache 會使 standby 有實際效益，但只是 scheduler hint：一個剛完成 Round、很快會收到 tool results 的 bot，短暫 standby 並保留 affinity 比立即和其他一萬個 bot round-robin 更省 prefill；沒有 pending work 時仍不應因 cache 而自行醒來。
+cache 會使 standby 有實際效益，但只是 scheduler hint：一個剛完成 Step、很快會收到 tool results 的 bot，短暫 standby 並保留 affinity 比立即和其他一萬個 bot round-robin 更省 prefill；沒有 pending work 時仍不應因 cache 而自行醒來。
 
 ## history 與 cache 的取捨
 
@@ -78,18 +78,18 @@ append-only history 天然保留前綴；compact、重排 tools、改 system 或
 
 - supervisor crash：從 event＋snapshot 重建 queue；過期 activation lease 回收，舊 activation commit 被 fencing token 擋。
 - endpoint/cache restart：hint 失效即可；完整 request 可在任一合法 replica 重算。
-- endpoint error：按 endpoint policy backoff；Round attempt／token cost 留紀錄，只提交一個 response。
+- endpoint error：按 endpoint policy backoff；Step attempt／token cost 留紀錄，只提交一個 response。
 - tool worker crash：可能有副作用，標 `needs_inspection`，不自動重跑。
 - wake storm：同 bot causes 合併；per-team quota、cooldown、causal depth 與 fairness 擋互相叫醒。
 - dormant 收信不醒；standby 只被符合 policy 的事件喚醒；task/message/report 不因 sleep 消失。
 
 ## 離線驗收
 
-用 reducer＋fake scheduler 建一萬個 bot records、固定 K 個 Round slots，至少驗：
+用 reducer＋fake scheduler 建一萬個 bot records、固定 K 個 Step slots，至少驗：
 
 - duplicate wake 只生一個 activation；task/message 同時到達可合併。
 - 越權 wake/sleep 被拒；leader standby 可被 child terminal 喚醒。
-- sleep during Round/tool 到安全 checkpoint；stale activation 不可提交。
+- sleep during Step/tool 到安全 checkpoint；stale activation 不可提交。
 - crash recovery 沒有幽靈 active；不確定 tool side effect 不重跑。
 - fake cache 的 hit/miss/expiry/unknown 都不改輸入與結果；replica failover 仍成功。
 - hot affinity 確實降低 prefill，但在硬上限內，cold bot 最終一定被服務。

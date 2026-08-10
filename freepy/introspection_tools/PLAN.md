@@ -16,8 +16,8 @@ self_status(detail="summary")  # summary | tools | resources | organization
 
 摘要包含：
 
-- 當前 `turn_id`、第幾輪、phase、已執行工具與 token／時間。
-- 回合、輪、工具總數、單一工具的已用／剩餘預算。
+- 當前 `round_id`、第幾步、phase、已執行工具與 token／時間。
+- 回合、步、工具總數、單一工具的已用／剩餘預算。
 - workspace 與「這是工具 API root 還是 OS sandbox mount」的精確說明。
 - effective tools、engines、mount mode、network policy、CPU/RAM/PID/GPU 上限。
 - canonical agent path、team subtree、主管、直屬下屬、當前任務與被授予權限；沒有 team 時明說。
@@ -38,7 +38,7 @@ introspection_tools.bind(
 
 模型不能提供 handle、identity 或 policy path。回傳的是 bind 當下物件的 snapshot；不同 agent 不能共用 module global，正式實作應產生 closure/object dispatch。
 
-## 回合與輪
+## 回合與步
 
 `self_status` 本身是一個工具呼叫，不豁免工具預算。報告要明寫統計截點，例如「本次 self_status 已計入 calls，但結果尚未計入 history」。不要為了自我報告在 `Limits` 裡開第一個免費工具例外。
 

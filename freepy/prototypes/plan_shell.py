@@ -40,7 +40,7 @@ import base_tools                                        # noqa: E402
 from llms import LLM, Engine, to_schemas                 # noqa: E402
 
 MODEL = "ollama-qwen3-32b"
-ROUNDS = 6                     # 探查幾輪還交不出計劃就放棄，免得模型原地打轉
+STEPS = 6                      # 探查幾步還交不出計劃就放棄，免得模型原地打轉
 
 SYSTEM = """你是一個翻譯器：把使用者的檔案操作意圖，翻譯成一串 shell 指令。
 
@@ -116,7 +116,7 @@ def translate(bot, prompt):
     """讓模型探查到它交得出計劃為止。回傳 (exit_code, 要印到 stdout 的東西)。"""
     reply = bot.ask(prompt)
 
-    for _ in range(ROUNDS):
+    for _ in range(STEPS):
         if not reply:
             return 1, f"llm error: {reply.err}"
 
@@ -144,7 +144,7 @@ def translate(bot, prompt):
 
         reply = bot.ask(tool_results=results)
 
-    return 1, f"探查了 {ROUNDS} 輪還沒交出計劃，放棄"
+    return 1, f"探查了 {STEPS} 步還沒交出計劃，放棄"
 
 
 def main():

@@ -40,7 +40,7 @@ uv run python prototypes/plan_shell.py --model deepseek-chat --root /tmp/ws "...
 
 | 工具 | 意思 | 後果 |
 |---|---|---|
-| `inspect` | 先看現場（唯讀指令） | 結果餵回去，再想一輪 |
+| `inspect` | 先看現場（唯讀指令） | 結果餵回去，再想一步 |
 | `plan` | 翻得出來了 | 吐 shell，exit 0 |
 | `ask_user` | 你講得不夠清楚 | 吐問題，exit 2 |
 
@@ -92,8 +92,8 @@ test -f a.txt && echo '...' ; test -d backup && echo '...'
 
 ### 2. 思考型模型的空回合會白燒掉探查次數
 
-qwen3-32b 前兩輪回的是「有 `reasoning_content`、`content` 空、也沒有 tool_calls」。
-現在的迴圈把它當成「模型在講廢話」，推它一把再來一次 —— 六輪的預算白花兩輪。
+qwen3-32b 前兩步回的是「有 `reasoning_content`、`content` 空、也沒有 tool_calls」。
+現在的迴圈把它當成「模型在講廢話」，推它一把再來一次 —— 六步的預算白花兩步。
 能自己恢復，所以先擱著；等回合經濟真的變成問題再處理。
 
 ### 3. 兩個小的

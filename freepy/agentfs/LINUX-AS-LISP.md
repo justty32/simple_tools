@@ -2,6 +2,10 @@
 
 這是設計隱喻，不是說 Linux 在語言分類上真的是 Lisp。值得借用的是：少量通用原語、名稱解析、環境、組合與「資料可再次被解釋」；不值得照抄的是無型別文字協定和到處帶副作用的寫檔介面。
 
+這份保留 agentfs 的 namespace 透鏡；慢速機率求值、Goal、OS resource controller 與 Lisp
+condition/restart 已升格到 [Agent Machine](../agent_machine/README.md) 的
+[Plan 9／Lisp 規格](../agent_machine/PLAN9-LISP.md)。
+
 跨 agentfs、九軸、記憶與時間尺度的綜合版本見 [Agent World 設計報告](../../docs/agent-world/README.md)。
 
 ## 對應關係
@@ -19,7 +23,7 @@
 | unquote／dereference | read／load | 需要時把連結內容拉回工作 context |
 | dynamic binding | 私有 mount view | 同一路徑在不同 agent 可解析成不同能力 |
 | fork + evaluation | fork／clone + exec | 複製受限環境，再讓 child 執行指定角色 |
-| evaluation trace | process／I/O history | Turn、Round、tool call 與事件紀錄 |
+| evaluation trace | process／I/O history | Round、Step、tool call 與事件紀錄 |
 
 更精確地說，agent 並不是「檔案」；agent 是在某個 namespace 裡求值的 process。agentfs 是它可觀察、可組合的世界，而 open 後得到的 handle 才像已解析且帶權限的引用。
 
@@ -48,11 +52,11 @@ canonical identity 仍是唯一組織路徑，例如 `/root/research/web`；但 
 
 ```text
 /self/context/
-  manifest.json       本輪實際工作集及順序
+  manifest.json       本步實際工作集及順序
   instructions.md     必須保持 inline 的有效指令
   working/            目前載入的段落
   links/              尚未展開的記憶引用
-  tool-results/       本 Turn 需要的工具結果
+  tool-results/       本 Round 需要的工具結果
 ```
 
 把一段舊內容提升成 memory object，近似 `quote`：內容暫時不求值，只保留名稱、摘要、來源與 hash。`memory_load` 近似受預算和權限控制的 dereference。詳見 [組織化 context 規格](../memory_tools/ORGANIZED-CONTEXT.md)。
@@ -91,8 +95,8 @@ agent view = evaluation environment
 授權 = mount capability
 委派 = bind 一個受限 view
 spawn = 建立 child evaluator
-Turn = 一次有邊界的求值活動
-Round = 一個 ask -> message reduction
+Round = 一次有邊界的求值活動
+Step = 一個 ask -> message reduction
 記憶提升 = quote to object
 記憶載入 = checked dereference
 context compact = 重編譯 working set，不刪原始 trace

@@ -15,7 +15,7 @@
 
 ### 不照搬
 
-- global mutable `MinichainContext` 不適合 concurrent Turn 或 multi-tenant；
+- global mutable `MinichainContext` 不適合 concurrent Round 或 multi-tenant；
 - Python backend 用 `exec`、Bash backend 用 `shell=True`，不是安全工具邊界；
 - 依賴停在 OpenAI 0.28 時代，HEAD 日期為 2023-12；
 - 無 repository tests，mutable defaults、空輸出與重入語意都不夠可靠。

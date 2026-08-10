@@ -21,7 +21,7 @@ interruptible, guarantee, dry_run, nondeterministic
 | lifecycle | 自行結束還是持續等待？ | one-shot worker、persistent supervisor |
 | state | 是否跨呼叫保留外部狀態？ | task store、memory refs、workspace edits |
 | resources | 需要、保留、實際用了什麼？ | token、time、memory、network、child slots |
-| interruptible | pause/stop 後能否 resume/rollback/reset？ | tool cancel、Turn checkpoint |
+| interruptible | pause/stop 後能否 resume/rollback/reset？ | tool cancel、Round checkpoint |
 | guarantee | 可否重試、是否 transactional、可否 dry-run？ | send once、patch proposal |
 | composition | 多節點合起來後性質如何？ | pipeline、team、nested agent |
 | environment | 在哪個 namespace／sandbox 求值？ | mounts、container、network policy |

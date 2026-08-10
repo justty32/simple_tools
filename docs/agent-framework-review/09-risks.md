@@ -2,11 +2,11 @@
 
 ## 1. Framework gravity
 
-大框架會誘使所有狀態塞回同一個 Agent/Crew/Graph object。freepy 反而需要 owner 清楚：agentloop 擁有 Turn，team 擁有 task/grant，runtime 擁有 instance/effective policy，memory 擁有 object/ref，workflow 擁有 checkpoint，agentfs 只 projection。
+大框架會誘使所有狀態塞回同一個 Agent/Crew/Graph object。freepy 反而需要 owner 清楚：agentloop 擁有 Round，team 擁有 task/grant，runtime 擁有 instance/effective policy，memory 擁有 object/ref，workflow 擁有 checkpoint，agentfs 只 projection。
 
 ## 2. Hidden model calls
 
-Instructor re-ask、guardrail repair、Crew manager/delegation、LightAgent planning 都可能在一次高階 API 內多叫模型。若不攤開成 Round/attempt event，usage、budget、context manifest 與 replay 都會說謊。
+Instructor re-ask、guardrail repair、Crew manager/delegation、LightAgent planning 都可能在一次高階 API 內多叫模型。若不攤開成 Step/attempt event，usage、budget、context manifest 與 replay 都會說謊。
 
 ## 3. Retry is not recovery
 
@@ -50,7 +50,7 @@ CrewAI AMP、LangSmith deployment/observability 是外部/商業控制面，不�
 - 不做星數排行或宣稱某框架全面勝出；
 - 不因 quickstart 短就推論 production 成本低；
 - 不在這次調查中替換 freepy runtime；
-- 不把 graph node、model Round、agent Turn、team task、world tick 合成一層；
+- 不把 graph node、model Step、agent Round、team task、world tick 合成一層；
 - 不用 agentfs 的 path 字串直接打開 host filesystem；
 - 不先支援所有 provider、DSL、stream mode 或 remote control plane。
 

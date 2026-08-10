@@ -2,7 +2,7 @@
 
 **這份是實作規格，尚未寫程式。** 目標是把大型工具結果無損移出 context，需要時再載入；同一個 resolver 同時理解 JSON `$ref` 與 Markdown link。
 
-模型上下文的一般化組織、段落提升、Round manifest 與 agentfs memory view 見 [組織化記憶與 context filesystem](ORGANIZED-CONTEXT.md)；那是建立在本文件無損 object/ref 核心上的後續層。
+模型上下文的一般化組織、段落提升、Step manifest 與 agentfs memory view 見 [組織化記憶與 context filesystem](ORGANIZED-CONTEXT.md)；那是建立在本文件無損 object/ref 核心上的後續層。
 
 evidence／grounding／derived facts 與撤回失效機制見 [跨層設計報告](../../docs/agent-world/03-memory-context.md)。
 
@@ -11,10 +11,10 @@ evidence／grounding／derived facts 與撤回失效機制見 [跨層設計報�
 卸載不刪除 history message，只替換 `role="tool"` 的 `content`，保留 assistant `tool_calls` 與 tool message 的配對：
 
 ```markdown
-[unloaded t7 · read_file("src/engine.py") · 12.4 KB · 第 3 輪](memory:t7)
+[unloaded t7 · read_file("src/engine.py") · 12.4 KB · 第 3 步](memory:t7)
 ```
 
-內容仍在 object store。載入時追加一則新內容到 history 尾端，標出原始回合／輪與 tool call；不倒帶修改舊前綴。
+內容仍在 object store。載入時追加一則新內容到 history 尾端，標出原始回合／步與 tool call；不倒帶修改舊前綴。
 
 只有 tool result 可卸載。使用者指令與 assistant message 是任務和決策脈絡，v1 不允許卸載。
 
@@ -45,7 +45,7 @@ Markdown 可以保存：
 
 | 工具 | 用途 |
 |---|---|
-| `memory_candidates` | 列出可卸載 tool results 的短 ref、來源、輪次與大小 |
+| `memory_candidates` | 列出可卸載 tool results 的短 ref、來源、步次與大小 |
 | `memory_unload` | 批次卸載多個 ref，一次改 history 中段 |
 | `memory_load` | 批次解析 ref／JSON `$ref`／Markdown link，追加內容 |
 | `memory_links` | 只列出某份 JSON/Markdown 內可載入的連結，不展開正文 |
@@ -62,7 +62,7 @@ unload 必須批次：改一次歷史中段就會讓其後 prefix cache 失效�
   refs/<session>/<t7>.json  ref → object + metadata
 ```
 
-metadata 至少包含 owner、readers、mime、bytes、hash、tool name/args、tool_call_id、原始回合與輪、建立時間。對外 ref 短而好唸；對內 content hash 去重。
+metadata 至少包含 owner、readers、mime、bytes、hash、tool name/args、tool_call_id、原始回合與步、建立時間。對外 ref 短而好唸；對內 content hash 去重。
 
 ref 不是權限 token。另一個 agent 從 communication message 收到 `[資料](memory:t7)` 後，loader 仍要檢查 reader grant；不可因 ref 難猜就當成授權。
 
@@ -87,7 +87,7 @@ v1 由模型呼叫 candidates → batch unload → 需要時 load，先把可逆
 
 ## 與回合、通訊的關係
 
-metadata 同時記 `turn_id` 與 `round_no`。回合內或跨回合載入都只是下一輪的額外 context，不會把舊輪重新計算成新輪。
+metadata 同時記 `round_id` 與 `step_no`。回合內或跨回合載入都只是下一步的額外 context，不會把舊 Step 重新計算成新 Step。
 
 communication transport 只傳文字 link；team tools 可授予某 agent 讀取一組 refs/paths 的權限。memory loader 是最後執行權限檢查的一層。
 

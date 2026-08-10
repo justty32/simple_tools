@@ -23,9 +23,9 @@
 3. 舊文若仍有追溯價值，標明已被取代及替代文件；否則刪除重複內容。
 4. README 不複製 PLAN／NOTES 全文，只連到唯一的詳細說明。
 
-目前時間語彙的唯一來源是 [`freepy/agentloop/TURNS.md`](../freepy/agentloop/TURNS.md)：
-一次完整 `agentloop.run()` 是 **Turn**，每次 `ask() → message` 是 **Round**；tool call
-發生在兩個 Round 之間，不另造一個時間層級。
+目前時間語彙的唯一來源是 [`freepy/agentloop/ROUNDS.md`](../freepy/agentloop/ROUNDS.md)：
+一次完整 `agentloop.run()` 是 **Round**，每次 `ask() → message` 是 **Step**；tool call
+發生在兩個 Step 之間，不另造一個時間層級。
 
 ## 程式註解
 

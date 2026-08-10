@@ -1,5 +1,9 @@
 # 分期路線與驗收
 
+本章保留 Agent World 各 view 的研究路線；跨 package 的目前實作順序已由較新的
+[Agent Machine PLAN](../../freepy/agent_machine/PLAN.md) 與
+[FreePy ROADMAP](../../freepy/ROADMAP.md) 取代。
+
 ## 原則
 
 先驗證語意，再選 transport；先無損，再做自動 compact；先 read-only，再開 control。`unipath` 已證明 9P/live tree 可行，這裡不需重做概念展示，而要補 production agent 系統缺的 identity、ACL、manifest 與 lifecycle。
@@ -11,7 +15,7 @@
 - `AgentPath`：canonicalize、parent、child、ancestor；保留 `.agent`。
 - `NodeMeta`：declared/effective/observed 分層與九軸 schema。
 - `MemoryTarget`、source span、content hash、ACL。
-- Round/Turn/event/stop reason records。
+- Step/Round/event/stop reason records。
 
 Gate：segment prefix 不誤判；未知欄位 fail closed；所有 object 可 serialize；metadata 不把 requested 當 effective。
 
@@ -25,11 +29,11 @@ agent_stat(path)
 agent_read(path, max_bytes)
 ```
 
-先投影 self identity、state、Turn/Round、public env、resources、effective permissions 與 child presence。Windows 直接跑 Python resolver，不依賴 mount。
+先投影 self identity、state、Round/Step、public env、resources、effective permissions 與 child presence。Windows 直接跑 Python resolver，不依賴 mount。
 
 Gate：self/ancestor/peer/operator 四種 view；secret/name 不洩漏；stale instance；generation snapshot；bytes/list limit；provider error fail closed。
 
-## M2：不可變 trace、objects 與 Round manifest
+## M2：不可變 trace、objects 與 Step manifest
 
 先把現有大型 tool result unload/load 接到 content-addressed store。每次 `ask()` 保存實際 blocks manifest，不改 source trace。
 
@@ -59,7 +63,7 @@ Gate：current instructions 永遠 inline；預算硬上限；不發生 load/unl
 
 ## M5：team、tick 與 read-only cross-agent memory
 
-每個 agent 保有獨立 Turn；team task 可建立 tick/barrier，child 用 report/artifact refs 交付，不共享私有 prompt。parent budget 先 reserve 再分配。
+每個 agent 保有獨立 Round；team task 可建立 tick/barrier，child 用 report/artifact refs 交付，不共享私有 prompt。parent budget 先 reserve 再分配。
 
 Gate：同儕與跨 subtree 越權被拒；取消能喚醒 blocked tool；父停止的 propagation 可預測；資源守恆；tick snapshot 可指出每個 child 的 stop reason。
 
@@ -87,7 +91,7 @@ Gate：mount adapter 與 model tools 看見相同語意；無 mount 權限仍可
 AgentPath
   -> fake runtime/team providers
   -> per-actor agent_list/read
-  -> immutable Round manifest
+  -> immutable Step manifest
   -> tool-result memory ref
 ```
 
@@ -103,4 +107,3 @@ AgentPath
 6. 哪些九軸欄位直接沿用 ai_core，哪些只做 adapter 對接。
 
 這些都不阻塞 M0–M2；先跑出真資料再定，會比提前發明完整 Lisp/9P 世界更可靠。
-

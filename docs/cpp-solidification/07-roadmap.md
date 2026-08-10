@@ -30,7 +30,7 @@ Gate：preset id 能建立等價 Engine；path property、subset、conservation 
 
 ## Phase 3：agentloop semantic core（3–5 週）
 
-- Turn/Round reducer、pending debt、limits、quiet、finish/usage。
+- Round/Step reducer、pending debt、limits、quiet、finish/usage。
 - control event queue、completion/enqueue、tool input/cancel。
 - fake Bot／Tool adapter replay；不接真模型。
 

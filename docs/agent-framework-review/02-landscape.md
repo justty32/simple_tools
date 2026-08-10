@@ -41,7 +41,7 @@ Instructor 把答案視為待驗證資料；這是最適合 freepy 的態度。S
 
 ```text
 data contract     <- Instructor
-Turn tool loop    <- freepy 現有 agentloop
+Round tool loop    <- freepy 現有 agentloop
 workflow kernel   <- PocketFlow concepts + LangGraph durability
 policy/audit      <- LightAgent concepts
 handoff/task      <- Swarm + CrewAI concepts
@@ -57,10 +57,10 @@ OS enforcement    <- freepy runtime/container adapters（外部專案都不能�
 
 | 名稱 | 單位 |
 |---|---|
-| `turn_id` | agent 從啟動到主動停止 |
-| `round_no` | 一次 provider ask→message |
-| `workflow_run_id` / `step_no` | deterministic workflow 的 run/superstep |
-| `task_id` | team 層可跨 Turn 的工作 |
+| `round_id` | agent 從啟動到主動停止 |
+| `step_no` | 一次 provider ask→message |
+| `workflow_run_id` / `workflow_node_no` | deterministic workflow 的 run/node 或 superstep |
+| `task_id` | team 層可跨 Round 的工作 |
 | `tool_call_id` | 一次工具要求與結果配對 |
 | `attempt_no` | 同一操作的 retry/re-ask 次數 |
 

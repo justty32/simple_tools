@@ -1,6 +1,6 @@
 """loop.py — 一個函式：讓 bot 一直跑到它不再叫工具（或預算用完）為止。
 
-模型開口要工具 → 這裡真的去跑 → 結果餵回去 → 它再想一輪，這樣一來一回。
+模型開口要工具 → 這裡真的去跑 → 結果餵回去 → 它再走一步，這樣一來一回。
 
 **這一包不 import llms，也不 import tooljson。** `bot` 只要有 `ask()` 和
 `pending_calls`，`dispatch` 只要是 `{名字: fn(**kwargs)}`。
@@ -30,12 +30,12 @@ async def run(bot, dispatch, prompt=None, handle=None, limits=None, images=None)
     同步要的話就 `asyncio.run(run(bot, dispatch, "..."))`。會擋住的兩件事
     （模型那次 HTTP、工具本體）都丟到 thread 去跑，所以 event loop 不會被卡住。
 
-    `limits` 見 [limits.py](limits.py)，不給就是 `Limits()`（12 輪，其餘不設限）。
+    `limits` 見 [limits.py](limits.py)，不給就是 `Limits()`（12 步，其餘不設限）。
     停的原因在 `handle.stop`：
 
         done      模型不叫工具了，講完了 —— 正常結束
         length    也不叫工具了，但它是被 max_tokens 切斷的，不是講完
-        budget    輪數用完了，它還在叫工具
+        budget    步數用完了，它還在叫工具
         calls / time / tokens   那項預算用完了
         engine    bot 現在掛的思考引擎不在准用的清單裡（`handle.err`）
         error     llms 那邊回了錯（`handle.err`）
@@ -53,12 +53,12 @@ async def run(bot, dispatch, prompt=None, handle=None, limits=None, images=None)
     h.begin(lim)
 
     # 上次跑到一半停掉的話，history 最後會是一則欠著工具結果的 assistant message，
-    # 這時候直接再講一句會被 API 打回票。所以每一輪都從「先還債」開始 —— 順便讓
+    # 這時候直接再講一句會被 API 打回票。所以每一步都從「先還債」開始 —— 順便讓
     # 「再叫一次 run() 就接著跑」跟平常的迴圈走完全同一條路
     owed = bot.pending_calls
     h.say(prompt)  # 第一句話跟外面插的話走同一條路，所以不給 prompt 也行
 
-    for _ in range(lim.rounds):
+    for _ in range(lim.steps):
         while h.paused and not h.stopping:
             h.phase = "paused"
             await asyncio.sleep(TICK)
@@ -72,7 +72,7 @@ async def run(bot, dispatch, prompt=None, handle=None, limits=None, images=None)
             return h.end("engine", err=ValueError(wrong_engine))
 
         results = await _settle(owed, dispatch, h, lim) if owed else None
-        h.turn()
+        h.next_step()
         reply = await asyncio.to_thread(
             bot.ask, prompt=h.take_say(), images=images, tool_results=results)
         images = None  # 圖只跟第一句一起送
@@ -90,16 +90,16 @@ async def run(bot, dispatch, prompt=None, handle=None, limits=None, images=None)
         h.quiet += 1
         if h.quiet >= lim.quiet:
             return h.end("done")
-        h.say(NUDGE)  # 只有 quiet 調大過才走到這：推它一把，再給一次機會
+        h.say(NUDGE)  # 只有 quiet 調大過才走到這：推它一把，再給一步機會
 
     return h.end("budget")
 
 
 async def _settle(calls, dispatch, h, lim):
-    """把這一輪要的工具全跑完，回 `{call_id: 結果字串}`。
+    """把上一步要求的工具全跑完，回 `{call_id: 結果字串}`。
 
     一次一個，照模型要求的順序 —— 併發跑省不了多少，卻會讓兩個 `run_shell`
-    在同一個資料夾裡互相踩。**一個都不能漏**：少一個 key 下一輪就對不起來，
+    在同一個資料夾裡互相踩。**一個都不能漏**：少一個 key 下一步就對不起來，
     所以被預算擋下來的那些也要回一句話，不能不回。
     """
     results = {}

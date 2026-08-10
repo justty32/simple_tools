@@ -7,7 +7,7 @@
 | `llmkit/tooljson` pure／exec | spec、strict load、registry、argv、subprocess、clip | A/B | C++ core；process 為 native adapter |
 | `tooljson _type:"python"` | importlib、sys.path/sys.modules、任意 callable | D | Python sidecar；跨語言走 exec／RPC |
 | `llms` presets | id → endpoint/model/parameters 的 JSON object | A | 簡單 config loader；不需獨立 subsystem |
-| `agentloop` | Round loop、budget、pending debt、pause/stop | B | C++ reducer + scheduler adapter |
+| `agentloop` | Step loop、budget、pending debt、pause/stop | B | C++ reducer + scheduler adapter |
 | `llmkit/llms` protocol/state | history、tool calls、stream accumulation、usage、caps | B | 可固化 value/state |
 | `llmkit/llms` transport/reflection | OpenAI SDK、HTTPS/SSE、inspect/type hints/docstring | C/D | proxy/Python adapter；schema 改顯式契約 |
 | `base_tools` | files/edit/root containment/POSIX shell | B | C++ filesystem core + Linux process adapter |
@@ -40,7 +40,7 @@ C++ client 需要它，只需 JSON lookup 與最小形狀檢查；capability、�
 值得搬的是：pending tool debt、round/call/token/time budget、quiet、finish reason、resume 與 ordered tool settlement。建議先表達成：
 
 ```text
-reduce(TurnState, Event) -> TurnState + Intents
+reduce(RoundState, Event) -> RoundState + Intents
 ```
 
 HTTP request、tool execution、timer 與 user control 由 host/scheduler 產 event。不要把 `asyncio.to_thread` 機械翻成 coroutine；C++ coroutine 並不自動給你 deadline、cancellation 或 thread safety。

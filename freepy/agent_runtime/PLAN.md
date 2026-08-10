@@ -61,19 +61,19 @@ child permissions ⊆ parent effective permissions
 
 ### 可消耗預算
 
-token、工具呼叫、模型輪數等在 spawn 時先從父帳本 **reserve**。child 結束後只退還未使用部分；不能讓十個 child 各自拿到父剩餘 token 的完整副本。
+token、工具呼叫、模型步數等在 spawn 時先從父帳本 **reserve**。child 結束後只退還未使用部分；不能讓十個 child 各自拿到父剩餘 token 的完整副本。
 
 ### 同時容量
 
 CPU、memory、PID、GPU visibility 等由父 cgroup／runtime pool 統一封頂，再分配 child 上限。即使帳本有 race，OS 上層 ceiling 仍不能被突破。
 
-wall time 要區分 deadline 與消耗時間；等待工具使用者輸入是否暫停某項 timeout，由 tool policy 決定，不能偷偷改 Turn/Round 計數。
+wall time 要區分 deadline 與消耗時間；等待工具使用者輸入是否暫停某項 timeout，由 tool policy 決定，不能偷偷改 Round/Step 計數。
 
 ## fresh 與 fork
 
 `fresh` 只給 child：任務、角色說明、獲准工具與明確 memory links。它 context 最乾淨，適合正式委派。
 
-`fork` 複製父 bot 在分岔點的 history，再加 child task。它適合針對性探查，價值是中間幾十輪不進父 context。限制：
+`fork` 複製父 bot 在分岔點的 history，再加 child task。它適合針對性探查，價值是中間幾十步不進父 context。限制：
 
 - 複製 history 不代表複製 Handle 或未完成的 tool call。
 - 有 pending calls 時禁止 fork，除非先結清。

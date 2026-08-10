@@ -12,7 +12,7 @@ Python 是探索器與 reference oracle；C++ 是穩定契約的 production impl
 
 每個 slice 先記錄：輸入、normalized output、錯誤分類、side effects、OS/provider/version、延遲與記憶體 baseline。沒有 workload benchmark 前，不以「C++ 更快」當 acceptance criterion。
 
-規格仍在探索就留 Python。特別是 provider quirks、模型 tool reliability、Turn control 新語意與尚未實作的多 agent plans。
+規格仍在探索就留 Python。特別是 provider quirks、模型 tool reliability、Round control 新語意與尚未實作的多 agent plans。
 
 ## Stage 1：語言中立契約
 

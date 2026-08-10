@@ -5,10 +5,10 @@
 Linux-as-Lisp 最有用的版本是 **unify-to-path**：
 
 1. 靜態物可用路徑找到：定義、資料、記憶、artifact。
-2. 執行中的東西可用路徑找到：agent、Turn、tool run、resource state。
+2. 執行中的東西可用路徑找到：agent、Round、tool run、resource state。
 3. 呼叫方式可用路徑找到：tool entry、`ctl`、`clone`、inbox 等 protocol nodes。
 
-路徑統一的是命名和導航，不是儲存媒介。`/self/turn` 可以由記憶體 provider 即時計算；`/memory/objects/<hash>` 可以來自 object store；`/tools/web/clone` 可以是 supervisor 操作。它們服從同一組 walk/stat/read 契約，不必真的落成宿主檔案。
+路徑統一的是命名和導航，不是儲存媒介。`/self/round` 可以由記憶體 provider 即時計算；`/memory/objects/<hash>` 可以來自 object store；`/tools/web/clone` 可以是 supervisor 操作。它們服從同一組 walk/stat/read 契約，不必真的落成宿主檔案。
 
 ## 唯一身分與私有 view
 
@@ -54,7 +54,7 @@ canonical agent identity 使用唯一組織樹：
 
 檔案系統目錄本質較像 map：名稱到 child；Lisp list 則帶位置和順序。需要順序時要顯式表示：
 
-- `/rounds/0`、`/rounds/1`：0-based numeric segments，適合 append-only sequence。
+- `/steps/0`、`/steps/1`：0-based numeric segments，適合 append-only sequence。
 - `manifest.json`：保存 block 的精確順序與版本，適合 context。
 - stable id + order field：避免刪一項後全部改名。
 

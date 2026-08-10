@@ -4,7 +4,7 @@
 
 ## 結論先講
 
-這七個專案都值得看，但**沒有一個適合整套搬進 freepy**。最好的做法是保留 freepy 現有的小核心、Turn／Round、logical agent path、typed operation、event log 與 agentfs projection，再抽取七種可獨立驗證的設計切片：
+這七個專案都值得看，但**沒有一個適合整套搬進 freepy**。最好的做法是保留 freepy 現有的小核心、Round／Step、logical agent path、typed operation、event log 與 agentfs projection，再抽取七種可獨立驗證的設計切片：
 
 1. **Instructor**：schema normalization、validation re-ask、provider handler registry。
 2. **LightAgent**：一致的 policy hook、approval receipt、trace event、memory promotion。
@@ -18,7 +18,7 @@
 
 ## 對 freepy 最重要的判斷
 
-- 不換掉 `agentloop`。它已經有更清楚的 **Turn／Round** 定義；外部框架反而常混用 turn、step、retry。
+- 不換掉 `agentloop`。它已經有更清楚的 **Round／Step** 定義；外部框架反而常混用 turn、step、retry。
 - 不讓 workflow framework 成為權限邊界。工具仍要經 typed intent、effective grant、approval、sandbox 與 receipt。
 - 不把 checkpoint 當 memory，也不把 agent path 當 authority。checkpoint 保存執行游標；memory 保存可引用內容；path 只是 identity/namespace。
 - 不以 decorator 或 mutable dict 作為 durable ABI。核心狀態應有 schema、版本、instance id、operation id 與 append-only evidence。
@@ -29,13 +29,13 @@
 ```text
 model response
   -> schema normalize / validate
-  -> validation failure: append attempt + re-ask (新 Round)
+  -> validation failure: append attempt + re-ask (新 Step)
   -> ToolCallIntent
   -> schema + grant + policy hooks
   -> optional approval receipt
   -> sandboxed executor
   -> ToolReceipt + trace event
-  -> checkpoint / next Round
+  -> checkpoint / next Step
 ```
 
 這同時吸收 Instructor、LightAgent、LangGraph 的強項，而且能直接接現有 `tooljson`、`agentloop` 與規劃中的 runtime/agentfs。

@@ -23,7 +23,7 @@ Python demos / research / provider SDK / _type:python
                          ▼
 C++ semantic core ── typed intents ──► native trusted adapters
 path · schema · policy · state          HTTP/SSE · fs/db · process · FUSE
-Turn/Round · ledger · memory refs                 │
+Round/Step · ledger · memory refs                 │
                                                   ▼
                                   Linux namespace/cgroup/seccomp
 ```

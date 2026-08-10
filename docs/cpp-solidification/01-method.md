@@ -25,7 +25,7 @@ C 和 C++ 當然都能完成這套系統；有用的問題是：
 
 ### C++ 適合擁有
 
-- `AgentPath`、policy、budget、Turn／Round、tool spec 等強型別 value object。
+- `AgentPath`、policy、budget、Round／Step、tool spec 等強型別 value object。
 - `std::variant`／tagged state、RAII、`std::expected` 式錯誤、filesystem 與並發 primitive。
 - JSON contract、event reducer、native HTTP/process/storage/FUSE adapters。
 - 需要同時提供 executable 與 library 的部署形狀。
@@ -71,7 +71,7 @@ C 和 C++ 當然都能完成這套系統；有用的問題是：
 已實作：`llmkit/tooljson`、`llmkit/llms`（含簡單 preset loader）、`agentloop`、
 `base_tools`、`exec_tools/discover.py`、`shells`、prototypes。
 
-仍是設計：agent identity、communication、runtime、team、memory、introspection、agentfs、Turn control 擴充。後者只能評架構 fit，不能用文件頁數假裝 migration progress。
+仍是設計：agent identity、communication、runtime、team、memory、introspection、agentfs、Round control 擴充。後者只能評架構 fit，不能用文件頁數假裝 migration progress。
 
 ## 主要來源
 

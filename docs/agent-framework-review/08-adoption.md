@@ -1,6 +1,6 @@
 # 採用順序與驗收
 
-原則：先讓既有 Turn/tool loop 可觀測、可驗證，再加入 durable workflow；不要先造 generic graph DSL。
+原則：先讓既有 Round/tool loop 可觀測、可驗證，再加入 durable workflow；不要先造 generic graph DSL。
 
 ## Phase 0：凍結共同語彙
 
@@ -11,13 +11,13 @@
 - `WorkflowRun`、`StepTask`、`PendingWrite`、`Checkpoint`、`Interrupt`；
 - 全部帶 actor path + instance id、operation id、timestamps、parent refs。
 
-Gate：同一 trace 能回答「哪個 agent、哪個 Turn/Round、哪個 step/attempt、看見什麼、要求什麼、實際做什麼」。
+Gate：同一 trace 能回答「哪個 agent、哪個 Round/Step、哪個 step/attempt、看見什麼、要求什麼、實際做什麼」。
 
 ## Phase 1：結構化模型邊界
 
 採 Instructor 的窄切片：response model normalization、provider handler registry、parse/validation、bounded re-ask、raw response + usage。
 
-Gate：invalid JSON/schema 產生新 `ModelAttempt` 和新 Round；budget 正確累加；無 usage 不當成零；provider 差異只在 adapter。
+Gate：invalid JSON/schema 產生新 `ModelAttempt` 和新 Step；budget 正確累加；無 usage 不當成零；provider 差異只在 adapter。
 
 ## Phase 2：可審計工具閘門
 
@@ -51,7 +51,7 @@ Gate：
 - spawn：runtime 建 child instance；
 - 三者使用不同 typed operation。
 
-Gate：模型不能靠回傳 agent 名稱擴權；path/instance/grant/budget 全檢查；task 可跨 Turn；通知失敗不丟 authoritative task。
+Gate：模型不能靠回傳 agent 名稱擴權；path/instance/grant/budget 全檢查；task 可跨 Round；通知失敗不丟 authoritative task。
 
 ## Phase 5：memory 與 agentfs projection
 
@@ -70,4 +70,4 @@ Gate：per-actor view、snapshot generation、bytes/list limit、secret filterin
 
 ## 成功標準
 
-不是「支援七個框架 API」，而是同一組小 records/protocol 能表達它們最好的語意，同時保留 freepy 的 Turn/Round、agent path、capability、memory refs 與 OS isolation。
+不是「支援七個框架 API」，而是同一組小 records/protocol 能表達它們最好的語意，同時保留 freepy 的 Round/Step、agent path、capability、memory refs 與 OS isolation。

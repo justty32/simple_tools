@@ -9,7 +9,7 @@
 | memory | A/B | address、resolver、manifest、provenance、budget | object store／search adapter |
 | introspection | A/B | effective snapshot、read-only views | 各 backend 的真實 telemetry |
 | agentfs | B/C | resolver、provider、per-actor projection | FUSE/9P/native mount |
-| Turn control | B | queue、correlation、phase transition | blocking tool/user I/O |
+| Round control | B | queue、correlation、phase transition | blocking tool/user I/O |
 
 ## 最自然的 Lisp 核心
 
@@ -23,8 +23,8 @@ namespace = evaluation environment
 mount     = capability binding
 handle    = resolved reference + authority
 agent     = evaluator with bounded lifecycle
-Turn      = bounded evaluation activity
-Round     = ask → message reduction
+Round      = bounded evaluation activity
+Step     = ask → message reduction
 memory    = quoted object; load = checked dereference
 ```
 
@@ -40,7 +40,7 @@ policy 的集合運算、child 只能縮權、reserve/refund 冪等都適合 Jan
 
 ### Memory／organized context
 
-這一層非常 Lisp：source trace 不變，span 提升成 immutable object，context 是每個 Round 重新編譯的 working set。quote/dereference 是好模型。
+這一層非常 Lisp：source trace 不變，span 提升成 immutable object，context 是每個 Step 重新編譯的 working set。quote/dereference 是好模型。
 
 但 `marshal` 不能成為持久協定。它可做暫存快照，正式格式仍應是版本化 JSON/bytes + content hash，才能跨語言、稽核與遷移。
 
@@ -58,7 +58,7 @@ path 不能同時是 identity、authority、command。namespace 是最小暴露�
 
 ```text
 identity → communication/runtime → team
-Turn/Round → runtime
+Round/Step → runtime
 memory + introspection → agentfs projection
 source trace + memory → context compiler
 ```

@@ -2,6 +2,10 @@
 
 **這份是實作規格，尚未寫程式。** `agentfs` 把正在運作的 agent、組織與 runtime 狀態投影成一棵 synthetic filesystem；概念接近 Plan 9 process files、Linux `/proc` 與 `/sys`。
 
+它在整體 machine 中只負責 namespace projection；process、resource、goal 與 condition/restart
+邊界見 [Agent Machine](../agent_machine/README.md) 與
+[Plan 9／Lisp 規格](../agent_machine/PLAN9-LISP.md)。
+
 ## 一句話
 
 ```text
@@ -37,8 +41,8 @@ metadata 全放在保留目錄 `.agent/`，child agent 仍直接出現在父路�
 /root/
 ├─ .agent/
 │  ├─ state
-│  ├─ turn
 │  ├─ round
+│  ├─ step
 │  ├─ env/<public-name>
 │  ├─ resources/<name>
 │  ├─ permissions/{tools,engines,network,mounts}
@@ -69,7 +73,7 @@ authoritative state 仍由原本各層擁有：
 
 | 路徑 | 提供者 |
 |---|---|
-| `state`、`turn`、`round` | agent_runtime / agentloop Handle |
+| `state`、`round`、`step` | agent_runtime / agentloop Handle |
 | `env/` | runtime 宣告的 public variables |
 | `resources/` | runtime budget pool 的 effective/reserved/used |
 | `permissions/` | runtime effective policy，不是 request policy |
@@ -135,9 +139,9 @@ server 必須把命令轉成現有 typed supervisor/team operation，再做相�
 
 communication 的 inbox 也先不映射成可寫檔案。`send_message` 保持 typed operation；之後若加入 `.agent/inbox`，寫入必須仍走相同 envelope 驗證與原子投信。
 
-## 與 Turn／工具輸入的關係
+## 與 Round／工具輸入的關係
 
-`state` 可顯示 `thinking`、`running_tool`、`awaiting_tool_input`、`paused`、`completed`；`turn` 與 `round` 是小文字檔。讀 agentfs 不會自動啟動或延長對方 Turn。
+`state` 可顯示 `thinking`、`running_tool`、`awaiting_tool_input`、`paused`、`completed`；`round` 與 `step` 是小文字檔。讀 agentfs 不會自動啟動或延長對方 Round。
 
 若 supervisor 決定監看檔案變化並把事件注入 Handle，那是獨立 subscription/control policy。v1 沒有阻塞 `read` 或「等狀態改變」工具。
 

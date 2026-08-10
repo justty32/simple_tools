@@ -36,7 +36,7 @@ calls，那句話進了歷史但呼叫端永遠看不到，畫面上就是一片
 **串流一個字都沒收到就斷線，會在記憶裡留下沒人回答的問題。** 非串流那條有
 `del history[checkpoint:]` 收回來，串流沒有（同樣是因為錯誤發生得太晚）。留著的後果
 是下次再問就變成連續兩則 user message，有些 API 不收。現在 `Reply` 收 `checkpoint`，
-整輪落空時自己退回去。判斷「有沒有講過話」用 `finish_reason is None` —— 正常講完但
+整步落空時自己退回去。判斷「有沒有講過話」用 `finish_reason is None` —— 正常講完但
 內容是空的不算落空，這樣才分得開「模型沒話說」和「話還沒開始就斷了」。
 
 ## 串流的兩個坑（都是原本 llms.py 漏掉的）
@@ -45,9 +45,9 @@ calls，那句話進了歷史但呼叫端永遠看不到，畫面上就是一片
 一小段接起來的，要**依 `delta.index` 分組**才拼得回去（一次可能有多個 call 交錯）。
 原本的 `__next__` 只讀 `delta.content`，所以串流下的工具呼叫整包消失。
 
-**工具輪的歷史要連 `tool_calls` 一起寫回去**，形狀要跟 API 收的一模一樣
-（`{"id", "type": "function", "function": {"name", "arguments"}}`）。少了它，第二輪送
-`tool_results` 時 API 會說對不上。2026-08-05 對 deepseek 和 gemma-4-e4b 都跑過完整兩輪。
+**工具 Step 的歷史要連 `tool_calls` 一起寫回去**，形狀要跟 API 收的一模一樣
+（`{"id", "type": "function", "function": {"name", "arguments"}}`）。少了它，第二步送
+`tool_results` 時 API 會說對不上。2026-08-05 對 deepseek 和 gemma-4-e4b 都跑過完整兩步。
 
 **疊代只吐答案的字**，思考和工具收在旁邊當屬性。理由：`for ch in handler: print(ch)`
 是最常見的用法，把思考混進去會直接印到使用者臉上；而工具碎片要收完才有意義。
@@ -101,7 +101,7 @@ messages 陣列。現在是 `if prompt is not None or images`。
 抄的，沒實打過。LM Studio 開起來之後補打了 `deepseek-chat` 和 `lm-gemma-4-e4b`：
 
 - **`tool_choice`**：兩邊 `"required"` 都真的逼得出呼叫。
-- **`parallel_function_calling`**：兩邊一輪都吐得出 2 個 call（system 要明講「一次全部
+- **`parallel_function_calling`**：兩邊一步都吐得出 2 個 call（system 要明講「一次全部
   叫出來」，不然模型傾向一次問一個）。litellm 對兩邊都回報 `None`。
 - **`response_schema`**：LM Studio 收；**DeepSeek 回 400 `This response_format type is
   unavailable now`**，而 litellm 內建資料庫說它 `True`。**這是第二個謊報，而且方向

@@ -8,14 +8,14 @@
 |---|---|---|
 | JSON encode/decode | `spork/json` 文件與測試 | schema、card、manifest 可直接表示 |
 | OpenAI-compatible HTTP | `modules/llm-http` | `llms` 可有 Janet transport frontend |
-| 多輪 tool loop | fake backend wire test | agentloop 基本 messages/call/result 閉環可行 |
+| 多步 tool loop | fake backend wire test | agentloop 基本 messages/call/result 閉環可行 |
 | vision payload | media 模組與測試 | image content shape 可移植 |
 | fiber/event/channel | `docs/09`、`docs/15` | 可實作非同步控制與 mailbox consumer |
 | subprocess | `modules/pi-shell` | 有 `os/spawn`、pipe、wait、exit code API |
 | FFI/native/embed | `docs/10*`、C examples | 能接 C，但要自負 ownership 風險 |
 | executable build | `project.janet` | 固化核心可包成獨立 CLI |
 
-`test/llm-http-server.janet` 在同一 process 啟假 OpenAI backend，實際驗證 request wire、tool_calls、tool result、第二輪回答、max-rounds、unknown handler、finish reason、usage 與自訂參數。這比僅看 API 文件更能支持移植。
+`test/llm-http-server.janet` 在同一 process 啟假 OpenAI backend，實際驗證 request wire、tool_calls、tool result、第二步回答、舊測試欄位 `max-rounds`（語意是最大 Steps）、unknown handler、finish reason、usage 與自訂參數。這比僅看 API 文件更能支持移植。
 
 ## 本次實跑
 
