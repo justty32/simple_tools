@@ -1,4 +1,4 @@
-"""reply.py — 一個回合的結果。ask() 永遠回傳這個，不管有沒有串流。
+"""reply.py — 一輪的結果。ask() 永遠回傳這個，不管有沒有串流。
 
 bot 說了什麼（text）、要你去做什麼（calls）、想了什麼（reasoning），加上後設：為什麼停
 （finish_reason）、花了多少（usage）、壞了沒（err）。串流與否是同一種東西，非串流的
@@ -15,7 +15,7 @@ from .usage import usage_dict
 
 
 class Reply:
-    """一個回合。err 不是 None 時 bool(reply) 是 False，其餘欄位都是空的。"""
+    """一輪。err 不是 None 時 bool(reply) 是 False，其餘欄位都是空的。"""
 
     def __init__(self, response, llm=None, remember=False, stream=False,
                  err=None, checkpoint=0):
@@ -145,5 +145,5 @@ class Reply:
             # 整輪落空（還沒開口就斷線，或被提前 close）：這輪送出去的訊息一起收回來
             del self._llm.history[self._checkpoint:]
             return
-        # 有 tool_calls 的回合要連工具一起寫回去，下一輪送 tool 結果才對得起來
+        # 有 tool_calls 的輪要連工具一起寫回去，下一輪送 tool 結果才對得起來
         self._llm.history.append(toolcalls.history_message(self._buffer, self._raw_calls))

@@ -2,6 +2,9 @@
 
 **一個函式，讓 bot 自己一直跑。**
 
+一次完整 `run()` 是一個回合（Turn）；裡面每次 `ask() → message` 是一輪（Round）。
+回合內追加指令與工具要求使用者輸入的完整語意規劃在 [TURNS.md](TURNS.md)。
+
 底下三層（[`llms`](../llmkit/llms/README.md)、[`modelcards`](../modelcards/README.md)、
 [`tooljson`](../llmkit/tooljson/README.md)）都是「人推一輪，它動一下」。
 這一層負責**真的去執行、把結果餵回去、決定什麼時候收手**。
@@ -107,7 +110,7 @@ if h.stop == "budget":
 
 四種壞法都會變成一句英文送回模型，讓它自己改一次再試：沒有這個工具、
 參數對不上、工具自己炸了、**args 不是合法 JSON**（小模型和被 `max_tokens`
-切斷的回合的常客）。
+切斷的輪的常客）。
 
 判斷「參數對不對」是**先問簽名再叫**，不是叫下去接 `TypeError` ——
 不然工具內部自己丟的 `TypeError` 會被誤報成「參數對不上」，

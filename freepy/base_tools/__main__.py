@@ -101,7 +101,7 @@ def demo_agent(model):
     reply = bot.ask(
         "工作目錄裡有一個 a/b.txt，把裡面的 two 改成 TWO，然後把改完的內容讀出來給我看。"
     )
-    for _ in range(8):  # 給它幾回合，別讓壞掉的模型無限打轉
+    for _ in range(8):  # 給它幾輪，別讓壞掉的模型無限打轉
         if not reply or not reply.calls:
             break
         for c in reply.calls:

@@ -1,148 +1,151 @@
 # team_tools 規劃
 
-**還沒寫任何程式。** 這份是要審的東西，不是文件。
+**這份是實作規格，尚未寫程式。** `team_tools` 是有上下級、有組織的多 agent 工具集；它建立在 `communication_tools` 與 `agent_runtime` 之上。
 
-讓一個 agent 加入一個團隊，然後跟團隊裡的其他 agent 講話。
-四件事：註冊自己、看有沒有信、讀信、寄信（含廣播）。
+## 分層
 
-跟 `base_tools` 一樣，對外就是 `schemas, dispatch = team_tools.tools()`，
-給 `agentloop` 用。
-
-## 一句話講完
-
-**一個團隊就是一個資料夾。沒有 server、沒有 daemon、沒有 port。**
-
-```
-<root>/<團隊>/members/<名字>.json          誰在這個團隊
-<root>/<團隊>/inbox/<名字>/<檔名>.json     給這個人的信
+```text
+team_tools
+  組織樹、權限、資源帳本、任務與回報
+       │                         │
+       ▼                         ▼
+communication_tools        agent_runtime
+直接傳訊、通知             spawn/stop/collect、實際限制
 ```
 
-`<root>` 吃 `$FREEPY_TEAMS`，預設 `~/.freepy/teams`（比照 `exec_tools`
-的 `FREEPY_TOOLS`）。兩個 agent 只要看得到同一個資料夾就通得了。
+mailbox 不是團隊。訊息只負責通知；成員、grant、allocation 與 task record 才是 authoritative state。讀掉一封信不能讓任務消失。
 
-挑檔案系統當起點的理由只有一個：**多個行程往同一個信箱投信，需要的原子操作
-只有「改名」，而那個檔案系統本來就有。** 換成 sqlite / redis / 一個真的
-message broker 都可以，但那要先有東西在跑；這個版本 `mkdir` 完就能用。
+## 路徑就是組織位置
 
-## 我是誰
+agent 使用 canonical path：
 
-**不是工具，是啟動時設好的。**
-
-```python
-team_tools.set_identity("worker-3")     # 主程式設，模型碰不到
+```text
+/root
+├─ /root/research
+│  ├─ /root/research/web
+│  └─ /root/research/papers
+└─ /root/build
+   └─ /root/build/tests
 ```
 
-跟 `base_tools.set_root()` 同一個道理：那是**關住模型的東西**，不能讓它自己改。
-一個能改自己名字的 agent 可以冒充隊友。
+- `/root` 是組織 root agent。
+- `dirname(path)` 是直接主管；下一段是直接下屬。
+- 一個 leader 管理的 team 是自己的整棵 subtree。
+- spawn child 只能在自己的 path 下建立一段，例如 `/root/build` 產生 `/root/build/tests`。
 
-名字只准 `[A-Za-z0-9._-]`，最多 64 字 —— 它會變成資料夾名字，`../` 不能混進來。
+每段只允許安全名稱，`.agent` 保留給 synthetic filesystem metadata。ancestor 判斷必須比較 path segments，不能用裸 `startswith()`：`/root/a` 不是 `/root/ab` 的祖先。
 
-## 四個工具
+這個設計借 Unix namespace 的好處：身分、隸屬與 scope 用同一個可讀地址表達。但它是邏輯 path，不是宿主路徑；三層共用 `agent_identity.py` 解析。**path 只表示位置，不自動授權**；一個叫 `/root/admin` 的 agent 若沒有 grant，仍沒有管理能力。
 
-| 工具 | 模型看到的 | 做什麼 |
-|---|---|---|
-| `join_team` | `team`, `role` | 在 `members/` 放一張自己的名片 |
-| `check_messages` | `team` | **只看檔名**：幾封、誰寄的、多久以前 |
-| `read_messages` | `team`, `limit` | 真的打開信，讀完就搬走 |
-| `send_message` | `team`, `to`, `text` | 投進對方的 `inbox/`。`to="*"` 就是廣播 |
+v1 不允許 reparent/rename active subtree。路徑移動會同時影響身分、mailbox、task assignee 與 audit，必須等有 migration protocol 才能安全做。
 
-### 為什麼「檢查」和「讀取」要分開
+## 資料布局
 
-因為**它們的代價差一個數量級**。
-
-信的檔名長這樣，資訊全寫在名字裡：
-
-```
-1786284380123-planner-a1b2c3.json
-   ^ 什麼時候    ^ 誰寄的  ^ 防撞號
-```
-
-所以 `check_messages` 只要 `listdir` 一次就答得出「有 3 封，2 封來自 planner」，
-**一個位元組的信件內容都不用讀**。`read_messages` 才會真的把內容塞進 context。
-
-這個差別對 agent 很重要：它可以每輪都便宜地看一眼有沒有事，
-只有真的有事時才花 context 去讀。要是只有一個「讀信」，
-它每次確認都要付全額 —— 或者乾脆不確認。
-
-### 廣播
-
-`to="*"` 就是**寫進團隊裡每一個 `members/` 的信箱，除了自己**。
-
-不做「一份共用的信箱大家各自記已讀」，因為那要維護每個人的讀取位置，
-而且新加入的人到底該不該看到之前的廣播沒有好答案。複製 N 份的成本是
-一則短訊息 × 隊友數，換掉的是一整套已讀狀態 —— 划算。
-
-**廣播不會寄給自己**，不然 agent 會讀到自己剛喊的話再回應一次。
-
-## 一封信長什麼樣
-
-```json
-{
-  "from": "planner", "to": "worker-3", "team": "build",
-  "at": 1786284380.123, "id": "a1b2c3",
-  "text": "a.txt 你處理完了嗎",
-  "broadcast": false
-}
+```text
+<org-root>/
+  organization.json
+  members/root/.../<agent>.json
+  grants/root/.../<agent>.json
+  allocations/root/.../<agent>.json
+  tasks/<task-id>.json
+  reports/<task-id>/<report-id>.json
+  events/<sortable-id>.json
 ```
 
-`text` 就是純字串，**不定義結構化的欄位**（沒有 type、沒有 payload、
-沒有 reply_to）。理由：現在還不知道 agent 之間真的會講什麼，
-先發明一套訊息型別，等於憑空造一堆用不到的抽象。
-真的需要「這是回覆」的時候，那時候的訊息長什麼樣才看得出來該加什麼。
+member 記 canonical path、instance id、role label、status、created/seen。主管由 path 推導，不另存一份可能漂移的 parent。
 
-## 三個會咬人的地方
+event log append-only；其他 JSON 是目前 snapshot。所有 mutation 都帶 operation id，重試不得重複扣資源、重複 spawn 或重複完成任務。
 
-### 1. 投信要原子
+## 權限模型
 
-兩個 agent 同時寄信給同一個人，不能有人讀到寫到一半的 JSON。
+effective permission 是 supervisor 已驗證、正在生效的能力，不是 agent 自己宣稱的 request。類型至少包括：
 
-**寫進同一個檔案系統上的暫存檔，再 `os.replace()` 改名進 inbox。**
-POSIX 保證改名是原子的，所以讀信的人只會看到「還沒有」或「完整的一封」，
-不會看到半封。檔名裡的隨機防撞號負責同一毫秒的兩封不互相蓋掉。
+- 可用 tools、engines。
+- workspace mounts：path 與 `ro`/`rw`。
+- network destinations/protocol。
+- 可委派的 broker/secret routes。
+- `spawn`、`grant`、`allocate`、`assign`、`stop_descendant` 等管理能力。
 
-### 2. 讀完的信搬走，不是刪掉
+授權遵守單調縮減：
 
-`read_messages` 把信搬到 `inbox/<名字>/read/` 底下。
+```text
+child grant ⊆ grantor effective permission
+```
 
-刪掉的話出事就沒得查了 —— agent 之間講了什麼是**最難重現的東西**，
-它取決於時序。留著才有得看。要清就外面自己清，這一包不自動清。
+`grant_permissions` 只能授予自己的 descendant，預設只准 direct child；跨層需明確 `manage_subtree`。撤權要寫事件並通知 runtime 收斂 effective policy；若某權限不能在不中斷 process 的情況下撤除，就停止並用新 policy 重啟，不能只改 JSON 假裝已生效。
 
-### 3. 不做「等一封信」
+## 資源模型
 
-**沒有 `wait_for_message`，只有「現在有沒有」。**
+資源由 `agent_runtime` 的 budget pool 實際保留，team_tools 只提供組織語意與帳本視圖：
 
-一個會阻塞的工具會把 agent 卡在那裡，而 `agentloop` 的預算（時間、輪數）
-是照「一直在動」算的。要等就是外面那條 routine 的事：它拿著 `Handle`，
-可以自己 sleep、自己 `h.say("planner 回你了：...")`。
+- consumable：tokens、rounds、tool calls、金額。
+- capacity：CPU、RAM、PID、GPU visibility、concurrency slots。
+- artifacts：workspace、memory refs、dataset 的 `ro`/`rw` 使用權。
 
-**這條是這份規劃裡最容易做錯的一條。** 一旦有了阻塞的工具，
-「這個 agent 現在在幹嘛」就從「在想 / 在跑工具」多出一個「在發呆」，
-而發呆是看不出跟當掉的差別的。
+`allocate_resources` 必須先 reserve 才寫成功；失敗不留下 allocation。父 agent 的十個 child 不能各自複製父剩餘額度。回收未使用資源要有單一 settlement event，重試不得重複退款。
 
-## 死掉的隊友
+## 任務模型
 
-名片裡記 `joined` 和 `seen`（每次呼叫任何一個 team 工具就更新 `seen`）。
+```text
+draft → assigned → accepted → running
+      → completed → reviewed → closed
+      → failed | cancelled
+```
 
-**不做心跳、不做自動除名。** `check_messages` 回報隊友清單時，
-順便講一句「planner 上次出現在 40 分鐘前」，讓模型自己判斷 ——
-自動除名要挑一個超時秒數，那個數字沒有正確答案，挑錯就會把只是想得比較久的
-隊友踢掉。
+task 至少包含 issuer、assignee path + instance id、parent task、brief、deliverables、permission grant、resource reservation、deadline 與狀態。
 
-## 先不做
+報告是獨立、不可覆寫的 record：progress、blocked、completed、failed。正文保持短，較大的輸出用 `memory:` Markdown links 或 artifact paths。通知透過 `communication_tools` 寄出，但 task/report JSON 才是事實來源。
 
-- **不做跨機器**：先只服務「看得到同一個資料夾」。介面不會因為底下換掉而變。
-- **不做加密 / 簽章**：同一個資料夾裡的人本來就互相信任。
-- **不做訊息型別、不做 RPC**：`text` 是字串，就這樣。
-- **不做已讀回條**。
-- **不做團隊建立 / 解散**：`join_team` 遇到沒有的團隊就直接建資料夾。
+轉派任務會建立 child task，資源從原 task 的 reservation 再切分；不能新生預算。上級可查看 subtree task，但同儕不能因路徑相近就讀取彼此 private task。
 
-## 做的順序
+## 模型工具
 
-1. `paths.py` —— 路徑、身分、名字檢查。**先把「模型碰不到自己的名字」定死。**
-2. `roster.py` —— `join_team` / 看隊友。這一步做完，兩個行程就看得到彼此了。
-3. `mailbox.py` —— 投信（原子改名）、`check_messages`（只看檔名）、`read_messages`。
-4. `__main__.py` 離線關卡 —— 臨時資料夾裡開兩三個假身分互相寄信，
-   驗原子性（同時投 100 封，一封都不能掉）、廣播不寄給自己、讀完搬走。
-5. 接上 `agentloop` 真的跑兩個 agent。
+| 工具 | 作用 |
+|---|---|
+| `team_status` | 看自己的 path、主管、下屬、grants、allocations、tasks |
+| `grant_permissions` | 對下屬授予自己的權限子集 |
+| `allocate_resources` | 對下屬／task 保留資源 |
+| `assign_task` | 建立 task、授權／配額並通知 assignee |
+| `report_task` | 向 issuer 寫 progress/blocked/final report |
+| `review_task` | 接受、退回或關閉下屬的 completed task |
+| `spawn_subordinate` | 組合 runtime spawn、member register 與初始 task |
 
-前四步不需要模型，可以一路寫到底。
+`spawn_subordinate` 是高階 saga，不重寫 spawn 技術：
+
+```text
+reserve resources
+→ derive child policy
+→ agent_runtime.spawn
+→ register member
+→ assign initial task
+→ send notification
+```
+
+失敗時逆序補償。模型不直接呼叫 `join_team`；member identity 只有 supervisor 成功建立 runtime 後才能註冊。
+
+## 回合的關係
+
+一個 task 可跨多個 Turn；一次 Turn 也可處理多筆相關 task。兩者不能用同一個 id 或計數。
+
+主管在下屬 Turn 進行中追加指令，應由 supervisor 經 communication/control plane 送到該 Handle 的 instruction queue；普通 mailbox 到信不會自行打斷模型。工具內部向使用者要輸入則仍屬工具呼叫，不是 task report 或新 Round。
+
+## 不變條件
+
+- 所有管理 mutation 都檢查 actor canonical path、instance id 與 effective grant。
+- path ancestry 不等於權限；權限也不能作用到 grant scope 外。
+- 權限只能縮小，資源必須守恆。
+- task notification 可重送，task transition 不可重複執行。
+- 歷史 member、task、report、event 不刪除；active snapshot 可更新。
+- communication、runtime 或 ledger 任一步失敗都不能回報完整成功。
+
+## 實作順序與關卡
+
+1. 共用根目錄 `agent_identity.py` 的 canonical path parser。
+2. `store.py`：member/grant/allocation/task snapshot + append-only event。
+3. `authority.py`：ancestor scope、permission subset、artifact access。
+4. `tasks.py`：狀態機、report、idempotency。
+5. `tools.py`：先 status/report，再 grant/allocate/assign。
+6. 接 communication notification。
+7. 最後接 `spawn_subordinate` saga 與真 runtime。
+
+必測：path prefix 陷阱、同儕越權、跨 subtree 越權、grant 升權、資源超賣、重試冪等、非法 task transition、通知失敗仍可查 task、spawn 中途失敗完整補償、舊 instance 不能操作同路徑的新 member。

@@ -45,7 +45,7 @@ calls，那句話進了歷史但呼叫端永遠看不到，畫面上就是一片
 一小段接起來的，要**依 `delta.index` 分組**才拼得回去（一次可能有多個 call 交錯）。
 原本的 `__next__` 只讀 `delta.content`，所以串流下的工具呼叫整包消失。
 
-**工具回合的歷史要連 `tool_calls` 一起寫回去**，形狀要跟 API 收的一模一樣
+**工具輪的歷史要連 `tool_calls` 一起寫回去**，形狀要跟 API 收的一模一樣
 （`{"id", "type": "function", "function": {"name", "arguments"}}`）。少了它，第二輪送
 `tool_results` 時 API 會說對不上。2026-08-05 對 deepseek 和 gemma-4-e4b 都跑過完整兩輪。
 
@@ -118,4 +118,3 @@ messages 陣列。現在是 `if prompt is not None or images`。
 
 驗證用的腳本沒留（一次性的），做法是：`/model/info` 先讀出「proxy 宣稱什麼」，
 再對同一顆模型實際送出對應的請求，兩者對照。要重驗照這個路子再寫一支就好。
-

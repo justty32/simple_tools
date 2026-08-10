@@ -34,7 +34,7 @@ def show(reply):
 def agent(bot, dispatch):
     """一問一答，模型要叫工具就照做，把結果送回去，直到它給出文字答案。"""
     reply = bot.ask(TASK, stream=True)
-    for _ in range(8):                         # 給幾回合就好，別讓卡住的模型無限打轉
+    for _ in range(8):                         # 給幾輪就好，別讓卡住的模型無限打轉
         if not reply:
             return reply.err
         show(reply)                            # 這一步會把串流跑完，之後才讀得到 calls
@@ -44,7 +44,7 @@ def agent(bot, dispatch):
             print(f"  -> {c['name']}({c['args']})")
         results = {c["id"]: dispatch[c["name"]](**c["args"]) for c in reply.calls}
         reply = bot.ask(tool_results=results, stream=True)
-    return "回合用完了，模型還在叫工具"
+    return "輪數用完了，模型還在叫工具"
 
 
 with tempfile.TemporaryDirectory() as tmp:

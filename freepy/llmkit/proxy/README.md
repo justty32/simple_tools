@@ -103,7 +103,31 @@ LM Studio 那區用 **YAML anchor**（`&lm` / `<<: *lm`）收掉重複。`-12b-n
 | `response_schema` | ✗ 400 | ✓ |
 | `prompt_caching`（`usage.cached` 真的有數字） | ✓ 512 | ✗ 一直是 None |
 
-`ollama-*` 那批**沒驗**（那台機器連不到），所以刻意不宣告，維持 `None`。
+2026-08-10 遠端 Ollama 恢復連線後，把四顆都經 proxy 實打了一輪：
+
+| | qwen3-32b | qwen2.5-14b | deepseek-r1-8b | gemma3-1b |
+|---|---:|---:|---:|---:|
+| 一般／串流對話 | ✓ | ✓ | ✓ | ✓ |
+| `reasoning_effort: "none"` | ✓ | 不適用 | ✓ | 不適用 |
+| function calling | ✓ | ✓ | ✗ | ✗ |
+| `tool_choice: "required"` | ✗ 無聲忽略 | ✗ 無聲忽略 | 不適用 | 不適用 |
+| parallel function calling | ✓（一輪 2 calls） | ✓（一輪 2 calls） | ✗ | ✗ |
+| JSON schema | ✓ | ✓ | ✓ | ✓ |
+| prompt caching 指標 | ✗ | ✗ | ✗ | ✗ |
+
+最後一列是指 OpenAI usage 裡可觀察到的 cache hit；同一份 800+ token prompt 連打兩次，
+四顆的 `prompt_tokens_details` 都是 `None`。Ollama 內部可能仍重用 KV cache，但 proxy
+呼叫端看不到，能力表因此保守宣告為 `false`。
+
+`tool_choice` 要特別小心：請求不會報錯，但模型會違反 `required` 直接回答文字，所以
+不能只看 HTTP 200 就宣告支援。`/api/show` 回報的原生能力也吻合：兩顆 Qwen 有
+`tools`，qwen3 / DeepSeek R1 有 `thinking`，四顆都沒有 `vision`。
+
+qwen2.5 的 tool calling **有能力但不穩**：英文「use the available tool」能正常回
+`tool_calls`，中文「台北天氣如何？」直打 Ollama `/api/chat`（temperature 0）連續
+5 次都只回泰文夾中文的普通文字；經 proxy 也曾把 `<tool_call>` 當正文吐出。
+同一份 schema 換 qwen3-32b 則能完成中文 tool call 和工具結果回填。需要可靠工具鏈時
+優先用 qwen3，不要把 qwen2.5 的 `supports_function_calling: true` 解讀成每次都會叫。
 
 ## 改完設定要做兩件事
 

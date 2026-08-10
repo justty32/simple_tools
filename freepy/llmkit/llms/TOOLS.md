@@ -38,9 +38,9 @@ print(bot.ask(tool_results=results).text)
 動作的兩種材料，可以一起給（順序是 `tool_results` 先、`prompt` 後）。
 
 `args` 的 JSON 壞掉不會丟例外，會給空 dict 並附上 `args_raw` —— 小模型和被
-`max_tokens` 切斷的回合都會這樣，**執行前記得看一眼有沒有 `args_raw`**。
+`max_tokens` 切斷的輪都會這樣，**執行前記得看一眼有沒有 `args_raw`**。
 
-工具回合的記憶會連 `tool_calls` 一起寫回去，所以第二輪送 `tool_results` 時 API 對得
+工具輪的記憶會連 `tool_calls` 一起寫回去，所以第二輪送 `tool_results` 時 API 對得
 起來。串流也收得到工具，碎片會依 index 拼回同樣的形狀（讀 `reply.calls` 會先把串流
 跑完）。
 

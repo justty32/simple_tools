@@ -47,6 +47,11 @@ model_list:
       supports_function_calling: true
       supports_vision: false
       supports_reasoning: true
+      # 2026-08-10 實打：required 會被無聲忽略，但同一輪可以吐兩個 tool calls。
+      supports_tool_choice: false
+      supports_parallel_function_calling: true
+      supports_response_schema: true
+      supports_prompt_caching: false
 
   - model_name: ollama-qwen2.5-14b
     litellm_params:
@@ -64,6 +69,7 @@ model_list:
     model_info:
       <<: *ol_info
       supports_function_calling: false
+      supports_parallel_function_calling: false
 
   - model_name: ollama-gemma3-1b
     litellm_params:
@@ -72,6 +78,7 @@ model_list:
     model_info:
       <<: *ol_info
       supports_function_calling: false
+      supports_parallel_function_calling: false
       supports_reasoning: false
 
   # 本機 LM Studio（http://localhost:1234/v1，OpenAI 相容，api_key 是佔位假值）

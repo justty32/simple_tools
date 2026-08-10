@@ -75,7 +75,7 @@ class LLM:
             images        本機路徑或 http(s) 網址
             tool_results  {call_id: 執行結果}，等於跟它說「你要的工具跑出這些」
 
-        這回合怎麼跑：
+        這一輪怎麼跑：
             stream        True 的話 Reply 是邊收邊填的，疊代它可以逐字看
             remember      False 就不寫進 history
             tool_choice   "auto" / "none" / "required" / {"type": "function", ...}

@@ -68,7 +68,7 @@ class FakeBot(LLM):
 
 
 def go(bot, dispatch=None, prompt="做事", **kw):
-    """跑完一整圈，回那個 Handle。同步用法就是這一行。"""
+    """跑完一個回合，回那個 Handle。同步用法就是這一行。"""
     return asyncio.run(agentloop.run(bot, dispatch if dispatch is not None else TOOLS,
                                      prompt, **kw))
 

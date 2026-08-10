@@ -38,7 +38,7 @@ proxy 不是必需品，Engine(url=..., key=...) 可以直接打任何 OpenAI �
 檔案分工：
     client.py       LLM class：人格、記憶、能力、ask()
     engine.py       Engine class：端點、模型、旋鈕、這端點做得到什麼
-    reply.py        Reply class：一個回合的結果（串流與否都是它）
+    reply.py        Reply class：一輪的結果（串流與否都是它）
     usage.py        usage 物件 -> 純 dict
     toolcalls.py    tool_calls 在 raw / history / entries 之間搬
     caps.py         問 proxy 這顆模型做得到哪些事

@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>freepy Lisp／Janet 固化評估</title>
+  <style>
+    :root{color-scheme:dark;--bg:#101413;--panel:#18201e;--ink:#e8f0ec;--muted:#a8b8b1;--accent:#81d4a6;--line:#30423b}
+    *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.6 system-ui,sans-serif}
+    main{max-width:960px;margin:auto;padding:48px 22px 72px}h1{font-size:clamp(2rem,5vw,3.7rem);line-height:1.05;margin:.2em 0}
+    .lead{max-width:760px;color:var(--muted);font-size:1.12rem}.badge{display:inline-block;padding:.25rem .65rem;border:1px solid var(--accent);color:var(--accent);border-radius:999px}
+    .verdict{margin:28px 0;padding:22px;border-left:4px solid var(--accent);background:var(--panel)}
+    .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:14px;margin-top:28px}
+    a.card{display:block;padding:18px;text-decoration:none;color:var(--ink);background:var(--panel);border:1px solid var(--line);border-radius:10px}
+    a.card:hover{border-color:var(--accent);transform:translateY(-1px)}.n{color:var(--accent);font-weight:700}.card p{color:var(--muted);margin:.45rem 0 0}
+    table{width:100%;border-collapse:collapse;margin:24px 0}th,td{text-align:left;padding:10px;border-bottom:1px solid var(--line)}th{color:var(--accent)}
+    code{background:#0b0e0d;padding:.15em .35em;border-radius:4px}footer{color:var(--muted);margin-top:42px}
+  </style>
+</head>
+<body><main>
+  <span class="badge">2026-08-10 · evidence-based assessment</span>
+  <h1>freepy 的 Lisp／Janet 固化評估</h1>
+  <p class="lead">評估現有 Python、IDEAS／PLAN 與 langlab-janet 實證，回答哪些語意值得用 Janet 固化、哪些能力應留在 Python 或 Linux backend。</p>
+  <section class="verdict">
+    <strong>結論：可行，建議採混合架構。</strong><br>
+    約 60–75% 的核心語意適合 Janet；provider SDK、TLS/SSE、container、cgroup、FUSE/9P 與平台 process 屬 adapter／OS 邊界。第一個切片應是 <code>tooljson</code> differential implementation。
+  </section>
+  <table>
+    <tr><th>層</th><th>主要 owner</th></tr>
+    <tr><td>探索、provider 生態</td><td>Python</td></tr>
+    <tr><td>資料契約、規則、狀態機、context</td><td>Janet</td></tr>
+    <tr><td>process、container、mount、資源限制</td><td>trusted adapter + Linux</td></tr>
+  </table>
+  <nav class="grid" aria-label="報告章節">
+    <a class="card" href="README.md"><span class="n">00</span> 總覽<p>結論、起點與實跑摘要。</p></a>
+    <a class="card" href="01-method.md"><span class="n">01</span> 方法<p>評級、範圍與固化門檻。</p></a>
+    <a class="card" href="02-current.md"><span class="n">02</span> 現有模組<p>tooljson、agentloop、llms 等逐項判斷。</p></a>
+    <a class="card" href="03-planned.md"><span class="n">03</span> 規劃項目<p>runtime、team、memory、agentfs。</p></a>
+    <a class="card" href="04-janet-evidence.md"><span class="n">04</span> Janet 實證<p>已通過能力與 Windows／HTTP 反證。</p></a>
+    <a class="card" href="05-process.md"><span class="n">05</span> 固化流程<p>從 Python oracle 到 Janet default。</p></a>
+    <a class="card" href="06-architecture.md"><span class="n">06</span> 架構<p>semantic core、adapter 與 TCB 邊界。</p></a>
+    <a class="card" href="07-roadmap.md"><span class="n">07</span> 路線<p>分期、gate 與第一個 PR。</p></a>
+    <a class="card" href="08-risks.md"><span class="n">08</span> 風險<p>反證、安全與待決策事項。</p></a>
+  </nav>
+  <footer>所有本報告檔案均以 8 KiB 為上限；HTML 無外部依賴，可直接離線開啟。</footer>
+</main></body></html>

@@ -1,183 +1,61 @@
 # 想法收件匣
 
-**還沒分類、還沒決定要不要做的東西。** 想到就丟進來，不用先想清楚。
+**只放還沒分類、還沒決定要不要做的東西。** 想到就先丟進來；一旦開始設計，就搬到對應的 `PLAN.md`。已經落地且需要解釋「為什麼」的決定才進 [NOTES.md](NOTES.md)。
 
-跟 [NOTES.md](NOTES.md) 的分工：NOTES 記**已經決定的事和為什麼**，這裡記**還沒決定的**。
-一個想法一旦動手，就從這裡搬去 NOTES 或某個 `PLAN.md`。
-**這個檔不受 150 行的規矩管** —— 收件匣本來就會長，滿了是搬出去，不是拆檔案。
+## 目前分類
 
----
+2026-08-10 已把原本三組想法搬成可實作規格：
 
-## 1. 針對性 fork：拿現在的對話歷史分岔出去，回來只給結論
+跨 package 的依賴、里程碑與第一個實作切片集中在 [ROADMAP.md](ROADMAP.md)。
 
-拿 agent 手上這段對話歷史，**複製一份**，讓那個分身去跑一件事；
-它結束之後總結，只把結論回傳給本體。
+跨 package 的思想綜合與 HTML 導覽見 [Agent World 設計報告](../docs/agent-world/README.md)。
 
-有點像 dry run，又有點像呼叫函數 —— 這兩個比喻各講中一半：
+| 原想法 | 現在的位置 | 分類理由 |
+|---|---|---|
+| agent 之間寄信、查信、廣播 | [communication_tools/PLAN.md](communication_tools/PLAN.md) | 這只是 transport，不是團隊 |
+| 有上下級的多 agent 集合 | [team_tools/PLAN.md](team_tools/PLAN.md) | 組織、授權、資源、任務與回報 |
+| 產出 child agent、針對性 fork | [agent_runtime/PLAN.md](agent_runtime/PLAN.md) | 涉及 lifecycle、sandbox、權限與預算守恆 |
+| `$ref` 卸載／載入 | [memory_tools/PLAN.md](memory_tools/PLAN.md) | 結構化記憶；同時支援 JSON `$ref` 與 Markdown link |
+| context 段落提升成檔案、原位留連結 | [memory_tools/ORGANIZED-CONTEXT.md](memory_tools/ORGANIZED-CONTEXT.md) | 不可變 trace、組織化 memory 與按輪編譯的 working set |
+| 我是誰、在哪、還剩多少 | [introspection_tools/PLAN.md](introspection_tools/PLAN.md) | 唯讀觀察，不屬於 runtime mutation |
+| 用檔案路徑存取 live agent state | [agentfs/PLAN.md](agentfs/PLAN.md) | Plan 9／procfs 式的 synthetic filesystem projection |
+| 用 Linux-as-Lisp 理解 agent namespace | [agentfs/LINUX-AS-LISP.md](agentfs/LINUX-AS-LISP.md) | namespace 是環境、mount 是綁定、fd 是能力引用 |
+| 回合、輪、追加指令、工具輸入 | [agentloop/TURNS.md](agentloop/TURNS.md) | agentloop 的活動與互動語意 |
 
-- **像呼叫函數**：本體只看到「輸入 → 結論」，中間那幾十輪的探查全部不進本體的
-  context。這是它真正的價值 —— **context 是最貴的資源**，探查最花 context 又最不值得
-  留著。
-- **像 dry run**：分身可以去踩地雷（試一個可能錯的方向、跑一個會失敗的指令），
-  結果只是一句話回來，本體的歷史不會被那些失敗汙染。
+依賴方向：
 
-想得到的用法：「你去確認一下這個假設，只告訴我成不成立」、
-「這三個方向各 fork 一個去試，回來比較」。
+```text
+team_tools ──► communication_tools
+     │
+     ├──────► agent_runtime ──► agentloop
+     │                              │
+     └──────► memory_tools          └── Turn / Round
 
-### 已經有的零件
-
-`llmkit` 那邊其實**幾乎都齊了**：`LLM.history` 是一個普通 list，複製一份就是 fork；
-`agentloop.run()` 收任何一個 bot；`Handle.text` 就是回傳值。所以雛形大概是
-
-```python
-def fork(bot, task, limits):
-    child = LLM(engine=bot.engine, system=bot.system, tools=bot.tools)
-    child.history = list(bot.history)          # 分岔點
-    h = asyncio.run(agentloop.run(child, dispatch, task, limits=limits))
-    return h.text                              # 只有結論回去
+introspection_tools 唯讀聚合上述各層的 effective state
+agentfs 將同一批 effective state 投影成受權限控制的檔案 namespace
 ```
 
-### 沒想清楚的
+## 已固定但尚未實作的關鍵決定
 
-- **總結是誰做的？** 分身自己講的最後一句話，還是另外叫它「用三句話總結」？
-  前者便宜但常常答非所問（它以為在跟人講話），後者多一輪但可控。
-- **副作用怎麼辦。** 分身跟本體共用同一個工作目錄，它「試一試」的時候真的改了檔案。
-  dry run 的比喻在這裡會斷掉 —— 除非給分身一個唯讀的 dispatch，或一份 copy。
-  **這條是它跟「呼叫函數」最不像的地方，也是最容易出事的地方。**
-- **分身要不要繼承 `Handle`？** 本體那條 routine 想不想看得到分身在幹嘛。
-- **要不要當成工具給模型自己叫**（`spawn(task)`），還是只給外面的程式用。
-  給模型自己叫的話，預算怎麼分？（fork 出去的花費要算進本體的 `Limits`，
-  不然限制就漏了。）
+- canonical agent identity 用 Unix-like path，例如 `/root/leader/worker`；父路徑是直接主管，subtree 是組織 scope。
+- agent path 是邏輯 namespace，不是宿主 filesystem path；各層共用 `agent_identity.py`。
+- agent path 下保留 `.agent/` 作為 live filesystem 介面；子 agent 仍直接構成組織樹。
+- `agentfs` 的理想模型明確採 Plan 9：每個 agent 是 file server，agent group 是可掛載、可裁切的 namespace；FUSE/9P 是後端，不是核心契約。
+- path 表示組織位置，不自動創造權限；grant 仍由 supervisor 驗證。
+- child 權限只能是父 effective permissions 的子集；可消耗預算要先 reserve，不能複製。
+- `fork` 是 spawn 的 `context="fork"` 模式，不另造一套 runtime。
+- 一個 Turn 從模型啟動到主動停止；一次 `ask() → message` 是一個 Round，工具在兩輪之間執行。
+- 回合內追加指令仍屬同一 Turn；工具要求使用者輸入是 tool call 內部事件，不是新 Round。
+- memory 用同一 resolver 接 `{"$ref":"memory:t7"}` 與 `[內容](memory:t7)`；link 不是授權。
+- source trace 不因 compact 被改寫；每個 Round 保存實際送入模型的 context manifest，段落只從 working set 提升成 memory link。
 
----
+## 尚未分類的新想法
 
-## 2. 自檢：我是誰、我在哪、我剩多少
+目前沒有。新東西先加在這裡，不要直接塞進最像的 package；先問它是在做：
 
-一組給模型自己問的工具，三類：
-
-| | |
-|---|---|
-| **花掉多少** | 現在幾點、開跑到現在多久、幾輪、幾次工具、多少 token、**還剩多少** |
-| **我在哪** | 工作區在哪個資料夾、裡面有什麼、我是不是被關在裡面 |
-| **我能用什麼** | 有哪些工具、哪幾支已經用滿、哪些引擎准用、機器資源的上限 |
-
-理由很直接：這些**現在只有外面那條 routine 看得到**（`Handle.now()`），
-模型自己完全不知道。
-
-- 不知道還剩幾輪 → 沒辦法決定「要不要收斂了」，只會一直做到被硬停掉。
-- 不知道工作區在哪 → 只能靠 `run_shell("pwd")` 去猜，
-  而且它猜不到自己**被關在裡面**（`base_tools` 的 root），
-  只會一直撞牆然後拿到 `outside the workspace`。
-- 不知道自己有哪些工具 → 這件事現在是靠 tool schema 隱含告訴它的，
-  但「`run_shell` 你已經用掉 3/5 次」schema 裡沒有，
-  它只能在撞到限制的那一刻才知道。**太晚了。**
-
-### 已經有的零件
-
-幾乎都有：`Handle`（`round` / `calls` / `used` / `tokens` / `elapsed()`）、
-`Limits`（每一項的上限）、`base_tools.get_root()`（工作區）、
-`dispatch` 的 key（有哪些工具）。所以這其實是**把把手的讀取端包成一個工具給模型**：
-
-```python
-def self_check() -> str:
-    return ("第 3/12 輪，5 次工具，8420/200000 tokens，跑了 31 秒。\n"
-            "工作區 /tmp/ws（所有檔案操作都被關在這裡面）。\n"
-            "可用工具：read_file, write_file, edit_file, run_shell(3/5 已用)。")
-```
-
-一個真實的疑慮：**這串東西塞回去要花 context，而它報告的正是 context 的花費。**
-
-### 沒想清楚的
-
-- **時間為什麼不能塞在 system prompt 裡**：`llms` 的 USAGE.md 已經講過了 ——
-  在 system 裡塞當前時間等於把前綴快取整個砍掉。所以「現在幾點」**必須是工具**，
-  不能是人格的一部分。這條算是已經想清楚的。
-- **告訴它剩多少預算，它會不會反而擺爛？** 「只剩兩輪」很可能讓它草草收尾，
-  也可能讓它跳過該做的檢查。這要實測，不是想得出來的。
-- **要不要主動推**（快用完時自動 `h.say("你只剩兩輪了")`），
-  還是等它自己問。主動推比較可靠，但每次都塞會浪費 context。
-- 自檢工具本身也算一次工具呼叫，**它會吃掉自己在報告的那個預算**。
-  要不要讓它免計？（免計的話 `Limits` 就有例外了，例外會長大。）
-
----
-
-## 3. 整理上下文：`$ref` 式的記憶，配一對載入／卸載
-
-歷史裡佔位子的東西（尤其是工具吐回來的一大坨），**內容搬出去存著，
-原地只留一個 `$ref`**。模型自己挑要把哪些卸掉，需要的時候再叫回來。
-
-借 JSON Schema 的 `$defs` / `$ref` 講法，但**只借一半**：那邊的 `$defs`
-在同一份文件裡，這邊的重點正好是**定義不在文件裡**。實際上更像 symlink
-或 git 的 object store。名字很好用，但別讓人以為它照 JSON Schema 的語意解析。
-
-兩個工具：`memory_unload(ref…)` / `memory_load(ref)`。
-
-### 為什麼這比 compact 好
-
-compact（摘要掉前面那段）是**有損而且單向的** —— 摘完就回不去了，
-而摘要一定會丟掉「我試過 X，失敗了」這種負面結果，然後 agent 再試一次。
-
-`$ref` 是**無損而且可逆的**。內容還在，只是不在 context 裡。
-模型判斷錯了（卸掉了等一下要用的東西）**代價只是一次 `memory_load`**，
-不是永久失去。可逆這件事讓「讓模型自己決定」變成一個可以接受的賭注 ——
-compact 讓模型自己決定就太危險了。
-
-### 一個讓它真的可行的細節：換內容，不換訊息
-
-item 3 舊版本卡在這裡：`history` 不是純文字，帶 `tool_calls` 的 assistant
-message 後面**一定**要接上對應的 tool message，摘掉一半就是一份 API 直接
-打回票的歷史。
-
-`$ref` 繞過去了 —— **卸載是把那則 tool message 的 `content` 換掉，
-不是把訊息刪掉**。訊息骨架原封不動，API 那邊永遠看得到完整的配對。
-留下的票根長這樣：
-
-```
-[unloaded #t7 · read_file("src/engine.py") · 12.4 KB · 第 3 輪
- 要看內容就 memory_load("t7")]
-```
-
-**這張票根就是整個設計的 UX。** 模型只憑它決定要不要叫回來，
-所以「哪個工具、什麼參數、多大、多久以前」四樣都得在上面 ——
-`[unloaded #t7]` 這種光禿禿的票根等於逼它盲猜。
-
-### 已經有的零件
-
-`LLM.history` 是一個普通 list of dict，改某一則的 `content` 就是卸載。
-內容存哪：跟 [team_tools 的規劃](team_tools/PLAN.md)一樣走檔案
-（`<工作區>/.memory/<ref>`），這樣行程重啟後 ref 還解得開，
-而且**別的 agent 拿到 ref 也讀得到** —— 之後 team 那邊要傳一大包東西時，
-傳 ref 比傳內容划算。
-
-### 想清楚了的三條（要反對就在這裡反對）
-
-- **只有工具結果卸得掉。** 人講的話和模型自己講的話不准卸 ——
-  那是任務本身和它的推理鏈，卸掉就變成失憶。而工具輸出本來就佔了九成的量。
-- **`load` 不是塞回原位，是貼在最後面。** 塞回原位又要動一次前綴；
-  貼在最後只是 append，跟平常多一則訊息一樣。代價是歷史的時序會亂
-  （第 3 輪的東西出現在第 12 輪），所以貼回去的時候要註明它原本是哪一輪的。
-  **歷史只長不倒帶**，跟 `llms` 現在的行為一致。
-- **卸載要批次做。** 每 unload 一次就改一次歷史中段，`usage["cached"]` 從那個
-  位置以後整段作廢。一次卸十則跟卸一則的快取代價**一樣**，所以
-  「一次卸一個」是最貴的用法，工具簽名要收 `ref…` 而不是單一個 ref。
-
-### 沒想清楚的
-
-- **卸載真的要模型自己挑嗎？** 有個更省的分法：**卸載自動、載入手動**。
-  自動照政策卸（例如「超過 4KB 且超過 N 輪沒被提到的工具輸出」），
-  模型只負責在需要時叫回來。理由是這兩個判斷的成本差很多 ——
-  「現在該卸什麼」要它評估自己用不用得到（貴、還常估錯 token 數），
-  「我現在需要什麼」它百分之百知道。你原本的講法是兩邊都交給模型，
-  這條值得吵一下。
-- **什麼時候該開始卸。** 撞到 context 上限才卸已經太晚（那一輪先失敗）。
-  要提早就得知道上限，[`modelcards`](modelcards/README.md) 裡有
-  `max_context_length` —— 這會是那張卡第一個「不是能力宣告」的用途。
-- **ref 怎麼命名。** 給模型看的要短要好唸（`t7`），但底層用內容雜湊的話
-  同一個檔案讀兩次可以自動去重。大概是「對外流水號、對內雜湊」兩層。
-- **要不要保留 compact 當第二段。** ref 只是把東西移出 context，總量沒變；
-  真的長到連票根都嫌多的時候，還是需要「把二十張票根摘成一句話」。
-  那時候 compact 是**壓在 ref 之上**的第二層，不是替代品。
-- **跟 [1. fork](#1-針對性-fork拿現在的對話歷史分岔出去回來只給結論) 的分工。**
-  fork 是「探查根本不進來」，卸載是「進來了再搬出去」。
-  fork 比較省（那些 token 一次都沒付過），但要**事先**知道這件事是探查性的；
-  卸載是事後補救，適用於「拿回來才發現是一大坨」。兩個都要，不衝突。
+1. 傳輸資料；
+2. 管理組織與工作；
+3. 建立／限制 execution；
+4. 管理 context／memory；
+5. 觀察 effective state；
+6. 還是修改 agentloop 本身。

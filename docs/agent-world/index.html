@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Agent World 設計導覽</title>
+<style>
+:root{color-scheme:dark;--bg:#0b1020;--panel:#141b2d;--ink:#e9eefb;--muted:#aab5cc;--line:#2b3855;--a:#78dce8;--b:#ffd866}
+*{box-sizing:border-box}body{margin:0;background:linear-gradient(145deg,#090d18,#111a31);color:var(--ink);font:16px/1.65 system-ui,"Noto Sans TC",sans-serif}main{max-width:1050px;margin:auto;padding:40px 22px 70px}h1{font-size:clamp(2rem,6vw,4.3rem);line-height:1.05;margin:.15em 0}.lead{max-width:790px;color:var(--muted);font-size:1.12rem}.tag{display:inline-block;border:1px solid var(--line);border-radius:99px;padding:.25rem .7rem;color:var(--a);margin:.2rem .35rem .2rem 0}.map{margin:28px 0;padding:18px;border:1px solid var(--line);background:#0d1425;border-radius:14px;font-family:ui-monospace,monospace;overflow:auto}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(275px,1fr));gap:14px}.card{display:block;color:inherit;text-decoration:none;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px;transition:.15s}.card:hover{border-color:var(--a);transform:translateY(-2px)}.n{color:var(--b);font:700 .85rem ui-monospace,monospace}.card h2{font-size:1.15rem;margin:.25rem 0}.card p{color:var(--muted);margin:.35rem 0}.wide{grid-column:1/-1}section{margin-top:38px}a{color:var(--a)}footer{margin-top:45px;border-top:1px solid var(--line);padding-top:20px;color:var(--muted)}code{color:var(--b)}
+</style>
+</head>
+<body><main>
+<span class="tag">Plan 9</span><span class="tag">Linux-as-Lisp</span><span class="tag">AgentFS</span><span class="tag">Organized Memory</span>
+<h1>Agent World</h1>
+<p class="lead">把 agent 理解成在私有 namespace 中求值的 process；把記憶理解成可掛載、可追溯的結構；把每一輪模型輸入理解成由 manifest 編譯出的有限 working set。</p>
+<div class="map">path/namespace → agent/team → memory graph → Round context<br>　　　handle/capability ↘ Turn activity ↘ tick/world transition</div>
+
+<section><h2>建議閱讀路線</h2><div class="grid">
+<a class="card wide" href="README.md"><span class="n">START</span><h2>總覽與核心命題</h2><p>三層架構、八個新觀點，以及這套設計是不是 container based。</p></a>
+<a class="card" href="01-path-world.md"><span class="n">01 · SUBSTRATE</span><h2>歸一於路徑</h2><p>canonical identity、per-agent view、path/object/handle、快慢世界與 unipath 實證。</p></a>
+<a class="card" href="02-nine-axes.md"><span class="n">02 · CONTRACT</span><h2>九軸契約</h2><p>概念軸與 metadata fields 的差異；declared/effective/observed；組合推導。</p></a>
+<a class="card" href="03-memory-context.md"><span class="n">03 · COGNITION</span><h2>組織化記憶</h2><p>trace、objects、fact graph、grounding、LOD 與每輪 context manifest。</p></a>
+<a class="card" href="04-time-agency.md"><span class="n">04 · TIME</span><h2>Round、Turn、tick</h2><p>模型、單一 agent、多 agent 世界各自的時間尺度，以及工具內互動。</p></a>
+<a class="card" href="05-protocol-security.md"><span class="n">05 · ENFORCEMENT</span><h2>協定與隔離</h2><p>data/status/ctl、clone transaction、fd capability、secret broker 與 sandbox 邊界。</p></a>
+<a class="card" href="06-roadmap.md"><span class="n">06 · BUILD</span><h2>分期路線</h2><p>從純資料契約、read-only resolver、memory manifest，一路到 9P 與 runtime sandbox。</p></a>
+<a class="card wide" href="SOURCES.md"><span class="n">EVIDENCE</span><h2>來源與可信度</h2><p>區分 ai_core 正式規範、handy 未定案思考、unipath 原型實證與本報告推論。</p></a>
+</div></section>
+
+<section><h2>一句話關係</h2>
+<p><code>namespace</code> 決定 agent 看見的世界；<code>handle</code> 承載已解析的能力；九軸描述節點的執行性質；memory graph 保存證據與推論；context compiler 為每個 Round 選出 working set；Turn 管單一 agent 的活動；tick 才協調多個主體共同改變世界。</p>
+</section>
+
+<section><h2>相關現有規劃</h2><div class="grid">
+<a class="card" href="../../freepy/agentfs/PLAN.md"><h2>agentfs PLAN</h2><p>目前 package 級 namespace、providers、ACL 與 v1 工具。</p></a>
+<a class="card" href="../../freepy/agentfs/LINUX-AS-LISP.md"><h2>Linux-as-Lisp</h2><p>設計隱喻、對應關係與不可過度 Lisp 化的界線。</p></a>
+<a class="card" href="../../freepy/memory_tools/ORGANIZED-CONTEXT.md"><h2>Context filesystem</h2><p>段落提升、manifest、context compiler 與 retention 規格。</p></a>
+<a class="card" href="../sandboxing/README.md"><h2>Sandbox 調查</h2><p>execution isolation 的獨立報告；釐清 agentfs 不等於 container。</p></a>
+</div></section>
+
+<footer>產出限制：本目錄每個檔案皆不超過 8 KB。這是設計報告，不表示相關功能已實作。</footer>
+</main></body></html>

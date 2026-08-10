@@ -62,7 +62,7 @@ if not reply:
 
 ### Reply
 
-一個回合的結果，串流與否都是它：
+一輪的結果，串流與否都是它：
 
 | | |
 |---|---|
@@ -109,7 +109,7 @@ Params(extra={"extra_body": {"chat_template_kwargs": {...}}})  # 非標準的要
 |---|---|
 | `client.py` | `LLM`：人格、記憶、能力、`ask()` |
 | `engine.py` | `Engine`：端點、模型、旋鈕、這端點做得到什麼 |
-| `reply.py` | `Reply`：一個回合的結果，串流與否都是它 |
+| `reply.py` | `Reply`：一輪的結果，串流與否都是它 |
 | `usage.py` | usage 物件 → 純 dict |
 | `toolcalls.py` | tool_calls 在 raw / history / entries 之間搬，含串流碎片的 `Accumulator` |
 | `caps.py` | 問 proxy 這顆模型做得到哪些事，含快取 |

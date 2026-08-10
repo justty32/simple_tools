@@ -59,19 +59,30 @@
 —— 所以 `history`、`pending_calls`、`calls` 全是真的那條路。NOTES 慣例那條
 「不連 proxy 也驗得動 `Reply`」原本是給 `reply.py` 用的，這次整包迴圈都靠它。
 
-## 2026-08-09 兩份只有規劃、還沒動手的東西
+## 2026-08-10 多 agent 規劃拆層
 
-**都還沒寫程式，是要審的東西**：
+原本 [`team_tools/PLAN.md`](team_tools/PLAN.md) 實際只有 mailbox，名稱會讓人以為它已經
+處理組織與授權。現在拆成：
 
-- [`team_tools/PLAN.md`](team_tools/PLAN.md) —— agent 之間怎麼講話。一個團隊就是
-  一個資料夾，沒有 server。裡面比較不明顯的三條：投信靠 `os.replace()` 的原子改名；
-  「檢查有沒有信」只看檔名、「讀信」才開檔（差一個數量級的 context 成本）；
-  **不做會阻塞的 `wait_for_message`** —— 那會讓 agent 多一個「在發呆」的狀態，
-  而發呆跟當掉從外面看是一樣的。
-- [`agentloop/LIMITS.md`](agentloop/LIMITS.md) —— 機器資源那一半。重點是先寫清楚
-  「哪些擋得住、哪些擋不住」：rlimit 只管得到子行程（python 型的工具跟迴圈同一個
-  行程，設下去等於限制自己）、網路和檔案只有 netns / 容器擋得住、
-  GPU 只擋得了「哪幾張卡」不擋得了顯存。
+- [`communication_tools`](communication_tools/PLAN.md)：直接傳訊、原子 mailbox；
+  不知道上下級與任務，也不做阻塞式 `wait_for_message`。
+- [`team_tools`](team_tools/PLAN.md)：建在 communication/runtime 上的組織樹、grant、
+  allocation、task/report。agent 用 `/root/leader/worker` 形式的 canonical path；
+  path 表示組織位置，但不自動等於權限。
+- [`agent_runtime`](agent_runtime/PLAN.md)：spawn/fork/lifecycle。child 權限只能縮小，
+  consumable budget 必須 reserve，受限 agent 不拿 Podman socket。
+- [`memory_tools`](memory_tools/PLAN.md)：無損卸載 tool result，同一 resolver 支援 JSON
+  `$ref` 與 Markdown link；ref 不是授權。
+- [`introspection_tools`](introspection_tools/PLAN.md)：唯讀回答自己在哪、能做什麼、
+  預算還剩多少。
+
+[`agentloop/TURNS.md`](agentloop/TURNS.md) 固定兩層時間單位：一次 `ask() → message` 是
+一輪（Round）；模型從指令啟動、經過多輪與工具、最後主動停止是一回合（Turn）。工具
+向使用者要輸入仍是該 tool call 的內部事件，不另開一輪。
+
+機器資源的原規劃仍在 [`agentloop/LIMITS.md`](agentloop/LIMITS.md)：rlimit 只管得到
+子行程，網路和檔案要靠 namespace／容器，GPU 只容易限制可見裝置，不能承諾 per-process
+顯存硬上限。
 
 ## 2026-08-09 base_tools 接進 tooljson，順手抓到 `from_tool()` 的一個安靜錯誤
 
