@@ -14,7 +14,13 @@ cgroup、rlimit、容器，不是數數字就有的 —— 規劃在 [LIMITS.md]
 
 第二種**不是錯誤**，是情報：模型讀到「run_shell 你已經用滿 5 次了」會換一個方法
 繼續做事，比整條停掉有用得多。
+
+所有限制輸入在建構時驗證。時間與 token 限制是 cooperative：只在新工作開始前
+檢查，可超過一次已開始的 model/tool operation，不是 hard kill。
 """
+
+import math
+from collections.abc import Mapping
 
 
 class Limits:
@@ -22,23 +28,37 @@ class Limits:
 
     def __init__(self, steps=12, calls=None, per_tool=None, tools=None,
                  engines=None, seconds=None, tokens=None, quiet=1):
+        _positive_int("steps", steps)
+        _optional_count("calls", calls)
+        _optional_seconds(seconds)
+        _optional_count("tokens", tokens)
+        _positive_int("quiet", quiet)
+        if per_tool is not None and not isinstance(per_tool, Mapping):
+            raise ValueError(f"per_tool must be a mapping, got {per_tool!r}")
+        caps = dict(per_tool or {})
+        for name, cap in caps.items():
+            _name("per_tool key", name)
+            _optional_count(f"per_tool[{name!r}]", cap, optional=False)
+        allowed_tools = _names("tools", tools)
+        allowed_engines = _names("engines", engines)
+
         #: 模型最多走幾步。這是唯一有預設值的 —— 沒有它，壞掉的模型會永遠跑下去
         self.steps = steps
         #: 工具總共最多叫幾次
         self.calls = calls
         #: 指定某支工具最多叫幾次 `{"run_shell": 5}`
-        self.per_tool = dict(per_tool or {})
+        self.per_tool = caps
         #: 只准用這幾支工具。`None` 是 dispatch 裡的都能用
-        self.tools = set(tools) if tools is not None else None
+        self.tools = allowed_tools
         #: 只准用這幾顆思考引擎（model 名字，就是 proxy 上的 alias）。`None` 是不管
-        self.engines = set(engines) if engines is not None else None
+        self.engines = allowed_engines
         #: 整個 run() 最多跑幾秒（牆上時間，不是 CPU 時間）
         self.seconds = seconds
         #: 最多花掉多少 token，模型每步自己回報的加總
         self.tokens = tokens
         #: 連續幾步不叫工具就當它講完了。預設 1 = 一不叫工具就收工。
         #: 調大就會推它一把再給幾次機會 —— 小模型很常直接講一段話而不動手
-        self.quiet = max(1, quiet)
+        self.quiet = quiet
 
     def exhausted(self, h):
         """預算沒了嗎？回停的原因，還能跑就 `None`。每步開頭問一次。"""
@@ -86,3 +106,42 @@ class Limits:
     def __repr__(self):
         on = {k: v for k, v in vars(self).items() if v is not None and v != {}}
         return f"Limits({', '.join(f'{k}={v!r}' for k, v in on.items())})"
+
+
+def _positive_int(name, value):
+    if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+        raise ValueError(f"{name} must be a positive integer, got {value!r}")
+
+
+def _optional_count(name, value, optional=True):
+    if optional and value is None:
+        return
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        raise ValueError(f"{name} must be a non-negative integer, got {value!r}")
+
+
+def _optional_seconds(value):
+    if value is None:
+        return
+    if (isinstance(value, bool) or not isinstance(value, (int, float))
+            or not math.isfinite(value) or value < 0):
+        raise ValueError(f"seconds must be a finite non-negative number, got {value!r}")
+
+
+def _name(label, value):
+    if not isinstance(value, str) or not value:
+        raise ValueError(f"{label} must be a non-empty string, got {value!r}")
+
+
+def _names(label, values):
+    if values is None:
+        return None
+    if isinstance(values, (str, bytes)):
+        raise ValueError(f"{label} must be an iterable of names, not {values!r}")
+    try:
+        names = set(values)
+    except (TypeError, ValueError) as err:
+        raise ValueError(f"{label} must be an iterable of names, got {values!r}") from err
+    for value in names:
+        _name(f"{label} item", value)
+    return names

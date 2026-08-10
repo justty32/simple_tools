@@ -3,27 +3,23 @@
 四層裡的第四層（見 [../NOTES.md](../NOTES.md)）。底下三層讓模型會講話、會開口要
 工具，但每一步都是人在推；這一層負責**真的去執行、把結果餵回去、決定什麼時候收手**。
 
-只有一個函式和一個把手：
+只有一個阻塞函式和一個把手：
 
-    import asyncio, agentloop, base_tools
+    import agentloop, base_tools
     from llms import LLM
 
     schemas, dispatch = base_tools.tools()
     bot = LLM(tools=schemas)
 
-    h = agentloop.Handle()                              # 外面那條 routine 的把手
-    task = asyncio.create_task(
-        agentloop.run(bot, dispatch, "把 a.txt 裡的 two 改成 TWO", h))
-
-    while not h.done():                                 # 另一條 routine：問狀況
-        await asyncio.sleep(1)
-        print(h.now())                                  # 第 2/12 步，正在跑 run_shell
+    h = agentloop.run(bot, dispatch, "把 a.txt 裡的 two 改成 TWO")
     print(h.text, h.stop)
 
-同步的話一行就好：`asyncio.run(agentloop.run(bot, dispatch, "..."))`。
+`run()` 直接等到 Round 結束。它不建 task、不開 thread，也沒有 async 版本；
+需要背景執行時由上層 runtime 包裝。
 
-把手也下得了指令：`h.say("別再讀了，直接寫檔")`、`h.pause()` / `h.resume()`、
-`h.ask_stop()`。都是下一步開頭生效，不會打斷正在跑的那一步 —— 模型那次 HTTP
+把手可以改下一步：`add_instruction()`、`add_images()`、`add_tools()`、
+`set_ask_options()`；也能 `pause()` / `resume()` / `ask_stop()`。都是下一步開頭
+生效，不會打斷正在跑的那一步 —— 模型那次 HTTP
 和跑到一半的工具本來就停不下來，假裝停得下來只會讓人以為工具沒跑過。
 
 放它自己跑之前先給預算，`Limits` 見 [limits.py](limits.py)：

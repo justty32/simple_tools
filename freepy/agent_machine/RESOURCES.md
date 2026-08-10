@@ -60,12 +60,12 @@ OS cgroup 只管真 process 的 CPU/RAM/PID/I/O。Agent Machine 用同樣形狀�
 ## Endpoint scheduler v1
 
 每個 endpoint/model pool 維護 concurrency、RPM/TPM buckets、健康／backoff、estimated cost 與
-cache affinity。排程單位是 Step，不是整個 Round。
+cache affinity。排程單位是 Step attempt，不是整個 Round；有 message 才提交成 Step。
 
 1. 只將 context、policy、budget 都準備完成的 Round 放進 `runnable`。
 2. 先按 priority class；同級以 team/owner 做 weighted fair queue，等待時間提供 aging。
 3. admission 同時取得 endpoint slot、rate permit 與最大成本 reservation。
-4. Step 發出後通常 cooperative 跑完；cancel 是 best effort，不假裝可回收已花成本。
+4. Step attempt 發出後通常 cooperative 跑完；cancel 是 best effort，不假裝可回收已花成本。
 5. 回傳後 charge actual usage、更新 latency/error pressure，再釋放 slot。
 6. 429/5xx 進 pool-level backoff + jitter，避免每個 Round 各自形成 retry herd。
 

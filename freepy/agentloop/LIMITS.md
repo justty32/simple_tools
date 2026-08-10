@@ -18,6 +18,15 @@ agentloop.run(bot, dispatch, "…", limits=agentloop.Limits(
 
 不給就是 `Limits()`：12 步，其餘不限。
 
+`Limits` 在建構時 fail fast：`steps` 和 `quiet` 必須是正整數；`calls`、
+`tokens` 和單一工具次數必須是 `None` 或非負整數；`seconds` 必須是
+`None` 或有限非負數；`per_tool` 要是 mapping，tool/engine 名稱要是非空字串。
+非法值直接拋 `ValueError`，不會讓半個 Round 先跑起來。
+
+這些都是**合作式限制**：迴圈只在還沒提交新 Step 或 tool batch 的安全邊界
+檢查。`seconds` / `tokens` 可能超過最後一次 model/tool operation；它們不會強殺
+已送出的 HTTP，也不會切斷已開始的 tool batch。
+
 **擋法分兩種，這是這一包最重要的一個決定：**
 
 - **預算真的沒了** → 停整個 agent（Step、時間、token、總次數、引擎）

@@ -32,7 +32,6 @@ queued -> runnable -> leased -> running_step
    ^                              |
    |                              v
    +--- waiting_tool <- settling proposal
-   +--- waiting_input
    +--- paused
 
 running_step -> candidate | failed | cancelled | exhausted

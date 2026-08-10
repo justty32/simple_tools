@@ -27,10 +27,9 @@ runner、alias、mode、table 與專用 research workflow 全部退出 runtime�
 四層疊完了。[`agentloop`](agentloop/README.md) 只有一個函式 `run()` 和一個把手
 `Handle`，但形狀是想過的：
 
-**`run()` 是 async 的，把手是同步的。** 兩件會擋住的事（模型那次 HTTP、工具本體）
-丟進 `asyncio.to_thread`，所以 event loop 不會被卡住；把手上的 `now()` / `say()` /
-`pause()` 全是普通函式，別的 coroutine、別的 thread、REPL 都問得動、按得動。
-這是「放著跑 + 另一條 routine 盯著」那個用法唯一撐得住的組合。
+**`run()` 是同步阻塞的。** 它直接等模型 HTTP 和工具完成，不建 task、
+不開 thread，也不提供 async 版本。需要非同步或背景執行時，由上層 runtime
+把它放進 worker。`Handle` 仍是 thread-safe 的同步控制面。
 
 **沒有「立刻中斷」。** 指令一律下一步開頭生效。理由是 HTTP 和跑到一半的工具本來就
 停不下來，硬做出一個 `cancel()` 只會讓人以為工具沒跑過 —— 那比等它跑完危險。
@@ -67,9 +66,10 @@ runner、alias、mode、table 與專用 research workflow 全部退出 runtime�
 
 ### 驗證：假的回應物件餵真的 `Reply`
 
-35 關全離線。`FakeBot` 繼承真的 `LLM`，只是 `ask()` 照劇本吐 `Reply(假 response)`
-—— 所以 `history`、`pending_calls`、`calls` 全是真的那條路。NOTES 慣例那條
-「不連 proxy 也驗得動 `Reply`」原本是給 `reply.py` 用的，這次整包迴圈都靠它。
+全部關卡都離線。`FakeBot` 繼承真的 `LLM`，只是 `ask()` 照劇本吐 `Reply(假 response)`
+—— 所以 `history`、`pending_calls`、`calls` 全是真的那條路。新增的邊界關卡用
+`threading.Event` 固定 instruction/completion、pause/stop 與 model/tool 同時到達的時點，
+不靠運氣 sleep。
 
 ## 2026-08-10 多 agent 規劃拆層
 
@@ -219,7 +219,7 @@ qwen3.5-9b 標成 `vlm` 卻沒把 vision 列進 `capabilities`。所以 card 的
 - **沒有 test，驗證靠實跑**：`cd freepy/llmkit && uv run python -m tooljson`（離線，
   45 關）、
   `PYTHONPATH=llmkit uv run python -m base_tools`（離線，26 關）、
-  `PYTHONPATH=llmkit uv run python -m agentloop`（離線，35 關）和
+  `PYTHONPATH=llmkit uv run python -m agentloop`（離線）和
   `uv run python -m llms <一般模型> <思考模型>`（要 proxy，五關）。
   串流＋工具、串流＋思考這種組合 `__main__.py` 沒涵蓋，要另外手動打一次
   （`try.py` 就是串流＋工具）。

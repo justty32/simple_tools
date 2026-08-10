@@ -17,23 +17,26 @@ bot 從磁碟喚醒、待命、沉睡，以及 leader 的控制流程見 [`BOT-L
 這在架構上可行，但有兩個修正：
 
 1. 瓶頸不只有網路。endpoint 的並發、token/minute、prompt 大小與遠端推理時間通常最重；本機 tool 仍可能吃 CPU、RAM、磁碟、網路，甚至啟動 build／browser。
-2. bot 資料可冷藏，不代表把一萬個 `agentloop.run()` 都建成 asyncio task 就免費。queued Round 也應持久化；只有拿到資源 lease 的工作才進 runtime。
+2. bot 資料可冷藏，不代表把一萬個阻塞的 `agentloop.run()` 都放進 worker
+   就免費。queued Round 也應持久化；只有拿到資源 lease 的工作才進 runtime。
 
 ## 三種不同的東西
 
 ```text
 Bot record    身分、system、history ref、tool specs、policy；可長期 dormant
 Round record   一次目標與控制生命週期；queued/running/paused/done
-Step attempt 一次 endpoint request -> 完整 response/error；真正的 thinking 排程單位
+Step attempt 一次 endpoint dispatch；可能留下完整／部分 message，也可能完全落空
 ```
 
-Round 是使用者看見的工作單位，Step 是 endpoint scheduler 的 dispatch 單位。工具發生在兩個 Step 之間，走另一組 tool worker 資源；不計 Step，但要計 calls、CPU/時間及副作用。
+Round 是使用者看見的工作單位；Step 是一次成功留下 message 的 `ask()`，Step attempt
+才是 endpoint scheduler 的 dispatch 單位。工具發生在兩個 Step 之間，走另一組
+tool worker 資源；不計 Step，但要計 calls、CPU/時間及副作用。
 
 ## 建議執行模型
 
 ```text
              endpoint A queue -- semaphore / rate budget --+
-runnable Round                                               +-> Step
+runnable Round                                               +-> Step attempt
              endpoint B queue -- semaphore / rate budget --+
                                                                |
                        response calls tools                     v
@@ -42,10 +45,12 @@ Round done <- final response <- runnable again <- tool queue/workers
 
 - **N 個 bot records**：大多不載入記憶體。
 - **M 個 queued/running Rounds**：以 durable records 保存，不用一 Round 一 thread。
-- **K 個 active Steps**：K 受 endpoint/model 的 concurrency、rate limit 與 token budget 限制。
+- **K 個 active Step attempts**：K 受 endpoint/model 的 concurrency、rate limit 與 token budget 限制。
 - **T 個 active tool jobs**：獨立限制，避免一堆 shell/build 把 thinking scheduler 拖死。
 
-一個 Step 結束後更新 history 與 Round record：若有工具，送 tool queue；工具結果完整落盤後，Round 才重新成為 runnable。若是 final response／error／budget，進 terminal state。這沿用目前的 Round／Step／tool batch 語意，而不是另造一套 loop。
+一次 attempt 結算時，有 message 才提交 Step 並更新 history 與 Round record：若有工具，
+送 tool queue；工具結果完整落盤後，Round 才重新成為 runnable。完全落空或其他
+error／budget 進 terminal state。這沿用目前的 Round／Step／tool batch 語意。
 
 ## scheduler 最小語意
 
@@ -55,7 +60,7 @@ Round done <- final response <- runnable again <- tool queue/workers
 - priority + fair queue，避免一個團隊或超長 Round 永久吃滿 endpoint。
 - dispatch 前發 lease；完成後以 attempt id 原子提交，逾時 lease 可回收。
 - 同一 bot 同時只准一個會修改同一 history branch 的 Round，或明確 fork branch。
-- instruction、pause、stop 在既定 safe boundary 生效；不假裝能撤銷已送出的 Step。
+- instruction、pause、stop 在既定 safe boundary 生效；不假裝能撤銷已 dispatch 的 attempt。
 - tool worker 另有 root、allowlist、calls/time 與 concurrency policy。
 - crash 後可從 records 判斷 queued、leased、settling、done；副作用工具不可盲目重跑。
 
@@ -106,7 +111,7 @@ Claude Code、Codex、Pi 不是被放棄，而是變成 operator terminal：
 - 人與領頭／窗口 agent 在其成熟 UI 對話。
 - 它經 MCP／extension 查 team status、向某個 Round 追加指令、讀報告、啟停工作。
 - 背景 bot 不各自啟一份 CLI，不各自維持 TUI/session process。
-- 領頭 agent 也不能繞過 scheduler 直接把幾千個 Step 同時送 endpoint。
+- 領頭 agent 也不能繞過 scheduler 直接把幾千個 Step attempts 同時送 endpoint。
 
 換句話說：借它們的 UX，但 scheduling authority 與 durable truth 留在 freepy。
 
@@ -114,5 +119,5 @@ Claude Code、Codex、Pi 不是被放棄，而是變成 operator terminal：
 
 不打斷 `agentloop` 的既有修正順序，但 scheduler 的純資料模型現在可以獨立開始。第一個 scale
 prototype 已列為 Agent Machine M0 + M1：用 fake endpoint 跑「一萬個 dormant bot records、
-幾百個 queued Rounds、固定 K 個 active Steps」，驗 resource conservation、fairness、late result
+幾百個 queued Rounds、固定 K 個 active Step attempts」，驗 resource conservation、fairness、late result
 與有界 active memory；不開一萬個真 CLI，也不先做 dashboard、HTTP 或 FUSE/9P。

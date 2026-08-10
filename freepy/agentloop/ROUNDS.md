@@ -1,6 +1,6 @@
-# Round、Step 與工具輸入
+# Round 與 Step
 
-這份定義 `agentloop` 對外的活動單位，並規劃目前 `run()`／`Handle` 要補的語意。
+這份定義 `agentloop` 對外的活動單位，以及 `run()`／`Handle` 的控制語意。
 
 ## 固定術語
 
@@ -8,7 +8,8 @@
 
 從模型因一筆指令啟動，到模型完成一連串工具動作、最後主動不再呼叫工具而停止。一次回合可以包含很多步與工具呼叫。
 
-使用者在回合尚未結束時追加指令，指令會在下一步送入，回合繼續；不另開新回合。若完成狀態已經原子確立，之後的新指令才開下一回合。
+使用者在回合尚未結束時追加輸入或更改設定，變更會在下一步生效，回合繼續；
+不另開新回合。若完成狀態已經原子確立，之後的變更才由 supervisor 開下一回合。
 
 ### 步（Step）
 
@@ -45,73 +46,91 @@ ask(prompt / images / tools / tool_results / 追加指令 ...)
 ## Round 狀態機
 
 ```text
-idle → thinking → running_tools → thinking ... → completed
-             ↘ awaiting_tool_input ↗
-任意 active state → paused → 原狀態
-任意 active state → stopped | budget | error | length
+idle → active（thinking ↔ tool）→ completed
+                 ↕
+               paused
+
+active → error
 ```
 
-未來每回合產生不可重用的 `round_id`，記錄 started/finished、初始指令、追加指令、Steps、tool calls、usage 與 stop reason。`Handle` 是一個 Round 的把手；若同一 bot 開新回合，應建立新 Handle，bot history 則可延續。
+`completed` 是正常完成。`paused` 不是結束，它保證還能 `resume()` 回 active。
 
-## 回合內追加指令
+`error` 是所有非正常終止的總類，包括 `stopped`、強制中止、`budget`、`length`、
+端點錯誤、引擎錯誤與其他預算用完。進入 error 後，這個 Round 已結束，
+不保證能繼續。`Handle.stop` 仍保留具體原因，方便知道是哪一種 error。
 
-`Handle.say(text)` 改名或補一個語意更清楚的 alias：
+現在 `Handle` 就是一個 Round 的 one-shot 把手；若同一 bot 開新回合，必須建立
+新 Handle，bot history 則可延續。重用或同時使用同一 Handle 會立即失敗；
+同一 bot 也不要同時交給兩個 `run()`，因為兩邊會同時改同一份 history。
+簡單說：等上一個 `run()` 結束，再開下一個。
+
+`round_id` 與完整 event trace 仍延後；未來可記錄 started/finished、初始指令、
+追加輸入與設定、Steps、tool calls、usage 與 stop reason。
+
+## 回合內重新配置下一個 Step
+
+Round 途中有很大的操作空間；當前 operation 不切斷，下一個 Step 可以收到新的
+輸入、能力與 `ask()` 選項：
 
 ```python
 handle.add_instruction(text)
+handle.add_images("screen.png", "https://example.com/photo.jpg")
+handle.add_tools(schemas, dispatch)
+handle.set_ask_options(tool_choice="required", stream=True)
 ```
 
 規則：
 
 - 不打斷正在進行的模型 request 或工具。
-- 排入 FIFO，在下一次 `ask()` 合併送入。
-- 若模型本步沒有 tool calls，但 queue 已有追加指令，不能先結束回合。
+- 文字與圖片排入 FIFO，只送下一次 `ask()`；目前多媒體 adapter 只支援圖片。
+- tool schema 與同名 dispatch 必須一起提交，從下一個 Step 起持續可用；同名就是替換。
+- ask options 從下一個 Step 起持續生效，傳 `None` 清除。`stream=True` 仍由阻塞的
+  `run()` 收完，不表示 agentloop 會向外廣播 chunks。
+- `prompt`、`images`、`tool_results` 與 `remember` 是 loop 維持 history 協定所需的
+  欄位，不能從 ask options 覆蓋。
+- 若模型本步沒有 tool calls，但 queue 有任何變更，不能先結束回合。
 - completion 判斷與 enqueue 必須共用 lock，解決「最後一步剛回來、使用者同時插話」的 race。
-- completion 已提交後才到達的指令，明確拒絕並回 `round already completed`，由 supervisor 開新 Round；不能安靜遺失。
+- completion 已提交後才到達的變更，明確拒絕並回 `round already completed`。
+- stop 已接受後的新變更回 `round is stopping`；已排隊但尚未送出的變更不越過 stop。
 
 `quiet > 1` 的 nudge 也算 supervisor 對同一回合追加的控制指令。預設 `quiet=1` 時，一則完成且無 tool calls 的模型 message 就表示主動靜止。
 
-## 工具內部要求使用者輸入
+## pause / 合作式 stop 的安全邊界
 
-這不是新指令、不是新步驟，也不直接寫成 LLM user message。它不另外「延長一個回合」；原回合本來就要等這次工具呼叫完成。工具只是進入可觀察的等待狀態：
+「安全邊界」的意思只是：**不要把一件已開始的事切成一半**。
 
-```python
-value = tool_context.request_input(
-    prompt="選擇部署環境",
-    choices=["staging", "production"],
-    secret=False,
-    timeout=300,
-)
-```
+- 模型正在產生一個 Step 時，合作式控制會等這次 `ask()` 自己收尾。
+- 工具正在執行時，先跑完當前這批工具。
+- `pause()` 在上述事情完成後暫停，所以之後可以從明確的位置繼續。
+- `ask_stop()` 也先等當前事情收尾，然後將 Round 結束為 error，不再開始新工作。
 
-supervisor/UI 收到 `ToolInputRequest(request_id, tool_call_id, ...)`，再用獨立入口回覆：
+如果工具已經執行，它的結果必須先登記回 bot history；否則下次開新 Round 時，
+系統可能以為工具還沒跑過，把副作用重做一次。這就是為什麼 stop 不是立刻切斷。
 
-```python
-handle.provide_tool_input(request_id, value)
-```
+## operation 在中途被強行中止
 
-只有 request id 相符的等待工具能取走輸入。一般 `add_instruction()` 不會誤送給工具，`provide_tool_input()` 也不會進 bot history。工具完成後，其最終結果照常成為下一步的 tool result。
+這種中止只結算當前 Step 或 tool call，不等於殺掉整個實例。
 
-敏感輸入可標 `secret=True`：不寫 event payload、不出現在 `now()`、不自動包含於 tool result；是否傳給外部程序由該工具自己的 policy 決定。
+### Step 中斷
 
-## 為什麼這不等於 wait_for_message
+Step 的邊界就是 `ask() → message`，不需要 agentloop 猜 HTTP request 到了哪裡：
 
-communication 的 `wait_for_message` 是 agent 等另一個 agent，可能無期限閒置；仍不提供。
+- `Reply` 沒有留下任何 message：llms 回滾這次新增的 history，agentloop 不計 Step。
+- `Reply` 已留下完整或部分 message：保留 message，agentloop 計一個完成的 Step。
+- 部分 message 可以同時帶 `reply.err`；這時 Step 已完成，但 Round 仍以 error 結束。
 
-tool input 是一筆已在執行中的 tool call 主動產生、帶 request id、prompt、timeout 與取消語意的明確等待。`Handle.now()` 能顯示 `awaiting_tool_input`，所以外部可區分等待與卡死。
+串流 `Reply` 已負責累積片段、提前 `close()` 與「完全落空就回滾」。agentloop 若把
+`stream=True` 設為 ask option，仍會同步收完整個 Reply 後才跨過 Step 邊界。
 
-## 預算與停止
+### tool call 中斷
 
-- 一次 tool input 不增加 Step，也不增加 tool call 數。
-- 等待時間是否計入 Round wall-clock limit 要明確配置；預設仍計入，避免無限掛住。
-- tool 自己可有 input timeout；timeout 後回一般工具錯誤字串，模型下一步可改做法。
-- `ask_stop()` 必須喚醒等待中的工具並送 cancellation；不能只改 flag 留下 blocked thread。
-- `pause()` 不取消工具，也不攔工具輸入；它只阻止下一步模型 request。
+當作這次工具執行失敗，產生一筆錯誤 tool result 並照常回填 history。
+若 Round 本身沒有被中止，模型下一個 Step 可以根據這筆錯誤改做法。工具在被中斷前
+已產生的外部副作用仍可能存在，錯誤結果不代表自動 rollback。
 
-## 要改的既有位置
+工具必須支援取消，或在可終止的獨立 process 裡執行，才能真正實現中途中斷。
 
-1. `Handle`：`round_id`、thread-safe instruction queue、tool input request/response、active state lock。
-2. `loop._settle()`：傳入 `ToolContext`，辨識 awaiting input，停止時取消。
-3. `loop.run()`：沒有 tool calls 時先原子檢查 instruction queue，再 commit completion。
-4. `calling.perform()`：保留現有普通 function，相容可選的 context-aware tool protocol。
-5. `__main__.py`：補回合內最後邊界插話、工具輸入、timeout、secret、stop cancellation 測試。
+## 整個實例被強制終止
+
+Ctrl-C、SIGTERM 或直接殺 process 屬於不可抗力。這種情況不做收尾保證：
+當時已經保存什麼就留下什麼，尚未保存的狀態可以遺失。

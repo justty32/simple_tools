@@ -11,7 +11,9 @@
 
 因此不必重做單一 agent 的聊天、diff、approval、terminal；但仍要做適合大規模編排的原生介面。規模與 scheduler 判斷另見 [`CONTROL-PLANE.md`](CONTROL-PLANE.md)。
 
-眼前順序不變：先照 [`agentloop/PLAN.md`](agentloop/PLAN.md) 完成 Round／Step 與 thread-safe Handle，交使用者審核。adapter 與大規模 scheduler 都在其後。
+`agentloop` 的 Round／Step、thread-safe Handle 與控制邊界已收進
+[`agentloop/README.md`](agentloop/README.md) 與 [`agentloop/ROUNDS.md`](agentloop/ROUNDS.md)。
+adapter 與大規模 scheduler 在這個單 agent v1 之後。
 
 ## 先分清誰擁有 loop
 

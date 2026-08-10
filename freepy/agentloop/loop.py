@@ -1,4 +1,4 @@
-"""loop.py — 一個函式：讓 bot 一直跑到它不再叫工具（或預算用完）為止。
+"""loop.py — 一個阻塞函式：讓 bot 跑到它不再叫工具為止。
 
 模型開口要工具 → 這裡真的去跑 → 結果餵回去 → 它再走一步，這樣一來一回。
 
@@ -6,29 +6,25 @@
 `pending_calls`，`dispatch` 只要是 `{名字: fn(**kwargs)}`。
 """
 
-import asyncio
+import time
 
 from .calling import perform
+from ._control import TICK, start_step, start_tools
 from .handle import Handle
+from ._inputs import apply_tool_updates
 from .limits import Limits
 
 #: `limits.quiet > 1` 時，模型不叫工具就推它一句。只有調大過才會用到
 NUDGE = "還沒做完的話就用工具動手，不要只描述你打算做什麼；做完了就直接講結論。"
 
-#: 暫停中多久回頭看一次有沒有被放行
-TICK = 0.1
 
-
-async def run(bot, dispatch, prompt=None, handle=None, limits=None, images=None):
+def run(bot, dispatch, prompt=None, handle=None, limits=None, images=None):
     """讓 bot 一直跑到它不再叫工具為止，回傳那個 `Handle`。
 
-        h = agentloop.Handle()
-        task = asyncio.create_task(agentloop.run(bot, dispatch, "把 a.txt 改一改", h))
-        ...                                  # 另一條 routine 拿 h 問狀況、下指令
-        await task
+        h = agentloop.run(bot, dispatch, "把 a.txt 改一改")
 
-    同步要的話就 `asyncio.run(run(bot, dispatch, "..."))`。會擋住的兩件事
-    （模型那次 HTTP、工具本體）都丟到 thread 去跑，所以 event loop 不會被卡住。
+    `run()` 是同步阻塞 API：直接等模型 HTTP 和工具完成。需要非同步的
+    上層自己放進 thread/task，這一包不另外提供 async API。
 
     `limits` 見 [limits.py](limits.py)，不給就是 `Limits()`（12 步，其餘不設限）。
     停的原因在 `handle.stop`：
@@ -41,61 +37,82 @@ async def run(bot, dispatch, prompt=None, handle=None, limits=None, images=None)
         error     llms 那邊回了錯（`handle.err`）
         stopped   外面叫它收手
 
-    除了 done / length / error 以外，停下來時最後那批工具**還沒跑**，債留在
-    `bot.history` 上。同一個 bot 再叫一次 `run()` 就從那裡接下去，工具不會跑兩遍。
+    預算在 tool batch 開始前用完，或 stop 在 model 中到達時，新 calls 留在
+    `bot.history` 等下個 Round。stop 在 tools 中到達時則跑完整批，
+    多用一個 settlement Step 送回 results，才停下且不執行新 calls。
 
-    `prompt` 是第一句話，之後要插話用 `handle.say()`。`images` 只跟第一句一起送。
+    `prompt` 是第一句話，之後用 `handle.add_instruction()`（或短名
+    `handle.say()`）追加。`images` 只跟第一個 Step 一起送。
 
-    **這裡不串流。** 逐字看是給人看的，這個迴圈是放著自己跑的，兩件事的用法對不上
-    —— 要逐字看就自己 `bot.ask(stream=True)`（`../try.py` 就是那樣）。
+    預設不串流；`handle.set_ask_options(stream=True)` 可以改 endpoint transport，
+    但 `run()` 仍會阻塞收完，不負責把 chunks 廣播給外層。
     """
     h, lim = handle or Handle(), limits or Limits()
-    h.begin(lim)
+    # begin 和初始指令一起提交，不讓 stop/say 插在半啟動的縫裡。
+    # 這一行刻意在 try 外：Handle 重用是 caller contract error，要 fail fast。
+    h.begin(lim, prompt, images)
 
-    # 上次跑到一半停掉的話，history 最後會是一則欠著工具結果的 assistant message，
-    # 這時候直接再講一句會被 API 打回票。所以每一步都從「先還債」開始 —— 順便讓
-    # 「再叫一次 run() 就接著跑」跟平常的迴圈走完全同一條路
-    owed = bot.pending_calls
-    h.say(prompt)  # 第一句話跟外面插的話走同一條路，所以不給 prompt 也行
+    try:
+        # 上次跑到一半停掉的話，history 最後會是一則欠著工具結果的
+        # assistant message。每一輪都先還這批債，續跑和平常迴圈才會走同一條路。
+        owed = bot.pending_calls
 
-    for _ in range(lim.steps):
-        while h.paused and not h.stopping:
-            h.phase = "paused"
-            await asyncio.sleep(TICK)
-        if h.stopping:
-            return h.end("stopped")
-        spent = lim.exhausted(h)
-        if spent:
-            return h.end(spent)
-        wrong_engine = lim.engine_ok(bot)
-        if wrong_engine:
-            return h.end("engine", err=ValueError(wrong_engine))
+        while True:
+            results = None
+            settlement = bool(owed)
+            if settlement:
+                if not start_tools(h, lim, bot):
+                    return h
+                # 一旦原子提交了 batch，中途的 pause/stop 都不切斷它。
+                # 全部 results 必須成為下一個 Step，才不會在續跑時重做副作用。
+                results = _settle(owed, dispatch, h, lim)
 
-        results = await _settle(owed, dispatch, h, lim) if owed else None
-        h.next_step()
-        reply = await asyncio.to_thread(
-            bot.ask, prompt=h.take_say(), images=images, tool_results=results)
-        images = None  # 圖只跟第一句一起送
-        if not reply:
-            return h.end("error", err=reply.err)
-        h.spoke(reply.text, reply.usage)  # 沒串流，text 建好就在裡面了
+            started, step_prompt, step_images, updates, ask_options = start_step(
+                h, lim, bot, settlement)
+            if not started:
+                return h
+            apply_tool_updates(bot, dispatch, updates)
 
-        owed = reply.calls
-        if owed:
-            h.quiet = 0
-            continue
-        # 不叫工具了就是講完了 —— 除非它根本沒講完，是被 max_tokens 切斷的
-        if reply.finish_reason == "length":
-            return h.end("length")
-        h.quiet += 1
-        if h.quiet >= lim.quiet:
-            return h.end("done")
-        h.say(NUDGE)  # 只有 quiet 調大過才走到這：推它一把，再給一步機會
+            reply = bot.ask(prompt=step_prompt, images=step_images,
+                            tool_results=results, **ask_options)
+            text = getattr(reply, "text", "")
+            calls = getattr(reply, "calls", [])
+            finish_reason = getattr(reply, "finish_reason", None)
+            committed = bool(text or calls or finish_reason is not None)
+            if not committed:
+                err = getattr(reply, "err", None) or RuntimeError("bot.ask() returned no message")
+                return h.end("error", err=err)
 
-    return h.end("budget")
+            h.spoke(text, getattr(reply, "usage", None))
+            if getattr(reply, "err", None) is not None:
+                return h.end("error", err=reply.err)
+            owed = calls
+
+            # stop during model：message 已收進 history，但不執行它新要的 tools。
+            # stop during tools：上面已送完 settlement Step，也在這裡停，不跑新 calls。
+            if h.checkpoint() == "stopped":
+                return h.end("stopped")
+
+            if owed:
+                h.reset_quiet()
+                continue
+
+            # completion 與 say() 在 Handle 裡共用同一把 lock。pause 時只重問
+            # 這個完成邊界，不會多送一個 Step，quiet 也不會重複計數。
+            while True:
+                action = h.finish_or_continue(finish_reason, lim.quiet, NUDGE)
+                if action == "ended":
+                    return h
+                if action == "continue":
+                    break
+                time.sleep(TICK)
+
+    except Exception as err:
+        # LLM.ask() 一般會自己回錯誤 Reply，但 duck-typed bot 可能直接拋例外。
+        return h.end("error", err=err)
 
 
-async def _settle(calls, dispatch, h, lim):
+def _settle(calls, dispatch, h, lim):
     """把上一步要求的工具全跑完，回 `{call_id: 結果字串}`。
 
     一次一個，照模型要求的順序 —— 併發跑省不了多少，卻會讓兩個 `run_shell`
@@ -110,7 +127,7 @@ async def _settle(calls, dispatch, h, lim):
             h.did(call, blocked, ran=False)
             results[call["id"]] = blocked
             continue
-        out = await asyncio.to_thread(perform, dispatch, call)
+        out = perform(dispatch, call)
         h.did(call, out)
         results[call["id"]] = out
     return results

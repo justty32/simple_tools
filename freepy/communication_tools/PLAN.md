@@ -78,7 +78,8 @@ v1 的 `to` 只接受 canonical absolute path，先不做 `../peer` 相對位址
 
 沒有 `wait_for_message`。長時間阻塞會讓外部無法區分等待和卡死，也會污染 `agentloop` 的時間預算。
 
-supervisor 可在 mailbox 有新信時，把內容轉成回合內追加指令；這是 agent control plane，不是 communication tool 自己阻塞。工具因執行所需而要求使用者輸入，則走 `agentloop` 的 correlated tool-input channel，兩者不同。
+supervisor 可在 mailbox 有新信時，把內容轉成回合內追加指令；這是 agent control plane，
+不是 communication tool 自己阻塞。工具內部需要的互動由工具自己處理，不進 agentloop。
 
 ## 不變條件
 

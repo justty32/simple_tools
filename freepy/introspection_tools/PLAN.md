@@ -42,7 +42,8 @@ introspection_tools.bind(
 
 `self_status` 本身是一個工具呼叫，不豁免工具預算。報告要明寫統計截點，例如「本次 self_status 已計入 calls，但結果尚未計入 history」。不要為了自我報告在 `Limits` 裡開第一個免費工具例外。
 
-當前時間由呼叫當下取得。工具等待使用者輸入時，phase 顯示 `awaiting_tool_input`、工具名與等待多久，但 secret prompt 不回顯內容。
+當前時間由呼叫當下取得。工具內部的互動不額外展開成 agentloop phase；外層只看得到
+正在執行哪個工具與已經過多久。
 
 ## 實作順序與測試
 

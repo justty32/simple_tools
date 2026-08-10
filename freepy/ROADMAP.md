@@ -39,16 +39,18 @@ Gate：event replay 決定性；generation CAS；operation 冪等；父子資源
 
 ## Milestone 1：Round control 與逐步 runner
 
-先完成 `agentloop/PLAN.md` 的 lock、completion/enqueue、安全邊界、settlement 與 exception 修正；再
-抽一次只前進到下一 safe boundary 的 runner protocol，保留既有 `run()` 作 convenience loop。
+`agentloop` 的 lock、completion/enqueue、安全邊界、settlement 與 exception 修正已完成；
+下一步抽一次只前進到下一 safe boundary 的 runner protocol，保留既有 `run()`
+作 convenience loop。現行語意見 [`agentloop/ROUNDS.md`](agentloop/ROUNDS.md)。
 
 Gate：現有離線案例全過；追加指令不丟；pause/stop 不多放行 Step；tool pairing 不重做；runner
-能產生 `AskStep`、`RunToolBatch`、`WaitInput`、`Candidate` 等 durable commands。
+能產生 `AskStep`、`RunToolBatch`、`Candidate` 等 durable commands。
 
 ## Milestone 2：durable control plane
 
 用 transaction store 保存 event、ledger、outbox 與 snapshots；接 Agent Machine scheduler 與 Round
-runner。Bot record 可 dormant，queued Round 不需一 Round 一 task，只有取得 lease 的 Step 進 runtime。
+runner。Bot record 可 dormant，queued Round 不需一 Round 一 task，只有取得 lease 的
+Step attempt 進 runtime；留下 message 後才提交成 Step。
 
 Gate：每個 transition crash injection 後可恢復；queued work 不丟；effect unknown 可辨識；舊
 instance/lease 不污染新 generation；endpoint 恢復時沒有 retry herd。

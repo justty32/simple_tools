@@ -67,7 +67,8 @@ token、工具呼叫、模型步數等在 spawn 時先從父帳本 **reserve**�
 
 CPU、memory、PID、GPU visibility 等由父 cgroup／runtime pool 統一封頂，再分配 child 上限。即使帳本有 race，OS 上層 ceiling 仍不能被突破。
 
-wall time 要區分 deadline 與消耗時間；等待工具使用者輸入是否暫停某項 timeout，由 tool policy 決定，不能偷偷改 Round/Step 計數。
+wall time 要區分 deadline 與消耗時間；工具內部如何等待是工具自己的 policy，
+runtime 只看這次 tool invocation 的時間與結果，不能偷偷改 Round/Step 計數。
 
 ## fresh 與 fork
 

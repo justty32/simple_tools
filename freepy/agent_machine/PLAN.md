@@ -63,13 +63,14 @@ Step slots 的離線模擬保持有界 active state。
 
 ## M2：將 agentloop 抽成可逐步驅動的 Round machine
 
-先完成 `agentloop/PLAN.md` 的 lock、safe boundary 與 settlement 修正，再抽出一次只前進到下一
-safe boundary 的 `advance()`／runner protocol；現有 `run()` 保留為反覆呼叫 runner 的便利 API。
+`agentloop` 的 lock、safe boundary 與 settlement 修正已完成；現行語意見
+[`agentloop/ROUNDS.md`](../agentloop/ROUNDS.md)。接著抽出一次只前進到下一 safe boundary 的
+`advance()`／runner protocol；現有 `run()` 保留為反覆呼叫 runner 的便利 API。
 
-Agent Machine adapter 把 `AskStep`、`RunToolBatch`、`WaitInput`、`Candidate` 變成 durable commands。
+Agent Machine adapter 把 `AskStep`、`RunToolBatch`、`Candidate` 變成 durable commands。
 不讓 scheduler 直接修改 `LLM.history`。
 
-Gate：既有 35+ 離線案例維持；crash 在 dispatch 前／送出後／tool effect 後都能分辨；未閉合
+Gate：既有離線案例維持；crash 在 dispatch 前／送出後／tool effect 後都能分辨；未閉合
 tool pairing 不重做；pause/cancel 只在已定安全邊界生效。
 
 ## M3：durable store 與恢復

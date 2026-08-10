@@ -11,7 +11,7 @@ memory 與 agentfs 仍在規劃階段。
 | 模型與工具契約 | [`llmkit/`](llmkit/README.md) | `llms`、LiteLLM proxy、`tooljson` |
 | 模型 preset | [`llmkit/llms/presets.json`](llmkit/llms/presets.json) | id 對應 endpoint、model 與 parameters |
 | 基本工具 | [`base_tools/`](base_tools/README.md) | 讀、寫、編輯檔案與 POSIX shell |
-| 單 agent loop | [`agentloop/`](agentloop/README.md) | `run()`、limits 與可跨 routine 控制的 `Handle` |
+| 單 agent loop | [`agentloop/`](agentloop/README.md) | 阻塞 `run()`、limits 與可跨 thread 控制的 `Handle` |
 | 使用介面 | [`shells/`](shells/README.md) | REPL 與外部 coding-agent shell |
 | 原型 | [`prototypes/`](prototypes/README.md) | 尚未升格為穩定元件的可執行實驗 |
 

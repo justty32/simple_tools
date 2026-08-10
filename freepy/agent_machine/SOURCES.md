@@ -29,7 +29,7 @@
   與 network attack surface；兩者都不是 agent semantic permission 的替代品。
 - [FUSE](https://docs.kernel.org/filesystems/fuse/index.html)：agentfs 的 userspace mount adapter。
 - [`sched_ext`](https://docs.kernel.org/scheduler/sched-ext.html)：能擴充實體 CPU task scheduler；不會
-  自動排程遠端 endpoint Step。
+  自動排程遠端 endpoint Step attempt。
 - [Linux kernel driver interface](https://docs.kernel.org/process/stable-api-nonsense.html)：Linux
   不承諾穩定的 in-kernel module API；支持先使用穩定 userspace ABI。
 

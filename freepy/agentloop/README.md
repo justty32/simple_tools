@@ -3,7 +3,7 @@
 **一個函式，讓 bot 自己一直跑。**
 
 一次完整 `run()` 是一個回合（Round）；裡面每次 `ask() → message` 是一步（Step）。
-回合內追加指令與工具要求使用者輸入的完整語意規劃在 [ROUNDS.md](ROUNDS.md)。
+回合內重新配置下一個 Step 與控制邊界的完整語意在 [ROUNDS.md](ROUNDS.md)。
 
 底下兩層（[`llms`](../llmkit/llms/README.md)，含可選 preset；以及
 [`tooljson`](../llmkit/tooljson/README.md)）都是「人推一步，它動一下」。
@@ -20,48 +20,56 @@
 ## 三行
 
 ```python
-import asyncio, agentloop, base_tools
+import agentloop, base_tools
 from llms import LLM
 
 schemas, dispatch = base_tools.tools()
 bot = LLM(tools=schemas)
 
-h = asyncio.run(agentloop.run(bot, dispatch, "把 a.txt 裡的 two 改成 TWO"))
+h = agentloop.run(bot, dispatch, "把 a.txt 裡的 two 改成 TWO")
 print(h.text, h.stop)
 ```
 
 `h` 是把手（`Handle`），跑完之後它就是這趟的報告。
 
-## 真正的用法：一邊跑，一邊看，一邊控制
+## 阻塞 API
 
-`run()` 是 async 的，所以你可以把它丟著跑，另一條 routine 拿同一個把手：
+`run()` 會阻塞到整個 Round 結束。它不建 task、不開 thread，也沒有 async 版本：
 
 ```python
 h = agentloop.Handle()
-task = asyncio.create_task(agentloop.run(bot, dispatch, "整理一下這個資料夾", h))
-
-while not h.done():
-    await asyncio.sleep(1)
-    print(h.now())              # 第 3/12 步，正在跑 run_shell，5 個工具，8420 tokens，31s
-    if 我看它走偏了:
-        h.say("別再讀了，直接寫檔")
+result = agentloop.run(bot, dispatch, "整理一下這個資料夾", h)
 ```
+
+需要一邊跑一邊控制時，由上層 runtime 把這個阻塞函式放進 worker thread；
+`agentloop` 本身不管這層排程。另一條 thread 可拿同一個 `Handle` 查看或控制。
 
 把手上有兩組東西：
 
-**問狀況**（都是普通函式，不用 await）：`h.now()` 一行人話、`h.done()` 收工了沒、
-`h.text` 模型最後說的話、`h.stop` 為什麼停、`h.step` 已送出的模型請求數、`h.tool_log` 做過的每一件工具工作、
-`h.calls` / `h.used` / `h.tokens` / `h.elapsed()` 花掉多少。
+**問 live 狀況**（普通同步函式，可跨 thread）：`h.now()` 一行人話、
+`h.done()` 收工了沒、`h.elapsed()` 花了幾秒。完成後可穩定讀取 `h.text`、`h.stop`、
+`h.step`、`h.tool_log`、`h.calls` / `h.used` / `h.tokens` 等報告欄位。
 
-**下指令**：`h.say("…")` 插一句話、`h.pause()` / `h.resume()`、`h.ask_stop()`。
+**改下一步**：`h.add_instruction("…")`（短名 `h.say("…")`）、
+`h.add_images("photo.png")`、`h.add_tools(schemas, dispatch)`，以及
+`h.set_ask_options(tool_choice="required", stream=True)`。ask options 會持續到再次
+修改；圖片只送下一步，工具則從下一步起加入 bot 能力與執行表。
+若 `Limits.tools` 設了白名單，新工具仍須在白名單內才會真正執行。
 
-指令都是**下一步開頭生效**，不會打斷正在跑的那一步。
+**下控制**：`h.pause()` / `h.resume()`、`h.ask_stop()`。
+
+這些變更都是**下一步開頭生效**，不會打斷正在跑的那一步。
 沒有「立刻中斷」——模型那次 HTTP 和跑到一半的工具都停不下來，
 假裝停得下來只會讓人以為工具沒跑過。
 
+`Handle` 的查詢與控制方法可從其他 OS thread 使用。多筆
+instruction 依 FIFO 送出，completion 不會吃掉同時到達的指令。一個 `Handle`
+只屬於一個 Round，重用或同時使用會立即失敗。競態、拒絕訊息與 pause/stop
+的 settlement 規則見 [ROUNDS.md](ROUNDS.md)。
+
 ## 為什麼停
 
-`h.stop` 一定是這幾個之一：
+狀態機只分正常的 `completed` 與非正常的 `error`。`h.stop` 保留底下的具體原因：
 
 | | |
 |---|---|
@@ -91,35 +99,36 @@ agentloop.run(bot, dispatch, "…", limits=agentloop.Limits(
 ```
 
 不給就是 `Limits()`：12 步，其餘不限。
+計數型限制在建構時就驗證：`steps` / `quiet` 要正整數，其餘次數要非負。
+`seconds` 和 `tokens` 都是**合作式限制**：只在安全邊界檢查，最多可超過一次
+model/tool operation，不是 hard kill。
 
 ## 停在一半，可以接著跑
 
-Step 預算用完（或你喊停）的時候，最後那批工具**還沒跑**，債留在 `bot.history` 上。
-同一個 bot 再叫一次就從那裡接下去，工具不會跑兩遍：
+Step／其他預算在下一批 tools 開始前用完，或 stop 在 model 回應時到達，
+那批工具**還沒跑**，債留在 `bot.history` 上。同一個 bot 用新 Handle
+再叫一次就從那裡接下去：
 
 ```python
-h = asyncio.run(agentloop.run(bot, dispatch, "…", limits=Limits(steps=5)))
+h = agentloop.run(bot, dispatch, "…", limits=Limits(steps=5))
 if h.stop == "budget":
-    h = asyncio.run(agentloop.run(bot, dispatch))     # 不用再給 prompt
+    h = agentloop.run(bot, dispatch)     # 不用再給 prompt
 ```
 
-這是免費送的：迴圈每一步都從「先還上一步欠的工具結果」開始，
-所以「接著跑」跟平常那一步走的是同一條路，沒有第二套程式。
+迴圈每一步都從「先還上一步欠的工具結果」開始，所以「接著跑」
+跟平常那一步走同一條路。若 stop 是在 tool batch 中到達，當批已執行的
+results 會先 settlement，下個 Round 不會重跑這些副作用。
 
 ## 工具壞掉不會打斷迴圈
 
-四種壞法都會變成一句英文送回模型，讓它自己改一次再試：沒有這個工具、
-參數對不上、工具自己炸了、**args 不是合法 JSON**（小模型和被 `max_tokens`
-切斷的 Step的常客）。
-
-判斷「參數對不對」是**先問簽名再叫**，不是叫下去接 `TypeError` ——
-不然工具內部自己丟的 `TypeError` 會被誤報成「參數對不上」，
-模型就照著那句假話去改一個本來沒問題的參數。
+不存在的工具、參數不匹配、非法 JSON 與工具例外都變成一句 `Error: ...`
+送回模型，讓它改正後再試。參數會先用函式簽名驗證，工具內部的
+`TypeError` 不會被誤報成參數錯誤；過長輸出也會截斷以保護 context。
 
 ## 它不做什麼
 
-- **不串流。** 逐字看是給人看的，這個迴圈是放著自己跑的。要逐字看就自己
-  `bot.ask(stream=True)`（[`../try.py`](../try.py) 就是那樣）。
+- **不對外廣播串流。** 可以把 `stream=True` 設成 ask option，但 `run()` 仍會在
+  內部收完。要逐字顯示就自己 `bot.ask(stream=True)`。
 - **不 import `llms`，也不 import `tooljson`。** `bot` 只要有 `ask()` 和
   `pending_calls`，`dispatch` 只要是 `{名字: fn(**kwargs)}` ——
   `base_tools.tools()` / `tooljson.tools()` / `llms.to_tools()` 生出來的都是
@@ -131,21 +140,10 @@ if h.stop == "budget":
 
 ```bash
 cd freepy
-PYTHONPATH=llmkit uv run python -m agentloop                  # 35 關，離線
+PYTHONPATH=llmkit uv run python -m agentloop                  # 離線關卡
 PYTHONPATH=llmkit uv run python -m agentloop deepseek-chat    # 再多一關：真模型
 ```
 
 離線那部分用**假的回應物件餵真的 `Reply`**，所以迴圈走的路跟接真模型時一模一樣，
-差別只在 `ask()` 不出門。壞掉的模型、壞掉的工具、每一種預算、暫停、插話、
-接著跑，都在裡面。
-
-## 檔案分工
-
-| 檔案 | |
-|---|---|
-| `loop.py` | `run()`：迴圈本身 —— 推幾步、什麼時候收手 |
-| `calling.py` | 一個 tool call → 一個字串（壞掉的四種也是字串） |
-| `handle.py` | `Handle`：外面問狀況、下指令的窗口 |
-| `limits.py` | `Limits`：這次最多能花掉多少 |
-| `LIMITS.md` | 作業系統那一層的資源限制，**還沒做** |
-| `__main__.py` | 煙霧測試 |
+差別只在 `ask()` 不出門。壞掉的模型、壞掉的工具、每一種預算、競態邊界、
+跨 thread FIFO、pause/stop、one-shot Handle 和接著跑，都在裡面。

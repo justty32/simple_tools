@@ -141,7 +141,8 @@ communication 的 inbox 也先不映射成可寫檔案。`send_message` 保持 t
 
 ## 與 Round／工具輸入的關係
 
-`state` 可顯示 `thinking`、`running_tool`、`awaiting_tool_input`、`paused`、`completed`；`round` 與 `step` 是小文字檔。讀 agentfs 不會自動啟動或延長對方 Round。
+`state` 可顯示 `thinking`、`running_tool`、`paused`、`completed`；`round` 與 `step`
+是小文字檔。讀 agentfs 不會自動啟動或延長對方 Round。
 
 若 supervisor 決定監看檔案變化並把事件注入 Handle，那是獨立 subscription/control policy。v1 沒有阻塞 `read` 或「等狀態改變」工具。
 
