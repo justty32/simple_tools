@@ -1,7 +1,7 @@
 # base_tools
 
 給 LLM 用的四個基本工具：**讀檔、寫檔、改檔、跑指令** —— 一個 coding agent 最少需要的那組。
-配 [llms](../llms/README.md) 用，schema 直接從函式本體生出來。
+配 [llms](../llmkit/llms/README.md) 用，schema 直接從函式本體生出來。
 
 ```python
 import base_tools

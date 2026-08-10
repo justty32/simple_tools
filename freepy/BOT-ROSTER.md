@@ -48,7 +48,7 @@ spawn new member      新身分/權限/責任，可並行且真正隔離
 
 保留 agent path、incarnation、role memory 與 team 關係，但 working context 從 stable system/tools、task brief、明確 memory refs 重新編譯；舊 trace 不刪除，只是不整包 inline。它可能仍命中共享 system/tool prefix，又避免把全部舊對話帶進來。
 
-這是「想用熟悉成員，但要乾淨 context」的預設答案。branch 必須有自己的 history head/generation；同一 branch 仍只准一個 active Round。是否允許同 member 多 branch 並行要由 workspace／tool side-effect policy 決定，不能只看 endpoint capacity。
+這是「想用熟悉成員，但要乾淨 context」的預設答案。branch 必須有自己的 history head/generation；同一 branch 仍只准一個 active Turn。是否允許同 member 多 branch 並行要由 workspace／tool side-effect policy 決定，不能只看 endpoint capacity。
 
 ### 3. spawn new member
 

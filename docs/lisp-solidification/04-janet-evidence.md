@@ -66,9 +66,11 @@ repo 記錄 `jpm build` 不會可靠追蹤所有 import dependency。CI 應 clea
 
 ## 來源
 
-- [llm-http 模組](../../../langlab-janet/modules/llm-http/README.md)
-- [tool-loop wire test](../../../langlab-janet/test/llm-http-server.janet)
-- [pi-shell process](../../../langlab-janet/modules/pi-shell/proc.janet)
-- [HTTP 限制](../../../langlab-janet/docs/17-用-spork-http-打-api.md)
-- [Windows 筆記](../../../langlab-janet/docs/00b-windows-vscode.md)
-- [踩坑紀錄](../../../langlab-janet/FINDINGS-踩坑.md)
+- `langlab-janet/modules/llm-http/README.md`：llm-http 模組
+- `langlab-janet/test/llm-http-server.janet`：tool-loop wire test
+- `langlab-janet/modules/pi-shell/proc.janet`：pi-shell process
+- `langlab-janet/docs/17-用-spork-http-打-api.md`：HTTP 限制
+- `langlab-janet/docs/00b-windows-vscode.md`：Windows 筆記
+- `langlab-janet/FINDINGS-踩坑.md`：踩坑紀錄
+
+這些路徑屬於 2026-08-10 評估時的外部相鄰工作區，不包含在本 repository。

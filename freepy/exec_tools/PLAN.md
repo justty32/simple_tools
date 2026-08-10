@@ -1,6 +1,6 @@
 # exec_tools 規劃
 
-> **一半已經落地到 [`../../llmkit/tooljson/`](../../llmkit/tooljson/README.md)。**
+> **一半已經落地到 [`../llmkit/tooljson/`](../llmkit/tooljson/README.md)。**
 > 格式（FORMAT.md / EXEC.md）和標準庫（讀 .json、組 argv、執行）都在那邊，
 > 離線 24 關全過。
 >

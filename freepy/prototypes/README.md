@@ -6,7 +6,7 @@
 等同一件事在這裡出現第二次、第三次，才把它抽成 `base_tools` / `exec_tools` 那種
 有 README 有分工的標準庫。先有原型，再有規範 —— 反過來做只會憑空發明一堆用不到的抽象。
 
-跑之前先把 LiteLLM proxy 起來（見 [llms/README.md](../llms/README.md)）。
+跑之前先把 LiteLLM proxy 起來（見 [llms/README.md](../llmkit/llms/README.md)）。
 
 ---
 

@@ -1,4 +1,4 @@
-"""try.py — 隨手試的地方。現在放的是：讓模型拿 base_tools 做事，順便看它在想什麼。
+"""try.py — 串流、思考與 base_tools 呼叫的 worked example。
 
     uv run python try.py                    # 預設 deepseek-reasoner
     uv run python try.py lm-gemma-4-e4b     # 換模型
