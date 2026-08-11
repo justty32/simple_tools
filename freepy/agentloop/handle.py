@@ -1,110 +1,316 @@
-"""handle.py — 外層手上的把手：問狀況，也下得了指令。
+"""Thread-aware public state and controls for one agentloop Round."""
 
-`run()` 在 worker thread 裡跑時一路更新它，外層可從另一條 thread
-隨時讀、隨時下指令。這些都是普通同步函式。
-這些 live 查詢、控制、追加輸入 FIFO 和 completion commit 共用一把 lock。
-公開結果在 `done()` 為真後不再變動；一個 Handle 也只能啟動一個 Round。
-
-追加輸入都是**下一步開頭才生效**的，不會打斷正在跑的那一步。
-沒有「立刻中斷」這種東西：模型那次 HTTP 呼叫和跑到一半的工具都停不下來，
-假裝停得下來只會讓人以為工具沒跑過。
-"""
-
+from contextlib import contextmanager
+from enum import IntEnum
 import threading
 import time
 
-from ._inputs import PendingInputs
-from ._state import RoundState
+
+class Decision(IntEnum):
+    """A callback's control-flow vote."""
+
+    CONTINUE = 0
+    PAUSE = 1
+    END = 2
 
 
-class Handle(RoundState, PendingInputs):
-    """一個 `run()` 的把手。不傳給 `run()` 也行，它會自己生一個回給你。"""
+CONTINUE = Decision.CONTINUE
+PAUSE = Decision.PAUSE
+END = Decision.END
 
-    def __init__(self):
-        self._lock = threading.Lock()
-        self.step = 0  # 這個 Round 已經留下幾則 ask() → message
-        self.limits = None  # 這次的預算，run() 開頭掛上來
-        self.phase = "idle"  # idle / thinking / tool / paused，停了就是 stop 的值
-        self.tool = None  # phase 是 "tool" 時，正在跑哪一個
-        self.text = ""  # 模型最後說的那段話
-        self.tool_log = []  # [(第幾步, 工具名, args, 結果字串)]，含被擋下來的
-        self.calls = 0  # 真的跑掉幾個工具（被預算擋下來的不算）
-        self.used = {}  # {工具名: 真的跑掉幾次}，per_tool 那條限制數的就是它
-        self.quiet = 0  # 連續幾步沒叫工具
-        self.stop = None  # 為什麼停，還在跑就是 None（見 loop.py 那張表）
-        self.err = None  # 停在 error / engine 時，出了什麼事
-        self.tokens = 0  # 累計花掉的 token，模型每步回報的加總
-        self.paused = False
-        self.stopping = False
-        self._init_inputs()
+
+class Handle:
+    """Live, deliberately mutable state for one ``run()``.
+
+    A single runner thread owns model/tool execution. Other threads may inspect or
+    mutate every public field. Use ``edit()`` when a compound cross-thread update
+    must be atomic.
+    """
+
+    def __init__(self, *, auto_finish=True):
+        self._lock = threading.RLock()
+        self._condition = threading.Condition(self._lock)
+        self._runner = None
         self._started = None
         self._finished = None
+        self._pause_requested = False
 
-    # ---- 問狀況 ----
+        # Control and callbacks.
+        self.auto_finish = bool(auto_finish)
+        self.after_step = []
+        self.after_tools = []
+        self.state = "idle"
+        self.stop = None
+        self.end_reason = None
+        self.err = None
 
-    def done(self) -> bool:
-        """收工了沒。"""
-        with self._lock:
-            return self.stop is not None
+        # Inputs and capabilities. The runner snapshots these before an operation.
+        self.bot = None
+        self.history = None
+        self.prompt = None
+        self.images = None
+        self.tools = None
+        self.dispatch = {}
+        self.ask_options = {}
 
-    def elapsed(self) -> float:
-        """開跑到現在幾秒。還沒開跑是 0。"""
-        with self._lock:
+        # Latest committed Step/tool state.
+        self.reply = None
+        self.message = None
+        self.text = ""
+        self.finish_reason = None
+        self.usage = None
+        self.tool_calls = []
+        self.tool_results = {}
+
+        # Reports.
+        self.step = 0
+        self.tool_log = []
+        self.calls = 0
+        self.used = {}
+        self.input_tokens = 0
+        self.output_tokens = 0
+        self.cached_input_tokens = 0
+        # Convenience report only. Policies should limit input/output separately.
+        self.tokens = 0
+
+    @property
+    def phase(self):
+        """Compatibility spelling for the public state."""
+        return self.state
+
+    @phase.setter
+    def phase(self, value):
+        self.state = value
+
+    @contextmanager
+    def edit(self):
+        """Make any number of public mutations atomically."""
+        with self._condition:
+            yield self
+
+    def done(self):
+        with self._condition:
+            return self.state in {"completed", "error"}
+
+    def elapsed(self):
+        with self._condition:
             if self._started is None:
                 return 0.0
-            end = self._finished if self._finished is not None else time.monotonic()
-            return end - self._started
+            return (self._finished or time.monotonic()) - self._started
 
-    def now(self) -> str:
-        """一行人話：現在在幹嘛。印給人看的，不要拿去 parse。"""
-        with self._lock:
-            steps = self.limits.steps if self.limits else "?"
-            where = f"第 {self.step}/{steps} 步"
-            if self._started is None:
-                elapsed = 0.0
-            else:
-                end = self._finished if self._finished is not None else time.monotonic()
-                elapsed = end - self._started
-            tail = f"{self.calls} 個工具，{self.tokens} tokens，{elapsed:.0f}s"
-            stop, err, phase, tool = self.stop, self.err, self.phase, self.tool
-        if stop:
+    def now(self):
+        with self._condition:
+            elapsed = 0.0 if self._started is None else (
+                (self._finished or time.monotonic()) - self._started)
+            state, step, calls = self.state, self.step, self.calls
+            input_tokens, output_tokens = self.input_tokens, self.output_tokens
+            stop, err = self.stop, self.err
+        if state in {"completed", "error"}:
             why = f"{stop}: {err}" if err else stop
-            return f"停了（{why}）：{where}，{tail}"
-        doing = {"idle": "還沒開始", "thinking": "正在想", "paused": "暫停中"}.get(
-            phase, f"正在跑 {tool}")
-        return f"{where}，{doing}，{tail}"
+            return (f"停了（{why}）：第 {step} 步，{calls} 個工具，"
+                    f"{input_tokens} input / {output_tokens} output tokens，"
+                    f"{elapsed:.0f}s")
+        labels = {
+            "idle": "還沒開始", "ready": "準備執行", "running_step": "正在想",
+            "running_tools": "正在跑工具", "waiting": "等待繼續", "paused": "暫停中",
+        }
+        return (f"第 {step} 步，{labels.get(state, state)}，{calls} 個工具，"
+                f"{input_tokens} input / {output_tokens} output tokens，"
+                f"{elapsed:.0f}s")
 
-    # ---- 下控制；追加輸入方法由 PendingInputs 提供 ----
-
-    def pause(self):
-        """下一步開頭停住不送出，等 `resume()`。跑到一半的那一步會先跑完。"""
-        with self._lock:
-            if self.stop is None and not self.stopping:
-                self.paused = True
+    def pause(self, safe=True):
+        """Request a pause at the next Step/tool boundary; never cut an operation."""
+        if not safe:
+            raise ValueError("agentloop only supports safe cooperative pause")
+        with self._condition:
+            if self.done():
+                return False
+            self._pause_requested = True
+            if self.state == "waiting":
+                self.state = "paused"
+            self._condition.notify_all()
+            return True
 
     def resume(self):
-        with self._lock:
-            self.paused = False
+        """Wake this Round only when it is waiting/paused (or cancel a pending pause)."""
+        with self._condition:
+            accepted = self._pause_requested or self.state in {"waiting", "paused"}
+            if not accepted:
+                return False
+            self._pause_requested = False
+            if self.state in {"waiting", "paused"}:
+                self.state = "ready"
+            self._condition.notify_all()
+            return True
 
-    def ask_stop(self):
-        """叫它收手，`stop` 會是 `"stopped"`。暫停中的也一起放行出來。"""
-        with self._lock:
-            if self.stop is not None:
-                return
-            self.stopping = True
-            self.paused = False
+    def wait_for_state(self, *states, timeout=None):
+        """Wait until the Handle reaches any requested state."""
+        wanted = set(states)
+        with self._condition:
+            return self._condition.wait_for(lambda: self.state in wanted, timeout)
 
-    # ---- 以下是 run() 在用的，外面不用叫 ----
+    def wait_until_paused(self, timeout=None):
+        return self.wait_for_state("paused", timeout=timeout)
 
-    def begin(self, limits, prompt=None, images=None):
-        """將 Handle 原子綁定到一個 Round；同一個 Handle 不能再用。"""
-        with self._lock:
-            if self._started is not None:
+    # Runner-only operations follow. They remain methods so all transitions share
+    # the same condition and one linearization point.
+
+    def _begin(self, bot, dispatch, prompt, images):
+        with self._condition:
+            if self._runner is not None or self._started is not None:
                 raise RuntimeError("handle already used")
-            self.limits = limits
+            self._runner = threading.get_ident()
             self._started = time.monotonic()
-            if prompt:
-                self._say.append(str(prompt))
-            if images:
-                images = [images] if isinstance(images, str) else images
-                self._images.extend(str(image) for image in images if image)
+            self.bot = bot
+            self.history = getattr(bot, "history", None)
+            self.dispatch = dispatch
+            if self.tools is None:
+                self.tools = getattr(bot, "tools", None)
+            if prompt is not None:
+                self.prompt = prompt
+            if images is not None:
+                self.images = images
+            self.tool_calls = list(getattr(bot, "pending_calls", None) or [])
+            self.state = "ready"
+
+    def _start_step(self):
+        with self._condition:
+            if not self._await_ready_unlocked():
+                return None
+            self.state = "running_step"
+            if self.tools is not None:
+                self.bot.tools = self.tools
+            inputs = (self.prompt, self.images, dict(self.tool_results),
+                      dict(self.ask_options))
+            self.prompt = None
+            self.images = None
+            self.tool_results = {}
+            self._condition.notify_all()
+            return inputs
+
+    def _commit_step(self, reply, text, calls, finish_reason, usage):
+        with self._condition:
+            self.reply = reply
+            self.message = text
+            self.text = text
+            self.finish_reason = finish_reason
+            self.usage = usage
+            self.tool_calls = list(calls)
+            self.step += 1
+            input_tokens = (usage or {}).get("prompt") or 0
+            output_tokens = (usage or {}).get("completion") or 0
+            cached_input_tokens = (usage or {}).get("cached") or 0
+            total_tokens = (usage or {}).get("total")
+            self.input_tokens += input_tokens
+            self.output_tokens += output_tokens
+            self.cached_input_tokens += cached_input_tokens
+            self.tokens += (input_tokens + output_tokens
+                            if total_tokens is None else total_tokens)
+            decision = self._callbacks_unlocked(self.after_step)
+            if self.state == "error":
+                return "end"
+            if decision == END:
+                self._end_unlocked(self.end_reason or "ended", self.err)
+                return "end"
+            if decision == PAUSE or self._pause_requested or self.state == "paused":
+                if not self._park_unlocked("paused"):
+                    return "end"
+            if self.tool_calls:
+                return "tools"
+            if self.tool_results:
+                return "step"
+            if self.auto_finish:
+                reason = self.end_reason or (
+                    "length" if self.finish_reason == "length" else "done")
+                self._end_unlocked(reason)
+                return "end"
+            if not self._park_unlocked("waiting"):
+                return "end"
+            return "tools" if self.tool_calls else "step"
+
+    def _start_tools(self):
+        with self._condition:
+            if not self._await_ready_unlocked():
+                return None
+            self.state = "running_tools"
+            snapshot = (list(self.tool_calls), dict(self.dispatch), dict(self.tool_results))
+            self._condition.notify_all()
+            return snapshot
+
+    def _commit_tools(self, calls, results, records):
+        with self._condition:
+            self.tool_calls = list(calls)
+            self.tool_results = dict(results)
+            for call, out, ran in records:
+                name = call.get("name")
+                self.tool_log.append((self.step, name, call.get("args"), out))
+                if ran:
+                    self.calls += 1
+                    self.used[name] = self.used.get(name, 0) + 1
+            decision = self._callbacks_unlocked(self.after_tools)
+            if self.state == "error":
+                return False
+            if decision == END:
+                self._end_unlocked(self.end_reason or "ended", self.err)
+                return False
+            if decision == PAUSE or self._pause_requested or self.state == "paused":
+                return self._park_unlocked("paused")
+            return True
+
+    def _callbacks_unlocked(self, callbacks):
+        decision = CONTINUE
+        first_error = None
+        for callback in list(callbacks):
+            try:
+                vote = callback(self)
+                if vote is None:
+                    vote = CONTINUE
+                vote = Decision(vote)
+                decision = max(decision, vote)
+            except Exception as exc:
+                first_error = first_error or exc
+        if first_error is not None:
+            self._end_unlocked("error", first_error)
+            return END
+        return decision
+
+    def _await_ready_unlocked(self):
+        if self.done():
+            return False
+        if self._pause_requested:
+            return self._park_unlocked("paused")
+        while self.state in {"waiting", "paused"}:
+            self._condition.wait()
+            if self.done():
+                return False
+        return True
+
+    def _park_unlocked(self, state):
+        self.state = state
+        self._pause_requested = state == "paused"
+        self._condition.notify_all()
+        while self.state in {"waiting", "paused"}:
+            self._condition.wait()
+            if self.done():
+                return False
+        return True
+
+    def _fail(self, err):
+        with self._condition:
+            # Endpoint failure discovered after a partial committed message wins
+            # over a simultaneous normal completion/callback END.
+            self.stop = "error"
+            self.err = err
+            self.state = "error"
+            self._finished = time.monotonic()
+            self._condition.notify_all()
+            return self
+
+    def _end_unlocked(self, stop, err=None):
+        if self.state in {"completed", "error"}:
+            return
+        self.stop = stop
+        self.err = err
+        self.state = "error" if err is not None else "completed"
+        self._finished = time.monotonic()
+        self._condition.notify_all()
