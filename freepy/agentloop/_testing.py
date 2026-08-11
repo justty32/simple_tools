@@ -16,13 +16,21 @@ def check(label, got, want):
     print(f"  {'ok  ' if ok else 'FAIL'} {label}: {got[:76]!r}")
 
 
-def response(text=None, calls=(), finish="stop", total=10):
+def response(text=None, calls=(), finish="stop", total=10, *, prompt=None,
+             completion=None, cached=None):
+    prompt = total - 1 if prompt is None else prompt
+    completion = 1 if completion is None else completion
     message = SimpleNamespace(content=text, reasoning_content=None, tool_calls=[
         SimpleNamespace(id=i, function=SimpleNamespace(name=n, arguments=a))
         for i, n, a in calls] or None)
     return SimpleNamespace(
         choices=[SimpleNamespace(message=message, finish_reason=finish)],
-        usage=SimpleNamespace(prompt_tokens=1, completion_tokens=1, total_tokens=total))
+        usage=SimpleNamespace(
+            prompt_tokens=prompt,
+            completion_tokens=completion,
+            total_tokens=total,
+            prompt_tokens_details=SimpleNamespace(cached_tokens=cached),
+        ))
 
 
 def wants(*calls):

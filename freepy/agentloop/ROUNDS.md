@@ -2,14 +2,18 @@
 
 這份定義 `agentloop` 對外的活動單位，以及 `run()`／`Handle` 的控制語意。
 
+> **實作狀態：**以下的 Step/tool callback、公開可變狀態、`auto_finish`、`waiting`
+> 與單一 parked runner 已落地。OS sandbox、worker pool 與 scheduler 不屬於本層。
+
 ## 固定術語
 
 ### 回合（Round）
 
-從模型因一筆指令啟動，到模型完成一連串工具動作、最後主動不再呼叫工具而停止。一次回合可以包含很多步與工具呼叫。
+從模型因一筆指令啟動，到控制者確定結束為止。一次回合可以包含很多步與工具呼叫。
+模型不再呼叫工具只代表它自然靜止；是否同時結束 Round，由 `auto_finish` 決定。
 
-使用者在回合尚未結束時追加輸入或更改設定，變更會在下一步生效，回合繼續；
-不另開新回合。若完成狀態已經原子確立，之後的變更才由 supervisor 開下一回合。
+使用者在回合尚未結束時可以直接存取或修改公開狀態。**修改資料不隱含繼續執行**；
+是否繼續只由 callback 的控制結果與明確的 `pause()`／`resume()` 操作決定。
 
 ### 步（Step）
 
@@ -40,24 +44,62 @@ ask(prompt / images / tools / tool_results / 追加指令 ...)
   → Step 3：工具結果 + 追加指令一起送入
   → tool：再執行
   → Step 4：模型回完成說明，不再呼叫工具
-  → Round completed
+  → auto_finish=True：Round completed
+    auto_finish=False：Round waiting，等外部修改或 resume
 ```
+
+## 固定的 operation 與 callback 邊界
+
+保留上述 Step 定義，不把工具執行塞進 Step。一次循環的順序固定為：
+
+```text
+Step N：ask(prompt / 上一批 tool results / 其他公開輸入)
+  → 模型回傳 message，可能含 tool calls
+  → 原子提交 Step 狀態
+  → after_step callbacks
+     callbacks 可增刪查改 message、tool calls 與其他公開狀態
+
+執行 callbacks 修改後留下的 tool calls
+  → 整批工具執行完成
+  → 原子提交 tool results
+  → after_tools callbacks
+     callbacks 可增刪查改 tool results 與其他公開狀態
+
+Step N+1
+  → 將 after_tools 最後留下的 tool results 傳給模型
+```
+
+兩種 callback 都是安全邊界。控制結果至少分成：
+
+- `CONTINUE`（數值 `0`）：進入下一個 operation。
+- `PAUSE`：保留當前公開狀態，不開始下一個 operation。
+- `END`：保留當前公開狀態並結束 Round。
+
+同一邊界的 callbacks 依註冊順序全部執行，不能遇到第一個非零結果就短路；後面的
+callback 看得到前面的修改，衝突採 last writer wins。全部完成後才彙總控制結果，
+優先序是 `END > PAUSE > CONTINUE`。
+
+`after_step` 回 `PAUSE`／`END` 時尚未執行該 message 要求的 tools；`after_tools` 回
+`PAUSE`／`END` 時保留修改後的 results，但尚未送入下一個 Step。Limits、完成判斷、
+tool 白名單、usage policy、result 過濾與審計都應由外部 callback 實作，而不是寫死在
+agentloop 控制迴圈裡。
 
 ## Round 狀態機
 
 ```text
-idle → active（thinking ↔ tool）→ completed
-                 ↕
-               paused
+idle → running_step → running_tools → running_step → ...
+              ↘              ↘
+               waiting / paused
 
-active → error
+active / waiting / paused → completed | error
 ```
 
-`completed` 是正常完成。`paused` 不是結束，它保證還能 `resume()` 回 active。
+`waiting` 表示模型沒有要求工具、但 Round 仍活著；`paused` 表示外部控制者主動暫停。
+兩者都保留可修改且可恢復的狀態。`completed` 才是正常且不可 resume 的完成狀態。
 
-`error` 是所有非正常終止的總類，包括 `stopped`、強制中止、`budget`、`length`、
-端點錯誤、引擎錯誤與其他預算用完。進入 error 後，這個 Round 已結束，
-不保證能繼續。`Handle.stop` 仍保留具體原因，方便知道是哪一種 error。
+`error` 表示 endpoint、callback 或 runner operation 拋錯。自然完成和 callback 的
+`END` 進入 `completed`；`Handle.stop` 仍保留 `done`、`length`、`budget`、
+`input_tokens`、`output_tokens`、`engine` 等具體原因。
 
 現在 `Handle` 就是一個 Round 的 one-shot 把手；若同一 bot 開新回合，必須建立
 新 Handle，bot history 則可延續。重用或同時使用同一 Handle 會立即失敗；
@@ -67,45 +109,72 @@ active → error
 `round_id` 與完整 event trace 仍延後；未來可記錄 started/finished、初始指令、
 追加輸入與設定、Steps、tool calls、usage 與 stop reason。
 
-## 回合內重新配置下一個 Step
+## 公開可變狀態
 
-Round 途中有很大的操作空間；當前 operation 不切斷，下一個 Step 可以收到新的
-輸入、能力與 `ask()` 選項：
+Handle 應盡量直接暴露資料，讓外部控制者增刪查改，包括但不限於：message、
+tool calls、tool results、history、prompt、images、tools、dispatch、ask options、usage、
+Step 計數與 phase。原本的 `add_instruction()`、`add_images()`、`add_tools()`、
+`set_ask_options()` queue API 不再是目標介面。
 
-```python
-handle.add_instruction(text)
-handle.add_images("screen.png", "https://example.com/photo.jpg")
-handle.add_tools(schemas, dispatch)
-handle.set_ask_options(tool_choice="required", stream=True)
-```
+外部控制者承擔修改錯誤、內容不一致與安全 policy 的風險；agentloop 不因某項資料被
+修改就自動多跑一步。跨執行緒要原子修改多個欄位或 nested list/dict 時，使用
+不限制修改能力的 `with handle.edit(): ...` 交易邊界。不使用它仍可直接修改，但一致性
+由操作者承擔。
 
-規則：
+## 自然靜止與 `auto_finish`
 
-- 不打斷正在進行的模型 request 或工具。
-- 文字與圖片排入 FIFO，只送下一次 `ask()`；目前多媒體 adapter 只支援圖片。
-- tool schema 與同名 dispatch 必須一起提交，從下一個 Step 起持續可用；同名就是替換。
-- ask options 從下一個 Step 起持續生效，傳 `None` 清除。`stream=True` 仍由阻塞的
-  `run()` 收完，不表示 agentloop 會向外廣播 chunks。
-- `prompt`、`images`、`tool_results` 與 `remember` 是 loop 維持 history 協定所需的
-  欄位，不能從 ask options 覆蓋。
-- 若模型本步沒有 tool calls，但 queue 有任何變更，不能先結束回合。
-- completion 判斷與 enqueue 必須共用 lock，解決「最後一步剛回來、使用者同時插話」的 race。
-- completion 已提交後才到達的變更，明確拒絕並回 `round already completed`。
-- stop 已接受後的新變更回 `round is stopping`；已排隊但尚未送出的變更不越過 stop。
+模型回傳的 message 沒有 tool calls 時，先完成 `after_step` callbacks，再進入自然靜止：
 
-`quiet > 1` 的 nudge 也算 supervisor 對同一回合追加的控制指令。預設 `quiet=1` 時，一則完成且無 tool calls 的模型 message 就表示主動靜止。
+- `handle.auto_finish = True`：轉成 `completed`，`run()` 返回；預設維持現有行為。
+- `handle.auto_finish = False`：轉成 `waiting`，`run()` 不因自然靜止而返回。
 
-## pause / 合作式 stop 的安全邊界
+外部修改資料不會自動喚醒；必須明確 `resume()`。因此「模型沒有 tool calls」、
+「`run()` 返回」與「Round completed」是三件可以分開的事。
+
+## pause 與 end 的安全邊界
 
 「安全邊界」的意思只是：**不要把一件已開始的事切成一半**。
 
 - 模型正在產生一個 Step 時，合作式控制會等這次 `ask()` 自己收尾。
 - 工具正在執行時，先跑完當前這批工具。
-- `pause()` 在上述事情完成後暫停，所以之後可以從明確的位置繼續。
-- `ask_stop()` 也先等當前事情收尾，然後將 Round 結束為 error，不再開始新工作。
+- `pause(safe=True)` 提出 cooperative pause request，在上述事情完成後進入 `paused`。
+- `pause(safe=True)` 本身立即返回，不同步等待 runner，以免 callback 在 runner thread
+  裡呼叫時自鎖；需要同步等待時另用 `wait_until_paused()`。
+- `end(safe=True, reason="ended")` 使用相同邊界，但會永久完成 Round；已在
+  `waiting`／`paused` 時立即結束並喚醒 runner。它也是立即返回的合作式請求。
+- callback 用 `END`，外部 controller 用 `end()`；兩者最後都走相同的
+  `completed` 狀態轉移。`auto_finish=True` 則是模型自然靜止時的自動結束。
+- `ask_stop()` 不再是目標 API；要保留可恢復狀態使用 `pause()`，要永久結束使用
+  callback `END` 或 controller `end()`。
 
 如果工具已經執行，它的結果必須先登記回 bot history；否則下次開新 Round 時，
-系統可能以為工具還沒跑過，把副作用重做一次。這就是為什麼 stop 不是立刻切斷。
+系統可能以為工具還沒跑過，把副作用重做一次。這就是為什麼 pause 不是立刻切斷。
+
+## 多執行緒原則
+
+一個 Handle 同時只能有一個 runner thread；只有 runner 能執行 `ask()`、tools 與狀態
+轉移。callbacks 由 runner thread 依註冊順序同步呼叫，不另開 thread。任意數量的
+controller threads 可以透過 Handle 觀察、修改、pause 或 resume。
+
+agentloop 核心以單執行緒執行為主要設計目標：一條 runner thread 從頭到尾擁有同一個
+Round。核心不建立 thread；可選的 `agentloop.threading.start()` 只包裝一條背景 thread，
+不改變控制語意。要建立多少 threads，以及 parked thread 的資源成本，仍由使用者或
+上層 runtime 負責；agentloop 不提供 worker pool 或 scheduler。
+
+同步必須處理 pause/下一個 operation、waiting/resume、`auto_finish` 切換、callback
+清單修改、tool calls/results 修改及 runner ownership 等競態。等待使用
+`threading.Condition` 的 predicate loop；`resume()` 必須在同一把 lock 下改狀態並
+`notify_all()`，避免 lost wakeup。每次通知 callbacks 前先取得 callback 清單快照。
+
+callback 要能重入 Handle，因此 callback 在 `threading.RLock` 下執行。遵守
+`handle.edit()` 的 controller 會等當批 callbacks 全部完成；未使用 `edit()` 的 nested
+mutable state 修改，其一致性由外部控制者承擔。
+
+runner 生命週期採 **parked runner**：進入 `waiting` 或 `paused` 時，本次 `run()`
+不返回，原 runner 停在 Condition 裡；`resume()` 喚醒同一條 thread 繼續。只有 Round
+進入 `completed`／`error` 或 callback 回 `END` 時，`run()` 才返回。這讓 Handle 的
+ownership 保持簡單，也不需要跨多次 `run()` 交接；長期占用 thread 是呼叫者明知並
+自行承擔的成本。
 
 ## operation 在中途被強行中止
 

@@ -1,84 +1,125 @@
-"""model/tool 中 stop、settlement 與 error priority 關卡。"""
+"""Callback PAUSE/END and tool-batch safe boundaries."""
 
 import threading
 
 import agentloop
+from agentloop.threading import start
 
-from ._events import background, event, finish
-from ._testing import FakeBot, TOOLS, check, wants
+from ._events import event
+from ._testing import FakeBot, check, response, wants
 
 
 def stop_boundaries():
-    model_entered, model_release = threading.Event(), threading.Event()
+    print("\n== callback 控制與 tool batch 安全邊界 ==")
+    h = agentloop.Handle()
+    h.after_step.append(lambda _: agentloop.PAUSE)
+    bot = FakeBot(wants(("a", "work", "{}")), response("完成"))
+    ran = []
+    runner = start(bot, {"work": lambda: ran.append(1) or "ok"}, "開始", h)
+    check("after_step PAUSE 發生在 tools 前", str(h.wait_for_state("paused", timeout=1)),
+          "True")
+    check("tool 尚未執行", repr(ran), "[]")
+    h.after_step.clear()
+    h.resume()
+    result = runner.join()
+    check("恢復後照常完成", f"{result.stop} {ran}", "done [1]")
 
-    class StoppableBot(FakeBot):
-        def ask(self, **kw):
-            model_entered.set()
-            if not model_release.wait(1):
-                raise TimeoutError("測試沒有放行 model")
-            return super().ask(**kw)
-
-    handle, model_ran = agentloop.Handle(), []
-    bot = StoppableBot(wants(("never", "must_not_run", "{}")))
-    runner, box = background(
-        agentloop.run, bot, {"must_not_run": lambda: model_ran.append("ran")}, "做事", handle)
-    event(model_entered, "stoppable model")
-    handle.ask_stop()
-    try:
-        handle.say("停止後不應接受")
-    except RuntimeError as exc:
-        rejected = str(exc)
-    else:
-        rejected = "not rejected"
-    model_release.set()
-    model = finish(runner, box)
-    check("model 中 stop 不執行新 tool calls",
-          f"{model.stop} step={model.step} ran={model_ran}", "stopped step=1 ran=[]")
-    check("stop 接受後的新指令明確拒絕", rejected, "round is stopping")
-
-    error_entered, error_release = threading.Event(), threading.Event()
-
-    class ErrorBot:
-        pending_calls = []
-
-        def ask(self, **kw):
-            error_entered.set()
-            if not error_release.wait(1):
-                raise TimeoutError("測試沒有放行 error model")
-            raise RuntimeError("端點同時壞掉")
-
-    handle = agentloop.Handle()
-    runner, box = background(agentloop.run, ErrorBot(), TOOLS, "做事", handle)
-    event(error_entered, "error model")
-    handle.ask_stop()
-    error_release.set()
-    error = finish(runner, box)
-    check("端點 error 優先於同時的 stop", f"{error.stop} {error.err}", "error 端點同時壞掉")
-
-    batch_entered, batch_release = threading.Event(), threading.Event()
-    batch_ran, handle = [], agentloop.Handle()
+    entered, release = threading.Event(), threading.Event()
+    batch = []
 
     def first():
-        batch_ran.append("first")
-        batch_entered.set()
-        if not batch_release.wait(1):
-            raise TimeoutError("測試沒有放行 tool batch")
-        return "first result"
+        batch.append("first")
+        entered.set()
+        if not release.wait(1):
+            raise TimeoutError("測試沒有放行工具")
+        return "a"
 
-    bot = FakeBot(
-        wants(("a", "first", "{}"), ("b", "second", "{}")),
-        wants(("c", "must_not_run", "{}")))
-    runner, box = background(agentloop.run, bot, {
-        "first": first,
-        "second": lambda: batch_ran.append("second") or "second result",
-        "must_not_run": lambda: batch_ran.append("forbidden"),
-    }, "做事", handle)
-    event(batch_entered, "stoppable tool batch")
-    handle.say("排過但 stop 優先")
-    handle.ask_stop()
-    batch_release.set()
-    batch = finish(runner, box)
-    settled = sorted((bot.asked[1][1] or {}).keys()) if len(bot.asked) > 1 else []
-    check("tool batch 中 stop 會完整 settlement 且不跑新 calls",
-          f"{batch.stop} step={batch.step} ran={batch_ran} results={settled} prompt={bot.asked[1][0]}",
-          "stopped step=2 ran=['first', 'second'] results=['a', 'b'] prompt=None")
+    h = agentloop.Handle()
+    bot = FakeBot(wants(("a", "first", "{}"), ("b", "second", "{}")),
+                  response("完成"))
+    runner = start(bot, {
+        "first": first, "second": lambda: batch.append("second") or "b",
+    }, "開始", h)
+    event(entered, "tool batch")
+    h.pause()
+    release.set()
+    check("tool batch 全部完成後才 paused",
+          str(h.wait_for_state("paused", timeout=1)), "True")
+    check("after_tools 前整批工具一個不漏", repr(batch), "['first', 'second']")
+    check("結果尚未送進下一 Step", str(len(bot.asked)), "1")
+    h.resume()
+    runner.join()
+
+    h = agentloop.Handle()
+    h.after_step.append(lambda _: (_ for _ in ()).throw(RuntimeError("callback 爆掉")))
+    result = agentloop.run(FakeBot(response("有提交")), {}, handle=h)
+    check("callback exception 結束 Round", f"{result.stop} {result.err}",
+          "error callback 爆掉")
+
+    external_end_boundaries()
+
+
+def external_end_boundaries():
+    print("\n== controller end 也遵守安全邊界 ==")
+    entered, release = threading.Event(), threading.Event()
+
+    class BlockingBot(FakeBot):
+        def ask(self, **kwargs):
+            entered.set()
+            if not release.wait(1):
+                raise TimeoutError("測試沒有放行 Step")
+            return super().ask(**kwargs)
+
+    callbacks, ran = [], []
+    h = agentloop.Handle()
+    h.after_step.append(lambda _: callbacks.append("step"))
+    bot = BlockingBot(wants(("a", "work", "{}")))
+    runner = start(bot, {"work": lambda: ran.append(1) or "ok"}, "開始", h)
+    event(entered, "end during Step")
+    check("end 請求立即接受", str(h.end()), "True")
+    release.set()
+    result = runner.join()
+    check("Step 與 callback 完成後才 end",
+          f"{result.stop} {callbacks} {ran}", "ended ['step'] []")
+
+    entered, release = threading.Event(), threading.Event()
+    batch, callbacks = [], []
+
+    def first():
+        batch.append("first")
+        entered.set()
+        if not release.wait(1):
+            raise TimeoutError("測試沒有放行 tool")
+        return "a"
+
+    h = agentloop.Handle()
+    h.after_tools.append(lambda _: callbacks.append("tools"))
+    bot = FakeBot(wants(("a", "first", "{}"), ("b", "second", "{}")))
+    runner = start(bot, {
+        "first": first, "second": lambda: batch.append("second") or "b",
+    }, "開始", h)
+    event(entered, "end during tools")
+    h.end(reason="operator")
+    release.set()
+    result = runner.join()
+    check("tool batch 與 callback 完成後才 end",
+          f"{result.stop} {batch} {callbacks} {len(bot.asked)}",
+          "operator ['first', 'second'] ['tools'] 1")
+
+    h = agentloop.Handle(auto_finish=False)
+    runner = start(FakeBot(response("等待")), {}, handle=h)
+    check("進入 waiting", str(h.wait_for_state("waiting", timeout=1)), "True")
+    check("parked Round 可立即 end", str(h.end(reason="closed")), "True")
+    result = runner.join()
+    check("end 會喚醒 parked runner", f"{result.stop} {result.state}",
+          "closed completed")
+    check("已結束時 end 是 no-op", str(h.end()), "False")
+
+    h = agentloop.Handle()
+    h.after_step.append(lambda _: agentloop.PAUSE)
+    runner = start(FakeBot(response("暫停")), {}, handle=h)
+    check("進入 paused", str(h.wait_until_paused(timeout=1)), "True")
+    h.end(reason="closed")
+    result = runner.join()
+    check("paused Round 也可立即 end", f"{result.stop} {result.state}",
+          "closed completed")

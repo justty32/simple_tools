@@ -1,149 +1,169 @@
 # agentloop
 
-**一個函式，讓 bot 自己一直跑。**
+一個同步控制迴圈：執行 Step、提交狀態、通知 callbacks、執行工具，再重複。
 
-一次完整 `run()` 是一個回合（Round）；裡面每次 `ask() → message` 是一步（Step）。
-回合內重新配置下一個 Step 與控制邊界的完整語意在 [ROUNDS.md](ROUNDS.md)。
+一次 `ask() → message` 是一個 Step；工具批次發生在兩個 Steps 之間：
 
-底下兩層（[`llms`](../llmkit/llms/README.md)，含可選 preset；以及
-[`tooljson`](../llmkit/tooljson/README.md)）都是「人推一步，它動一下」。
-這一層負責**真的去執行、把結果餵回去、決定什麼時候收手**。
-
-```
-模型說「我要用 read_file」
-    → 這裡真的去跑
-    → 結果餵回去
-    → 它再想一步
-    → …直到它不叫工具了，或預算用完
+```text
+ask() → message/tool calls
+      → after_step callbacks
+      → tools
+      → after_tools callbacks
+      → 下一次 ask(tool results)
 ```
 
-## 三行
+## 最小使用方式
 
 ```python
-import agentloop, base_tools
-from llms import LLM
+import agentloop
 
-schemas, dispatch = base_tools.tools()
-bot = LLM(tools=schemas)
-
-h = agentloop.run(bot, dispatch, "把 a.txt 裡的 two 改成 TWO")
+h = agentloop.run(bot, dispatch, "把 a.txt 改好")
 print(h.text, h.stop)
 ```
 
-`h` 是把手（`Handle`），跑完之後它就是這趟的報告。
+核心 `run()` 不建 thread，也沒有 async 版本。它永遠在呼叫者所在的 thread 執行。
 
-## 阻塞 API
+## 內置方便工具
 
-`run()` 會阻塞到整個 Round 結束。它不建 task、不開 thread，也沒有 async 版本：
+核心以外有兩個可選子專案：
+
+- [`agentloop.threading`](threading/README.md)：把同步 `run()` 放進一條背景 thread。
+- [`agentloop.limits`](limits/README.md)：用 callbacks 實作合作式預算與工具 policy。
+
+不另造 CLI 也可以直接在 Python 互動環境持有 Handle。REPL 目錄後續也會
+收納把其他 coding agent 當作操作入口的文件、腳本與範例；見
+[`agentloop` 互動入口](repl/README.md)。
+
+兩者都只使用核心的公開 API；核心 `run()` 不認識它們，也不替它們保留特殊分支。
+
+## Callback 邊界
+
+Handle 上有兩個公開 callback lists：
 
 ```python
+def inspect_calls(h):
+    # message 已提交，tools 尚未執行
+    h.tool_calls[0]["args"]["path"] = "other.txt"
+    return agentloop.CONTINUE
+
+def rewrite_results(h):
+    # 整批 tools 已完成，下一個 Step 尚未開始
+    h.tool_results["call_1"] = "修改後的結果"
+
 h = agentloop.Handle()
-result = agentloop.run(bot, dispatch, "整理一下這個資料夾", h)
+h.after_step.append(inspect_calls)
+h.after_tools.append(rewrite_results)
+agentloop.run(bot, dispatch, handle=h)
 ```
 
-需要一邊跑一邊控制時，由上層 runtime 把這個阻塞函式放進 worker thread；
-`agentloop` 本身不管這層排程。另一條 thread 可拿同一個 `Handle` 查看或控制。
+Callback 回 `CONTINUE`（`0`）、`PAUSE` 或 `END`。同一邊界的 callbacks 一定全部執行，
+後面的看得到前面的修改；最後按 `END > PAUSE > CONTINUE` 彙總。
 
-把手上有兩組東西：
+## 公開狀態
 
-**問 live 狀況**（普通同步函式，可跨 thread）：`h.now()` 一行人話、
-`h.done()` 收工了沒、`h.elapsed()` 花了幾秒。完成後可穩定讀取 `h.text`、`h.stop`、
-`h.step`、`h.tool_log`、`h.calls` / `h.used` / `h.tokens` 等報告欄位。
+Handle 刻意直接暴露狀態，包含：
 
-**改下一步**：`h.add_instruction("…")`（短名 `h.say("…")`）、
-`h.add_images("photo.png")`、`h.add_tools(schemas, dispatch)`，以及
-`h.set_ask_options(tool_choice="required", stream=True)`。ask options 會持續到再次
-修改；圖片只送下一步，工具則從下一步起加入 bot 能力與執行表。
-若 `Limits.tools` 設了白名單，新工具仍須在白名單內才會真正執行。
+- `prompt`、`images`、`tools`、`dispatch`、`ask_options`
+- `message`／`text`、`tool_calls`、`tool_results`、`reply`、`history`
+- `state`、`step`、`usage`、`input_tokens`、`output_tokens`、
+  `cached_input_tokens`、`tokens`、`calls`、`used`、`tool_log`
+- `auto_finish`、`stop`、`err`
 
-**下控制**：`h.pause()` / `h.resume()`、`h.ask_stop()`。
-
-這些變更都是**下一步開頭生效**，不會打斷正在跑的那一步。
-沒有「立刻中斷」——模型那次 HTTP 和跑到一半的工具都停不下來，
-假裝停得下來只會讓人以為工具沒跑過。
-
-`Handle` 的查詢與控制方法可從其他 OS thread 使用。多筆
-instruction 依 FIFO 送出，completion 不會吃掉同時到達的指令。一個 `Handle`
-只屬於一個 Round，重用或同時使用會立即失敗。競態、拒絕訊息與 pause/stop
-的 settlement 規則見 [ROUNDS.md](ROUNDS.md)。
-
-## 為什麼停
-
-狀態機只分正常的 `completed` 與非正常的 `error`。`h.stop` 保留底下的具體原因：
-
-| | |
-|---|---|
-| `done` | 模型不叫工具了，講完了。**正常結束** |
-| `length` | 也不叫工具了，但它是被 `max_tokens` 切斷的，不是講完 |
-| `budget` | Step 預算用完，它還在叫工具 |
-| `calls` / `time` / `tokens` | 那項預算用完 |
-| `engine` | 它掛的思考引擎不在准用清單裡 |
-| `error` | `llms` 那邊回錯，看 `h.err` |
-| `stopped` | 你叫它收手 |
-
-`done` 和 `length` 分開，是因為「它沒再叫工具」有兩種完全不同的原因：
-**講完了**，跟**話被切斷所以看起來像講完了**。混在一起的話，
-一個被截斷的回答會被當成正常結束。
-
-## 預算
-
-給它多少步、多少工具、多少時間、哪些工具、哪些引擎 —— 全在
-[LIMITS.md](LIMITS.md)。那份也講**沒做的那一半**（cpu / gpu / 記憶體 / 網路 /
-能碰哪些檔案），以及為什麼那些不放進 `Limits` 裡假裝有。
+外部可以直接增刪查改；資料修改不會自動要求 agentloop 多跑一步。跨 thread 要原子修改
+多個欄位或 nested list/dict 時使用：
 
 ```python
-agentloop.run(bot, dispatch, "…", limits=agentloop.Limits(
-    steps=20, calls=40, per_tool={"run_shell": 5},
-    tools=["read_file", "run_shell"], engines=["deepseek-chat"],
-    seconds=300, tokens=200_000))
+with h.edit():
+    h.prompt = "繼續檢查"
+    h.ask_options["tool_choice"] = "required"
 ```
 
-不給就是 `Limits()`：12 步，其餘不限。
-計數型限制在建構時就驗證：`steps` / `quiet` 要正整數，其餘次數要非負。
-`seconds` 和 `tokens` 都是**合作式限制**：只在安全邊界檢查，最多可超過一次
-model/tool operation，不是 hard kill。
+不用 `edit()` 仍可修改，但跨 thread 的一致性由呼叫者自行承擔。已開始的模型請求或
+工具批次使用啟動前取得的輸入快照；執行中的修改只影響下一個 operation。
 
-## 停在一半，可以接著跑
+## 自然等待、暫停與恢復
 
-Step／其他預算在下一批 tools 開始前用完，或 stop 在 model 回應時到達，
-那批工具**還沒跑**，債留在 `bot.history` 上。同一個 bot 用新 Handle
-再叫一次就從那裡接下去：
+預設 `auto_finish=True`：模型不再要求工具時，Round 進入 `completed`，`run()` 返回。
+
+設定 `auto_finish=False` 後，模型自然靜止時進入 `waiting`。原本的 runner thread 停在
+Condition 裡，`run()` 不返回；另一條 thread 修改狀態後呼叫 `resume()`，同一 runner
+繼續執行：
 
 ```python
-h = agentloop.run(bot, dispatch, "…", limits=Limits(steps=5))
-if h.stop == "budget":
-    h = agentloop.run(bot, dispatch)     # 不用再給 prompt
+h = agentloop.Handle(auto_finish=False)
+
+# 另一條 thread 正在執行 agentloop.run(..., handle=h)
+h.wait_for_state("waiting")
+with h.edit():
+    h.prompt = "再做一件事"
+    h.auto_finish = True
+h.resume()
 ```
 
-迴圈每一步都從「先還上一步欠的工具結果」開始，所以「接著跑」
-跟平常那一步走同一條路。若 stop 是在 tool batch 中到達，當批已執行的
-results 會先 settlement，下個 Round 不會重跑這些副作用。
+`pause(safe=True)` 只提出合作式暫停要求，立即返回：
 
-## 工具壞掉不會打斷迴圈
+- Step 中收到 pause：Step 與 `after_step` 完成後暫停，不執行 tools。
+- tool batch 中收到 pause：整批 tools 與 `after_tools` 完成後暫停，不開始下個 Step。
 
-不存在的工具、參數不匹配、非法 JSON 與工具例外都變成一句 `Error: ...`
-送回模型，讓它改正後再試。參數會先用函式簽名驗證，工具內部的
-`TypeError` 不會被誤報成參數錯誤；過長輸出也會截斷以保護 context。
+可用 `wait_until_paused()` 等待要求真正生效。`resume()` 只在 `waiting`／`paused`（或取消
+尚未生效的 pause）時回 `True`；其他狀態是明確的 no-op。
 
-## 它不做什麼
+一個 Handle 同時只准一個 runner，且只能用於一個 Round。Thread pool、scheduler 與
+parked thread 的資源成本由使用者或上層 runtime 負責。
 
-- **不對外廣播串流。** 可以把 `stream=True` 設成 ask option，但 `run()` 仍會在
-  內部收完。要逐字顯示就自己 `bot.ask(stream=True)`。
-- **不 import `llms`，也不 import `tooljson`。** `bot` 只要有 `ask()` 和
-  `pending_calls`，`dispatch` 只要是 `{名字: fn(**kwargs)}` ——
-  `base_tools.tools()` / `tooljson.tools()` / `llms.to_tools()` 生出來的都是
-  這個形狀，混著給也行。
-- **工具一次跑一個**，照模型要求的順序。併發省不了多少，
-  卻會讓兩個 `run_shell` 在同一個資料夾裡互相踩。
+不想自行寫啟動與收尾樣板時，可以用內置的 thread 工具：
 
-## 驗
+```python
+from agentloop.threading import start
+
+runner = start(bot, dispatch, "開始")
+h = runner.handle
+
+h.pause()
+h.wait_until_paused()
+# 修改公開狀態後：h.resume()
+# 不打算再繼續：h.end()
+
+result = runner.join()  # 等待、重拋 runner 啟動錯誤、返回同一個 Handle
+```
+
+`start()` 每次只建立一條 thread，不是 pool 或 scheduler。核心的同步模型與
+parked-runner ownership 都沒有因此改變。
+
+`end(safe=True, reason="ended")` 是 controller 對應 callback `END` 的操縱桿。
+若 Round 正在執行 Step，它會在 Step 與 `after_step` 完成後、tools 開始前
+結束；若正在執行 tool batch，則完成整批與 `after_tools` 後結束。已在
+`waiting`／`paused` 時會立即結束並喚醒 runner。
+
+## Limits
+
+`Limits` 位於 `agentloop.limits`，是附加在 `after_step` 的便利 callback policy：
+
+```python
+from agentloop.limits import Limits
+
+h = agentloop.Handle()
+Limits(
+    steps=20,
+    calls=40,
+    per_tool={"run_shell": 5},
+    tools=["read_file", "run_shell"],
+    engines=["deepseek-chat"],
+    seconds=300,
+    input_tokens=200_000,
+    output_tokens=20_000,
+).attach(h)
+agentloop.run(bot, dispatch, "...", handle=h)
+```
+
+OS 的 CPU、記憶體、網路與檔案限制不屬於這項工具；見 [LIMITS.md](LIMITS.md)。
+
+## 驗證
 
 ```bash
 cd freepy
-PYTHONPATH=llmkit uv run python -m agentloop                  # 離線關卡
-PYTHONPATH=llmkit uv run python -m agentloop deepseek-chat    # 再多一關：真模型
+PYTHONPATH=llmkit uv run python -m agentloop
 ```
 
-離線那部分用**假的回應物件餵真的 `Reply`**，所以迴圈走的路跟接真模型時一模一樣，
-差別只在 `ask()` 不出門。壞掉的模型、壞掉的工具、每一種預算、競態邊界、
-跨 thread FIFO、pause/stop、one-shot Handle 和接著跑，都在裡面。
+離線關卡使用假的 endpoint 回應配合真的 `llms.Reply`，涵蓋 callback 改寫、公開狀態、
+parked runner、跨 thread pause/resume、tool batch 邊界、錯誤與 Limits policy。

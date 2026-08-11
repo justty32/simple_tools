@@ -3,10 +3,11 @@
 import sys
 import tempfile
 
-from agentloop import Limits
+from agentloop import Handle
+from agentloop.limits import Limits
 
 from ._checks_contracts import contracts
-from ._checks_core import basics, broken, budgets, policy_and_quiet
+from ._checks_core import basics, broken, budgets, policies
 from ._checks_live import resuming, steering
 from ._checks_inputs import dynamic_inputs, step_commit
 from ._checks_races import races
@@ -25,8 +26,10 @@ def real(model):
         schemas, dispatch = base_tools.tools()
         bot = LLM(engine=Engine(model=model), tools=schemas,
                   system="用繁體中文回答。要看檔案或改檔案就用工具，不要用猜的。")
+        handle = Handle()
+        Limits(steps=8, per_tool={"run_shell": 3}).attach(handle)
         h = go(bot, dispatch, "notes.txt 裡的水果加起來幾個？答案寫進 total.txt。",
-               limits=Limits(steps=8, per_tool={"run_shell": 3}))
+               handle=handle)
         for step_no, name, args, out in h.tool_log:
             print(f"  [{step_no}] {name}({args}) -> {out.splitlines()[0][:60]}")
         print("  ", h.now())
@@ -39,7 +42,7 @@ def main():
     basics()
     broken()
     budgets()
-    policy_and_quiet()
+    policies()
     steering()
     resuming()
     print("\n== 競態與控制邊界 ==")
