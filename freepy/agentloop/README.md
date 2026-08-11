@@ -30,6 +30,10 @@ print(h.text, h.stop)
 - [`agentloop.threading`](threading/README.md)：把同步 `run()` 放進一條背景 thread。
 - [`agentloop.limits`](limits/README.md)：用 callbacks 實作合作式預算與工具 policy。
 
+不另造 CLI 也可以直接在 Python 互動環境持有 Handle。REPL 目錄後續也會
+收納把其他 coding agent 當作操作入口的文件、腳本與範例；見
+[`agentloop` 互動入口](repl/README.md)。
+
 兩者都只使用核心的公開 API；核心 `run()` 不認識它們，也不替它們保留特殊分支。
 
 ## Callback 邊界
