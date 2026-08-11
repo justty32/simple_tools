@@ -1,8 +1,12 @@
 # 以 Pi coding agent 操作 agentloop
 
 本文記錄把 [Pi coding agent](https://github.com/earendil-works/pi/tree/main/packages/coding-agent)
-當作 agentloop 進階互動入口的初步設計。這一階段只定義邊界與最小方案，不實作 adapter。
+當作 agentloop 進階互動入口的設計與第一版實作。
 官方 API 與 package 名稱最後核對日期為 2026-08-11。
+
+> **實作狀態：**Pi 0.84.1 已驗證能載入 TypeScript extension 與註冊 slash
+> commands；Python bridge 的完整 gate、edit、resume、end、join 流程已通過離線
+> subprocess smoke test。尚未使用真實 LLM factory 做端到端測試。
 
 ## Pi 是什麼，以及這裡採用哪個介面
 
@@ -195,9 +199,7 @@ Agentloop callback 自己回 `END` 與 Pi 呼叫 `end` 最終都進入 Handle �
 不同。Bridge 應保留 `stop`／`end_reason`，讓 Pi 不要把 Limits、callback policy 與人工結束
 混為一談。
 
-## 預計 scripts 與 examples
-
-這些是後續實作候選，現在尚未建立：
+## 已實作的 scripts 與 example
 
 ```text
 repl/
@@ -205,16 +207,16 @@ repl/
 │   └── pi-coding-agent.md
 ├── scripts/
 │   ├── pi-agentloop.ts       # Pi extension：tool、commands、child lifecycle、JSONL client
-│   └── pi_bridge.py          # Python bridge：factory、Handle、runner、callback events
+│   ├── pi_bridge.py          # Python bridge：factory、Handle、runner、callback events
+│   └── check_pi_bridge.py    # 離線 subprocess protocol smoke test
 └── examples/
-    ├── pi_minimal_factory.py # 建立最小 bot/dispatch 的 factory
-    ├── pi_observe.md         # observe mode 操作範例
-    └── pi_gate_tools.md      # after_step pause，審核/改寫 tool calls 的範例
+    ├── pi_minimal_factory.py # 離線 bot/dispatch factory
+    └── pi_quickstart.md      # 啟動、commands、factory contract 與實例
 ```
 
-第一個端到端 example 應刻意小：啟動一個 `auto_finish=False` Round，讓 after-step gate 暫停，
-由 Pi 查看並改寫一個 tool call，resume，於 after-tools gate 查看結果，最後 end/join。這能一次
-驗證最重要的控制邊界。
+Bridge 預設 `after_step=pause`、`after_tools=continue`；`start` 可透過 `gates`
+覆寫。Factory 只能由 bridge 啟動參數或 `AGENTLOOP_PI_FACTORY` 指定，不接受
+Pi tool payload 動態指定 import path。完整用法見 [Pi quickstart](../examples/pi_quickstart.md)。
 
 ## 風險
 

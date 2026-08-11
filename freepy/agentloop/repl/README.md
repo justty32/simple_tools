@@ -7,9 +7,8 @@
 - 啟動、連接或預載 agentloop 的薄腳本；
 - 可複製或直接執行的範例。
 
-目前第一個入口是 Python 原生 REPL。還沒有另外實作一套命令語言或文字
-介面；REPL 裡使用的就是 agentloop 公開 API。後續若加入 coding-agent
-adapter，也應維持這個原則：入口只組合公開 API，不為核心增加隱藏控制通道。
+目前已有 Python 原生 REPL 用法，以及 Pi coding agent 的第一版 extension／bridge。
+這些入口都只組合 agentloop 公開 API，不為核心增加隱藏控制通道。
 
 這些入口的共同目的，是讓操作者直接持有 `Handle`，自由查看或修改狀態，而不需要先把每種
 操作包成 CLI command。
@@ -24,13 +23,15 @@ repl/
 └── examples/   # 可執行或可複製的完整範例
 ```
 
-目前只建立已有內容的檔案；等第一個 adapter、script 或 example 出現時再建立
-對應子目錄，避免先放空目錄佔位。
-
 ## 已記錄的入口
 
 - [Pi coding agent](docs/pi-coding-agent.md)：比較 Pi extension、Python bridge、RPC 與
-  launcher，並提出第一版整合方案。
+  launcher，並記錄已實作的第一版。
+- [Claude Code](docs/claude-code.md)：推薦使用 project-local stdio MCP server 與薄 skill。
+- [OpenAI Codex](docs/codex.md)：推薦使用 project-scoped stdio MCP server 與薄 skill。
+- [MCP](docs/mcp.md)：共用 Python MCP server 的協議、tools、events 與 lifecycle 設計。
+
+Pi 離線範例與啟動方式見 [Pi quickstart](examples/pi_quickstart.md)。
 
 ## Python 原生 REPL
 
