@@ -34,6 +34,7 @@ class Handle:
         self._started = None
         self._finished = None
         self._pause_requested = False
+        self._end_requested = False
 
         # Control and callbacks.
         self.auto_finish = bool(auto_finish)
@@ -143,6 +144,21 @@ class Handle:
             self._condition.notify_all()
             return True
 
+    def end(self, safe=True, reason="ended"):
+        """End at the next safe boundary, or immediately when already parked."""
+        if not safe:
+            raise ValueError("agentloop only supports safe cooperative end")
+        with self._condition:
+            if self.done():
+                return False
+            self.end_reason = reason
+            if self.state in {"waiting", "paused"}:
+                self._end_unlocked(reason)
+            else:
+                self._end_requested = True
+                self._condition.notify_all()
+            return True
+
     def wait_for_state(self, *states, timeout=None):
         """Wait until the Handle reaches any requested state."""
         wanted = set(states)
@@ -212,6 +228,9 @@ class Handle:
             if decision == END:
                 self._end_unlocked(self.end_reason or "ended", self.err)
                 return "end"
+            if self._end_requested:
+                self._end_unlocked(self.end_reason or "ended")
+                return "end"
             if decision == PAUSE or self._pause_requested or self.state == "paused":
                 if not self._park_unlocked("paused"):
                     return "end"
@@ -253,6 +272,9 @@ class Handle:
             if decision == END:
                 self._end_unlocked(self.end_reason or "ended", self.err)
                 return False
+            if self._end_requested:
+                self._end_unlocked(self.end_reason or "ended")
+                return False
             if decision == PAUSE or self._pause_requested or self.state == "paused":
                 return self._park_unlocked("paused")
             return True
@@ -276,6 +298,9 @@ class Handle:
 
     def _await_ready_unlocked(self):
         if self.done():
+            return False
+        if self._end_requested:
+            self._end_unlocked(self.end_reason or "ended")
             return False
         if self._pause_requested:
             return self._park_unlocked("paused")
@@ -311,6 +336,8 @@ class Handle:
             return
         self.stop = stop
         self.err = err
+        self._pause_requested = False
+        self._end_requested = False
         self.state = "error" if err is not None else "completed"
         self._finished = time.monotonic()
         self._condition.notify_all()

@@ -118,12 +118,18 @@ h = runner.handle
 h.pause()
 h.wait_until_paused()
 # 修改公開狀態後：h.resume()
+# 不打算再繼續：h.end()
 
 result = runner.join()  # 等待、重拋 runner 啟動錯誤、返回同一個 Handle
 ```
 
 `start()` 每次只建立一條 thread，不是 pool 或 scheduler。核心的同步模型與
 parked-runner ownership 都沒有因此改變。
+
+`end(safe=True, reason="ended")` 是 controller 對應 callback `END` 的操縱桿。
+若 Round 正在執行 Step，它會在 Step 與 `after_step` 完成後、tools 開始前
+結束；若正在執行 tool batch，則完成整批與 `after_tools` 後結束。已在
+`waiting`／`paused` 時會立即結束並喚醒 runner。
 
 ## Limits
 

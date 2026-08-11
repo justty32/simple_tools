@@ -57,6 +57,13 @@ def contracts():
     else:
         unsafe = "not rejected"
     check("不假裝能 unsafe pause", unsafe, "only supports safe")
+    try:
+        agentloop.Handle().end(safe=False)
+    except ValueError as exc:
+        unsafe_end = str(exc)
+    else:
+        unsafe_end = "not rejected"
+    check("不假裝能 unsafe end", unsafe_end, "only supports safe")
 
     invalid = [
         {"steps": None}, {"steps": 0}, {"steps": 1.5}, {"steps": True},

@@ -131,7 +131,7 @@ Step 計數與 phase。原本的 `add_instruction()`、`add_images()`、`add_too
 外部修改資料不會自動喚醒；必須明確 `resume()`。因此「模型沒有 tool calls」、
 「`run()` 返回」與「Round completed」是三件可以分開的事。
 
-## pause 的安全邊界
+## pause 與 end 的安全邊界
 
 「安全邊界」的意思只是：**不要把一件已開始的事切成一半**。
 
@@ -140,8 +140,12 @@ Step 計數與 phase。原本的 `add_instruction()`、`add_images()`、`add_too
 - `pause(safe=True)` 提出 cooperative pause request，在上述事情完成後進入 `paused`。
 - `pause(safe=True)` 本身立即返回，不同步等待 runner，以免 callback 在 runner thread
   裡呼叫時自鎖；需要同步等待時另用 `wait_until_paused()`。
-- `ask_stop()` 不再是目標 API；需要結束時由 callback 回 `END`，需要保留可恢復狀態時
-  使用 safe pause。
+- `end(safe=True, reason="ended")` 使用相同邊界，但會永久完成 Round；已在
+  `waiting`／`paused` 時立即結束並喚醒 runner。它也是立即返回的合作式請求。
+- callback 用 `END`，外部 controller 用 `end()`；兩者最後都走相同的
+  `completed` 狀態轉移。`auto_finish=True` 則是模型自然靜止時的自動結束。
+- `ask_stop()` 不再是目標 API；要保留可恢復狀態使用 `pause()`，要永久結束使用
+  callback `END` 或 controller `end()`。
 
 如果工具已經執行，它的結果必須先登記回 bot history；否則下次開新 Round 時，
 系統可能以為工具還沒跑過，把副作用重做一次。這就是為什麼 pause 不是立刻切斷。

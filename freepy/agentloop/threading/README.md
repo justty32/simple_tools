@@ -103,6 +103,17 @@ result = runner.join()
 直接修改公開欄位仍然允許；如果需要一次一致地修改多個欄位或 nested list/dict，使用
 `with handle.edit()`。不使用它時，競態風險由操作者承擔。
 
+如果 controller 決定不再繼續，可以安全結束：
+
+```python
+h.end(reason="operator")       # 立即返回；不切斷已開始的 operation
+result = runner.join()         # 等安全邊界完成後返回
+```
+
+若已在 `waiting`／`paused`，`end()` 會當場轉成 `completed` 並喚醒 parked
+runner。若在 Step 中，它等 Step 和 `after_step` 完成後於 tools 前結束；若在
+tool batch 中，則先完成整批與 `after_tools`。
+
 ### callback 裡建立 thread 的自鎖風險
 
 callbacks 在 runner thread 且持有 Handle 的 `RLock` 時執行。callback 可以建立新
