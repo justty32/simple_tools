@@ -1,7 +1,8 @@
 # FreePy × Ollama 實測：192.168.1.146
 
 測試日期：2026-08-12。這是區域網路開發機的當次快照，不是穩定規格或公開 benchmark。
-測試只執行文字生成與純記憶體 `multiply(6, 7)`，沒有讀寫遠端檔案。
+模型只經 Ollama 生成；effects 在 FreePy 所在的本機執行，包括純記憶體 `multiply(6, 7)`，以及
+暫存 workspace 內的檔案、exec 與 loopback HTTP 操作，沒有讀寫 Ollama 主機的檔案。
 
 ## 環境
 
@@ -66,9 +67,10 @@
 
 - Qwen 2.5 14B：通過。2 Steps、1 tool call；tool log 正確記錄參數與結果 `42`，最後
   `TOOL_OK=42`。wall time 19.20s，input/output 418/116 tokens。
-- Qwen3 32B：先前用 256 output tokens、4 Steps/2 calls 的 smoke 設定時，256 tokens 全在
-  reasoning，尚未產生 tool call 就以 `length` 停止。這是預算不足的探針結果，不能判定模型或
-  FreePy 工具鏈失敗；原生對照已證明模型會正確 tool call。
+- Qwen3 32B：4096 output tokens、16 Steps/16 calls 的正式重測通過。2 Steps、1 tool call；
+  `multiply(a=6,b=7)` 回傳 `42`，最終精確回答 `TOOL_OK=42`。wall time 73.35s，input/output
+  411/244 tokens。先前 256-token smoke 在產生 tool call 前就以 `length` 停止，確認只是預算
+  不足，不能拿來判定模型或 FreePy 工具鏈失敗。
 
 ## `shells.session()` 互動控制
 
@@ -110,12 +112,14 @@ server 執行；模型只經 Ollama 思考。設定為每 Step 最多 4096 outpu
 ## 結論與下一步
 
 1. Ollama 服務、原生 API 與 OpenAI-compatible API 都可連線。
-2. FreePy 對非 reasoning 模型的文字與完整 14B tool Round 已實證可用。
+2. FreePy 對非 reasoning 模型的文字、14B foundation Round，以及 32B reasoning 模型的工具
+   閉環都已實證可用。
 3. `shells.session()` 與 Controller `.send()` 已通過真模型兩輪互動。
 4. `llms.Reply` 現已同時讀 `message.reasoning` 與 `reasoning_content`。
 5. Controller 加上目前三類 foundation effect 已完成一次有 assertion 的真模型整合測試。
-6. reasoning 模型的正式測試改用 4096（必要時 8192）output tokens；agentloop 使用至少
-   16 Steps/16 calls，只把 Limits 當防無限循環，不拿 smoke budget 評價模型能力。
+6. reasoning 模型的正式測試使用 4096（必要時 8192）output tokens；agentloop 使用至少
+   16 Steps/16 calls，只把 Limits 當防無限循環，不拿 smoke budget 評價模型能力。Qwen3 32B
+   已在這組設定下通過。
 
 ## 模型切換與卸載規則
 
@@ -126,5 +130,4 @@ server 執行；模型只經 Ollama 思考。設定為每 Step 最多 4096 outpu
 3. 短暫輪詢 `/api/ps` 確認舊模型消失，才開始下一顆；單次立即查詢可能過早。
 4. 測試被取消後也先檢查本機 process 與 `/api/ps`。
 
-本次 4096-token 重測被人工中斷；中斷後已確認本機沒有殘留測試 process，`/api/ps` 的
-`models` 為空。該次沒有完整結果，因此不列入能力結論。
+Qwen3 32B 的 4096-token 重測結束後已依這套流程卸載，輪詢確認 `/api/ps` 的 `models` 為空。
