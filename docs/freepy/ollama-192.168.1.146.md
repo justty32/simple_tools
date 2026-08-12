@@ -103,6 +103,10 @@ server 執行；模型只經 Ollama 思考。設定為每 Step 最多 4096 outpu
 `region=TW,total=50`；最後檔案是六個實體行，內容與預期完全相符，Controller 以 `done` 完成且
 沒有 error。
 
+腳本改為必填 `--model`、可指定 `--host` 並共用安全清理流程後，再以相同模型重跑一次：仍為
+7 Steps／6 Calls、6833/663 tokens，101.57s；JSON report 為 `ok=true`、`unloaded=true`，五種
+effect 次數、HTTP call 與最終檔案 assertions 全部通過。
+
 前兩輪不是 JSON parser 或 `write_file` 偷改資料：模型傳入的 Python argument 本身就是字面
 反斜線加 `n`，工具也明確回報「1 lines」。模型讀回後仍把畫面中的 `\\n` 當換行，宣稱六行驗證
 成功。這是可重現的 14B 指令／觀察弱點；在 prompt 明講「真正換行，不是兩個字元」後消失。

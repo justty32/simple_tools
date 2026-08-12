@@ -1,4 +1,4 @@
-"""Real Ollama roundtrip through Controller and all current foundation effects."""
+"""Manual Ollama roundtrip through all current FreePy foundation effects."""
 
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
@@ -6,13 +6,12 @@ from pathlib import Path
 import sys
 import tempfile
 import threading
-import time
 from urllib.parse import parse_qs, urlsplit
-from urllib.request import Request, urlopen
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT), str(ROOT / "llmkit")]
 
+from _ollama_probe import manual_probe, progress  # noqa: E402
 import base_tools  # noqa: E402
 import exec_tools  # noqa: E402
 import http_tools  # noqa: E402,F401 - registers the HTTP tooljson type
@@ -20,9 +19,13 @@ from agentloop import Controller, Handle  # noqa: E402
 from agentloop.limits import Limits  # noqa: E402
 from llms import Engine, LLM, Params, to_tools  # noqa: E402
 
-HOST = "http://192.168.1.146:11434"
-MODEL = "qwen2.5:14b-instruct-q4_K_M"
 EXPECTED = "project=cedar\nregion=TW\nunits=50\nshipping=7\ngrand=57\nstatus=verified"
+LIMITS = {
+    "max_tokens_per_step": 4096,
+    "steps": 16,
+    "calls": 16,
+    "seconds": 600,
+}
 
 
 class Shipping(BaseHTTPRequestHandler):
@@ -50,25 +53,9 @@ class Shipping(BaseHTTPRequestHandler):
         pass
 
 
-def request_json(path, body=None):
-    data = None if body is None else json.dumps(body).encode()
-    req = Request(HOST + path, data=data, headers={"Content-Type": "application/json"})
-    with urlopen(req, timeout=30) as response:
-        return json.loads(response.read())
-
-
-def unload_and_wait():
-    request_json("/api/generate", {"model": MODEL, "keep_alive": 0})
-    for _ in range(20):
-        remaining = [item["name"] for item in request_json("/api/ps").get("models", [])]
-        if MODEL not in remaining:
-            return remaining
-        time.sleep(0.5)
-    return remaining
-
-
 def write_json(path, value):
-    path.write_text(json.dumps(value, ensure_ascii=False, indent=2), encoding="utf-8")
+    path.write_text(
+        json.dumps(value, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
 def make_catalog(root, port):
@@ -103,7 +90,7 @@ def make_catalog(root, port):
     return work, catalog
 
 
-def run_round(work, catalog):
+def execute_round(host, model, work, catalog):
     base_tools.set_root(work)
     base_schema, base_dispatch = to_tools(
         base_tools.read_file, base_tools.write_file, base_tools.edit_file)
@@ -113,17 +100,23 @@ def run_round(work, catalog):
     effect_schema, effect_dispatch = exec_tools.tools([catalog])
     schemas = base_schema + effect_schema
     dispatch = {**base_dispatch, **effect_dispatch}
-    engine = Engine(MODEL, url=HOST + "/v1", key="ollama", timeout=300,
-                    params=Params(temperature=0, max_tokens=4096),
-                    caps={"tools": True})
+    engine = Engine(
+        model, url=host + "/v1", key="ollama", timeout=300,
+        params=Params(
+            temperature=0, max_tokens=LIMITS["max_tokens_per_step"]),
+        caps={"tools": True})
     bot = LLM(engine, tools=schemas, system=(
         "你是嚴格的整合測試 agent。不得自行計算或省略步驟；工具輸出才是事實。"))
     handle = Handle()
-    Limits(steps=16, calls=16, seconds=600, tools=dispatch,
-           engines=[MODEL]).attach(handle)
-    handle.after_step.append(lambda h: print(
-        f"STEP {h.step}: requested={len(h.tool_calls)}", flush=True))
-    handle.after_tools.append(lambda h: print(f"TOOLS: {h.used}", flush=True))
+    Limits(
+        steps=LIMITS["steps"], calls=LIMITS["calls"],
+        seconds=LIMITS["seconds"], tools=dispatch, engines=[model],
+    ).attach(handle)
+    handle.after_step.append(lambda h: progress(
+        f"step={h.step} requested={len(h.tool_calls)} "
+        f"output_tokens={h.output_tokens}"))
+    handle.after_tools.append(lambda h: progress(
+        f"calls={h.calls} used={json.dumps(h.used, sort_keys=True)}"))
     task = """讀 order.txt，依序完成：
 1. 用 sum_numbers 計算 units，禁止心算。
 2. 用 quote_shipping 查 region 與 units 總數的運費。
@@ -132,42 +125,55 @@ def run_round(work, catalog):
 4. 用 edit_file 把 status=pending 改成 status=verified。
 5. 用 read_file 讀回 result.txt 驗證，再簡短報告。不得跳步。"""
     result = Controller(bot, dispatch, task, handle=handle).run()
-    actual = (work / "result.txt").read_text(encoding="utf-8")
-    required = {"read_file", "write_file", "edit_file", "sum_numbers", "quote_shipping"}
-    ok = result.state == "completed" and result.err is None
-    ok = ok and actual == EXPECTED and required <= set(result.used)
-    ok = ok and Shipping.calls == [{"region": "TW", "total": 50}]
-    report = {"ok": ok, "state": result.state, "stop": result.stop,
-              "steps": result.step, "calls": result.calls, "used": result.used,
-              "input_tokens": result.input_tokens, "output_tokens": result.output_tokens,
-              "elapsed_seconds": round(result.elapsed(), 2), "result_file": actual,
-              "http_calls": Shipping.calls, "tool_log": result.tool_log,
-              "answer": result.text, "error": repr(result.err)}
-    print("RESULT=" + json.dumps(report, ensure_ascii=False), flush=True)
-    if not ok:
-        raise RuntimeError("foundation roundtrip did not satisfy its assertions")
+    result_path = work / "result.txt"
+    actual = (result_path.read_text(encoding="utf-8")
+              if result_path.is_file() else None)
+    required = {
+        "read_file", "write_file", "edit_file", "sum_numbers",
+        "quote_shipping"}
+    passed = (
+        result.state == "completed"
+        and result.err is None
+        and actual == EXPECTED
+        and required <= set(result.used)
+        and Shipping.calls == [{"region": "TW", "total": 50}]
+    )
+    return {
+        "assertions_passed": passed,
+        "state": result.state,
+        "stop": result.stop,
+        "steps": result.step,
+        "calls": result.calls,
+        "used": result.used,
+        "input_tokens": result.input_tokens,
+        "output_tokens": result.output_tokens,
+        "elapsed_seconds": round(result.elapsed(), 2),
+        "result_file": actual,
+        "http_calls": Shipping.calls,
+        "tool_log": result.tool_log,
+        "answer": result.text,
+        "round_error": None if result.err is None else repr(result.err),
+    }
 
 
-def main():
-    loaded = [item["name"] for item in request_json("/api/ps").get("models", [])]
-    if loaded:
-        raise RuntimeError(f"refusing to start while Ollama has loaded models: {loaded}")
+def run_round(host, model):
+    Shipping.calls = []
     server = ThreadingHTTPServer(("127.0.0.1", 0), Shipping)
     threading.Thread(target=server.serve_forever, daemon=True).start()
-    started = False
     try:
         with tempfile.TemporaryDirectory() as tmp:
             work, catalog = make_catalog(Path(tmp), server.server_port)
-            started = True
-            run_round(work, catalog)
+            return execute_round(host, model, work, catalog)
     finally:
         server.shutdown()
         server.server_close()
-        remaining = unload_and_wait() if started else loaded
-        print("OLLAMA_REMAINING=" + json.dumps(remaining), flush=True)
-        if MODEL in remaining:
-            raise RuntimeError(f"failed to unload {MODEL}")
+
+
+def main(argv=None):
+    return manual_probe(
+        "Run all current FreePy foundation effects against Ollama.",
+        LIMITS, run_round, argv)
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())
