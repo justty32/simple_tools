@@ -96,6 +96,8 @@ h = c.handle
 ## 查看狀態
 
 ```python
+c.wait()                  # waiting / paused / completed / error
+c.wait("waiting", timeout=10)
 h.now()
 h.state
 h.step
@@ -143,10 +145,14 @@ h.resume()
 ## 在 waiting 時追加輸入
 
 ```python
-h.wait_for_state("waiting")
+c.wait("waiting")
 
 c.send("再檢查 Windows 的情況")
 ```
+
+不特別指定 states 時，`c.wait()` 會等到可供操作者介入的 `waiting`／`paused`，
+或已終止的 `completed`／`error`。指定 states 與 `timeout=` 時，它直接保留
+`Handle.wait_for_state()` 的 bool 語意。
 
 修改公開資料本身不會喚醒 runner。只有明確呼叫 `resume()` 或 `c.send()` 才會繼續。
 
@@ -216,7 +222,7 @@ callbacks 在 runner thread 同步執行，而且持有 Handle 的 `RLock`。不
 c = session(bot, dispatch, "分析目前專案")
 h = c.handle
 
-h.wait_for_state("waiting", "paused", "completed", "error")
+c.wait()
 h.now()
 h.message
 h.tool_log

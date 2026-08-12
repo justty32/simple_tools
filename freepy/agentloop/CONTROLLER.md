@@ -12,7 +12,7 @@ import agentloop
 
 c = agentloop.Controller(bot, dispatch, "整理測試失敗")
 c.start()                         # 一條本地背景 thread
-c.handle.wait_for_state("waiting")
+c.wait()                          # waiting / paused / completed / error
 with c.handle.edit():             # 需要時仍直接操作 Handle
     c.handle.prompt = "繼續修正"
 c.resume()
@@ -29,6 +29,9 @@ result = c.join()
 - `.run()`：在目前 thread 一直跑到 Round 結束；語意等同 `agentloop.run()`。
 - `.start()`／`.join()`／`.is_alive()`：包裝 `agentloop.threading` 的單一背景 thread，不是 pool。
 - `.state`／`.now()`／`.pause()`／`.resume()`／`.end()`：常用狀態與控制的簡寫。
+- `.wait(*states, timeout=None)`：委派給 Handle 的狀態等待，並保留 timeout 的 bool
+  回傳值。沒有列 states 時，預設等到 `waiting`／`paused`／`completed`／`error`，
+  避免快速結束的 Round 錯過單一 `waiting` 狀態。
 - `.send(prompt, finish=False)`：只在 `waiting`／`paused` 邊界設定下一個 prompt 並恢復；返回
   Controller 自己，方便 REPL 使用。它不是任意時刻收件的 queue。
 

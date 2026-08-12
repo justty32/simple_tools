@@ -68,10 +68,13 @@ c = assistant(
 from shells import session
 
 c = session(bot, dispatch, "先檢查專案")
-c.handle.wait_for_state("waiting")
+c.wait()
 c.send("整理結論", finish=True)
 result = c.join()
 ```
+
+無參數的 `c.wait()` 會等到 `waiting`／`paused`／`completed`／`error`；要等特定狀態時可用
+`c.wait("waiting", timeout=10)`，回傳值與 `Handle.wait_for_state()` 一樣是 bool。
 
 若傳入自己的 `handle=`，其 `auto_finish` 與 callbacks 都保持原樣。
 

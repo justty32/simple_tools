@@ -49,7 +49,8 @@ database、ACL 或 sandbox 保證。
 把「import、建 bot、掛 tools、啟動、查看、繼續」收成小型 Python library／REPL helpers。廣義上
 GUI、vim、Pi extension 都是互動 shell；若取 Unix 薄殼原義，Python REPL／CLI 才是最接近的入口。
 
-第一版已有 `shells.session()`、Controller `.send()`，且 launcher 會預載常用名稱。
+第一版已有 `shells.session()`、Controller `.send()` 與等到可介入／終止邊界的
+`.wait()`，且 launcher 會預載常用名稱。
 真實任務顯示 bot／tools 組裝值得收斂，因此增加 `shells.assistant()` 與 `toolbox()`；
 `repl` 會保留操作者的 cwd 並顯示工具 workspace，`assistant(...).session(...)` 可直接啟動
 配對好的 bot/dispatch；工具來源、workspace 與 effect policy 仍由呼叫者明確決定。

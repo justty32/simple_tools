@@ -12,6 +12,9 @@ from .loop import advance as _advance
 from .loop import run as _run
 
 
+_OPERATOR_STATES = ("waiting", "paused", "completed", "error")
+
+
 class Controller:
     """Bundle one Round's inputs, Handle, and optional background runner.
 
@@ -38,6 +41,16 @@ class Controller:
     def now(self):
         """Return Handle's compact human-readable status."""
         return self.handle.now()
+
+    def wait(self, *states, timeout=None):
+        """Wait for requested states, or the next operator-facing boundary.
+
+        With no explicit states, wait until the Round can be inspected and
+        steered (``waiting``/``paused``), or has ended
+        (``completed``/``error``).
+        """
+        return self.handle.wait_for_state(
+            *(states or _OPERATOR_STATES), timeout=timeout)
 
     def advance(self):
         """Run one Step or one tool batch without blocking when parked."""

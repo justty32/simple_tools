@@ -30,12 +30,21 @@ def controller():
         FakeBot(response("先等待"), response("互動完成")), TOOLS,
         handle=agentloop.Handle(auto_finish=False))
     c.start()
-    c.handle.wait_for_state("waiting", timeout=1)
+    parked = c.wait(timeout=1)
+    check("wait 預設等到可介入或終止的邊界",
+          f"{parked} {c.state}", "True waiting")
     sent = c.send("繼續", finish=True)
+    completed = c.wait("completed", timeout=1)
     result = c.join(1)
+    check("wait 明確 states 保留 Handle 的 bool 語意",
+          f"{completed} {c.state}", "True completed")
     check("send 在 parked boundary 設定下一個 prompt 並恢復",
           f"{sent is c} {c.bot.asked[1][0]} {result.text} {result.stop}",
           "True 繼續 互動完成 done")
+
+    idle = agentloop.Controller(FakeBot(response("不應執行")), TOOLS)
+    check("wait timeout 仍會回傳 False",
+          str(idle.wait("waiting", timeout=0)), "False")
 
     try:
         c.send("太晚了")
