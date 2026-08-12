@@ -24,11 +24,12 @@ Pi 若已設定 `AGENTLOOP_PI_FACTORY`，launcher 會自動加入 FreePy adapter
 
 1. `PYTHONPATH` 前面補上 `freepy` 和隔壁的 `llmkit`，`import base_tools` /
    `import llms` 才會通（`llms` 和 `tooljson` 已經落地到 `llmkit/`）
-2. `os.execvp` **把自己換成目標程式**，不是開子 process
+2. 把收到的參數原樣交給目標程式，並保留它的退出碼
 
-第二點是重點：換掉自己之後 Ctrl-C、TTY、退出碼全部直通，中間沒有人插手。
-開子 process 的話這三樣都要自己轉一遍，而且轉不乾淨 —— TUI 程式（pi、claude 都是）
-對這個特別敏感。
+在 POSIX 上會用 `os.execvp` **把自己換成目標程式**，Ctrl-C、TTY 與退出碼直接交接。
+Windows 的 Python `exec` 無法可靠保留含空白的參數與 child 退出碼，因此改用繼承同一個
+console 的 child handoff；launcher 會先解析 PATH 上的 `.exe`／`.cmd`，參數與退出碼仍會
+原樣傳遞。這讓 `pi`、`claude` 之類的 TUI 和 `repl -c "... ..."` 都能走同一個入口。
 
 `pi` 與 `claude` 另外會把 cwd 固定在 `freepy/`；`repl` 則保留啟動時的 cwd，讓
 `base_tools` 的預設 workspace 就是操作者所在的專案。`repl` 會優先用 `freepy/.venv` 裡的

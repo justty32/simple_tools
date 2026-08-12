@@ -163,8 +163,16 @@ subprocess 驗證 `start → pause → edit → resume → end → join` 的 JSO
 
 ```powershell
 $env:AGENTLOOP_PI_FACTORY = "adapters.pi.examples.minimal_factory:create"
-'{"id":"probe","type":"get_commands"}' |
-  uv run python -m shells pi --offline --approve --mode rpc --no-session
+$probe = Join-Path ([IO.Path]::GetTempPath()) "pi-agentloop-probe-$([guid]::NewGuid().ToString('N')).jsonl"
+[IO.File]::WriteAllText(
+  $probe, '{"id":"probe","type":"get_commands"}' + "`n",
+  [Text.UTF8Encoding]::new($false)
+)
+try {
+  cmd /d /s /c "type `"$probe`" | uv run python -m shells pi --offline --approve --mode rpc --no-session"
+} finally {
+  Remove-Item -LiteralPath $probe -ErrorAction SilentlyContinue
+}
 ```
 
 ```bash
@@ -176,6 +184,8 @@ printf '%s\n' '{"id":"probe","type":"get_commands"}' |
 結果的 `data.commands` 應包含 `al-start`、`al-status`、`al-wait`、`al-pause`、
 `al-resume`、`al-end`。stdin 在 probe 後結束，Pi RPC process 也應正常退出。`--approve`
 代表本次信任 repository 內明確載入的 extension；只在你信任這份工作樹時使用。
+PowerShell 範例先寫成 UTF-8 無 BOM 的暫存檔，是為了避開部分 Windows PowerShell 版本在
+native stdin 前加入 BOM、令 Pi 無法解析第一行 JSON 的問題。
 
 ## Windows 注意事項
 
