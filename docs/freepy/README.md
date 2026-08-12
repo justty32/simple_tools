@@ -8,6 +8,7 @@
 - [`architecture.md`](architecture.md)：core → Controller → interfaces/libraries → outer services。
 - [`interfaces/python-repl.md`](interfaces/python-repl.md)：直接 Python REPL 的操作方式。
 - [`adapters/`](adapters/README.md)：Pi、MCP、Claude Code、Codex 的 adapter 文件。
+- [`ollama-192.168.1.146.md`](ollama-192.168.1.146.md)：本地 Ollama 與 FreePy 的實測證據。
 
 ## 未來規格
 
