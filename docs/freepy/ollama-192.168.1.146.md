@@ -44,8 +44,9 @@
 | Qwen3 32B | 空 text，`length` | 19.65s | 20 / 64 |
 
 原始 `/v1/chat/completions` 顯示兩顆 reasoning 模型把 token 放在 `message.reasoning`；64 tokens
-用完時還沒進入 final content。這不能解讀成模型失敗。FreePy 正確保留 `stop="length"`，但目前
-`Reply` 只讀 `reasoning_content`，沒有讀 Ollama 的 `reasoning` 拼法，因此 `Reply.reasoning` 為空。
+用完時還沒進入 final content。這不能解讀成模型失敗。測試當時 `Reply` 只讀
+`reasoning_content`，因此 reasoning 為空；後續已加入 Ollama 的 `reasoning` alias 並以 OpenAI SDK
+解析物件離線驗證，不需重載模型。
 
 ## 工具循環
 
@@ -83,7 +84,7 @@ Controller 狀態轉移錯誤。
 1. Ollama 服務、原生 API 與 OpenAI-compatible API 都可連線。
 2. FreePy 對非 reasoning 模型的文字與完整 14B tool Round 已實證可用。
 3. `shells.session()` 與 Controller `.send()` 已通過真模型兩輪互動。
-4. 應讓 `llms.Reply` 同時讀 `message.reasoning` 與 `reasoning_content`。
+4. `llms.Reply` 現已同時讀 `message.reasoning` 與 `reasoning_content`。
 5. reasoning 模型的正式測試改用 4096（必要時 8192）output tokens；agentloop 使用至少
    16 Steps/16 calls，只把 Limits 當防無限循環，不拿 smoke budget 評價模型能力。
 

@@ -14,6 +14,12 @@ from . import toolcalls
 from .usage import usage_dict
 
 
+def _thought(part):
+    """Read the two field names used by OpenAI-compatible reasoning servers."""
+    return (getattr(part, "reasoning_content", None) or
+            getattr(part, "reasoning", None))
+
+
 class Reply:
     """一輪。err 不是 None 時 bool(reply) 是 False，其餘欄位都是空的。"""
 
@@ -99,7 +105,7 @@ class Reply:
         msg = choice.message
         self.finish_reason = choice.finish_reason
         self.usage = usage_dict(getattr(response, "usage", None))
-        self._eat(getattr(msg, "reasoning_content", None), msg.content)
+        self._eat(_thought(msg), msg.content)
         self._raw_calls = toolcalls.raw_from(msg)
 
     def _pump(self):
@@ -122,8 +128,7 @@ class Reply:
             self.finish_reason = choices[0].finish_reason or self.finish_reason
             delta = choices[0].delta
             self._acc.feed(getattr(delta, "tool_calls", None))
-            self._eat(getattr(delta, "reasoning_content", None),
-                      getattr(delta, "content", None))
+            self._eat(_thought(delta), getattr(delta, "content", None))
         except Exception as e:
             # 後端回了預期外的形狀。這裡是 ask() 的 try 管不到的（錯誤在它回來之後才發生）
             self.err = e

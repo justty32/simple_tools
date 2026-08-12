@@ -49,6 +49,7 @@ OpenAI 相容端點也行，`Engine(url=..., key=...)` 換掉就是，proxy 不�
 
 ```bash
 cd freepy/llmkit               # 這一層才 import 得到 llms
+uv run python -m llms._checks_reply  # Reply shape 離線檢查，不連模型
 uv run python -m llms          # 跑一遍煙霧測試
 uv run python -m llms lm-gemma-4-e4b
 ```

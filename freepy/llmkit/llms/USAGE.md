@@ -55,7 +55,8 @@ print(reply.text, reply.reasoning)
 思考**不寫回記憶** —— DeepSeek 這類 API 不收回傳的 `reasoning_content`。
 所以 bot 記得自己說過什麼、做過什麼，但不記得自己當時為什麼那樣想。
 
-DeepSeek 和 LM Studio（qwen3.5、gemma-4）都是走 `reasoning_content` 這個欄位，
+DeepSeek 和 LM Studio（qwen3.5、gemma-4）走 `reasoning_content`；Ollama 的 OpenAI-compatible
+API 使用 `reasoning`。`Reply` 會把兩種都收進同一個 `.reasoning`，
 不是把 `<think>` 塞在答案裡，所以答案拿到手就是乾淨的。
 
 > **`reasoning` 是 `None` 不代表壞掉。** 混合式思考模型會自己決定要不要想 ——
