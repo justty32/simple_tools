@@ -16,5 +16,16 @@
 - 想知道筆記、規格、README 與程式註解各自應放什麼：見
   [`docs/CONVENTIONS.md`](docs/CONVENTIONS.md)。
 
+## 一鍵驗證
+
+```sh
+./smoke.sh          # 離線 checks、shell executables、dcap C/C++ 產生與建置
+./smoke.sh --live   # 再驗 DeepSeek 與 LM Studio 的所有家用模型 alias
+```
+
+`--live` 要求目前 shell 已設定 `DEEPSEEK_API_KEY`，且 LM Studio 已在
+`localhost:1234` 提供 API。若 port 4000 沒有 proxy，腳本會暫時啟動一個並在結束時關閉；
+若已有 proxy 則直接沿用，不會將它關掉。公司網路上的遠端 Ollama 不屬於家用必過項目。
+
 根目錄只保留跨專案入口；元件用法放在元件旁，跨元件研究放在 `docs/`，已結案但仍有
 追溯價值的材料放在 `docs/archive/`。
