@@ -79,13 +79,42 @@ Gemma 1B 經 FreePy 跑兩輪：第一輪抵達 `waiting`，再呼叫
 第二輪把要求保留英文 token 的指令翻成「自由二」。這是 1B 模型的指令遵循品質，不是
 Controller 狀態轉移錯誤。
 
+## Foundation 完整鏈路
+
+以 [`ollama_foundation_roundtrip.py`](../../freepy/examples/ollama_foundation_roundtrip.py) 讓
+Qwen 2.5 14B 實際完成一張六步訂單：讀檔、用明確 discovery 找到的 exec tool 加總、用固定
+endpoint HTTP tool 查運費、寫檔、改檔、讀回驗證。工具在本機暫存 workspace 與 loopback HTTP
+server 執行；模型只經 Ollama 思考。設定為每 Step 最多 4096 output tokens，整個 Round 最多
+16 Steps／16 Calls／600 秒。
+
+| 嘗試 | 結果 | Steps/Calls | input/output | wall time | 卸載 |
+|---|---|---:|---:|---:|---|
+| 原始指令 1 | 工具全通，但檔案是一個含字面 `\\n` 的長行 | 7/7 | 7037/860 | 118.75s | 單次檢查過早誤報 |
+| 原始指令 2 | 同一錯誤可重現 | 7/7 | 7037/860 | 119.28s | 輪詢後空載 |
+| 明講 physical newline | **完整通過** | 7/6 | 6833/663 | 97.79s | 輪詢後空載 |
+
+通過那輪每種 effect 都真的執行：`read_file` 2 次，其餘 `sum_numbers`、
+`quote_shipping`、`write_file`、`edit_file` 各 1 次。HTTP server 收到
+`region=TW,total=50`；最後檔案是六個實體行，內容與預期完全相符，Controller 以 `done` 完成且
+沒有 error。
+
+前兩輪不是 JSON parser 或 `write_file` 偷改資料：模型傳入的 Python argument 本身就是字面
+反斜線加 `n`，工具也明確回報「1 lines」。模型讀回後仍把畫面中的 `\\n` 當換行，宣稱六行驗證
+成功。這是可重現的 14B 指令／觀察弱點；在 prompt 明講「真正換行，不是兩個字元」後消失。
+它也說明日後 verifier 不能只相信 agent 的自然語言自評，應檢查 effect 產物。
+
+另有兩個工程觀察：`after_step` callback 執行時 Handle 的 state 仍是 `running_step`，所以用
+`now()` 印進度會像模型還在想；這是 callback 邊界的呈現問題，不是死鎖。Ollama unload 也不是
+保證在 POST 回來那刻立刻反映到 `/api/ps`，測試程式現會短暫輪詢確認，而非只查一次。
+
 ## 結論與下一步
 
 1. Ollama 服務、原生 API 與 OpenAI-compatible API 都可連線。
 2. FreePy 對非 reasoning 模型的文字與完整 14B tool Round 已實證可用。
 3. `shells.session()` 與 Controller `.send()` 已通過真模型兩輪互動。
 4. `llms.Reply` 現已同時讀 `message.reasoning` 與 `reasoning_content`。
-5. reasoning 模型的正式測試改用 4096（必要時 8192）output tokens；agentloop 使用至少
+5. Controller 加上目前三類 foundation effect 已完成一次有 assertion 的真模型整合測試。
+6. reasoning 模型的正式測試改用 4096（必要時 8192）output tokens；agentloop 使用至少
    16 Steps/16 calls，只把 Limits 當防無限循環，不拿 smoke budget 評價模型能力。
 
 ## 模型切換與卸載規則
@@ -94,7 +123,7 @@ Controller 狀態轉移錯誤。
 
 1. 每個 case 用 `try/finally`。
 2. `finally` 呼叫 `POST /api/generate`，body 為 `{"model": "舊模型", "keep_alive": 0}`。
-3. 查 `/api/ps` 確認舊模型消失，才開始下一顆。
+3. 短暫輪詢 `/api/ps` 確認舊模型消失，才開始下一顆；單次立即查詢可能過早。
 4. 測試被取消後也先檢查本機 process 與 `/api/ps`。
 
 本次 4096-token 重測被人工中斷；中斷後已確認本機沒有殘留測試 process，`/api/ps` 的
