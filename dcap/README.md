@@ -87,55 +87,10 @@ DCAP_TEMPLATES=~/tpls dcap web api          # 用 ~/tpls/web 模板
 cmake . && cmake --build . && ./bin/hello
 ```
 
-## 產生的專案：兩個檔
+## 產生後的專案
 
-`cmake --build build` 出來的是**兩個產物**，而且都不在 `build/` 裡，是照慣例分在 `bin/` 和 `lib/`：
-
-| 位置 | 是什麼 |
-|---|---|
-| `bin/<name>`（Windows 是 `bin\<name>.exe`） | 執行檔，`src/main.cpp` 是它的進入點 |
-| `lib/lib<name>.so` / `.dylib`（Windows 是 `lib\` 的 import library + `bin\` 的 dll） | shared library，`src/` 其餘全部在裡面 |
-
-實際檔名交給 CMake，不用記：Linux 是 `lib/lib<name>.so`、macOS 是 `lib/lib<name>.dylib`。Windows 照該平台的慣例擺——**dll 跟執行檔一起放 `bin/`**（loader 只往那裡找），`lib/` 放 import library。
-
-執行檔連結那個 library，所以 `./bin/<name>` 在任何 cwd 都直接跑（Linux/macOS 靠 CMake 自動寫進去的 RUNPATH，Windows 靠 dll 就在旁邊）。
-
-**`src/main.cpp` 是唯一有特殊意義的檔名**——它只編進執行檔，不進 library。`src/` 底下其他的檔（含子目錄）全部進 library，沒有命名規則。反過來說 **`src/` 至少要有一個 `main.cpp` 以外的檔**，不然 library 沒有原始碼，CMake 會在 configure 時報 `No SOURCES given to target`。模板附的 `src/lib.cpp` 就是那個檔，別把它刪光。
-
-library target 的名字就是 `<name>`（不是 `lib` 之類的通名），執行檔 target 叫 `<name>_main`（它產出的**檔案**才是 `<name>`）；兩個專案組在一起時才不會撞 target 名。
-
-### 引用另一個本地 dcap 專案
-
-專案就是資料夾——不必先安裝、不用 `find_package`。在**用**的那邊（BBB）CMakeLists 尾巴加兩行，直接指路徑：
-
-```cmake
-add_subdirectory(/path/to/AAA AAA-build)
-target_link_libraries(BBB PRIVATE AAA)
-```
-
-相對路徑（`../AAA`）也可以。`add_subdirectory` 的第二個參數是 build 目錄名，因為 AAA 在 BBB 的樹外面，CMake 要求給。
-
-這樣寫的好處是三件事都自動了：AAA 的 `include/` 會跟著傳過來（不用自己加 `target_include_directories`）、library 的實際檔名交給 CMake（所以三個平台都對）、**AAA 會被一起建起來**（不必先手動 build AAA）。
-
-AAA 被這樣引用時**只會建它的 library**，不會建它自己那個 `bin/AAA`——模板裡的 `if(PROJECT_IS_TOP_LEVEL)` 擋掉了。
-
-### 專案佈局與指令
-
-`include/` 放公開標頭、`src/` 放原始碼。`src/` 底下的檔案是 glob 進去的，而且帶 `CONFIGURE_DEPENDS`，所以**新增原始碼直接 `cmake --build build` 就會編進去**，不用手動重跑 configure、也不用改 CMakeLists。**沒有 test/、沒有 fmt**——debug/release 用 CMake 原生的：
-
-```sh
-cmake -B build -DCMAKE_BUILD_TYPE=Debug     # 預設是 Release
-```
-
-### 第三方函式庫
-
-模板**不管**這件事，是刻意的：CMake 原生就處理得夠好，多寫任何一段都只是猜你要哪一種。GitHub 上抓的用 `FetchContent` 或 `add_subdirectory`，apt / brew 裝的用 `find_package` 或 `pkg_check_modules`，自己在 CMakeLists 加就好。
-
-## 平台
-
-**Linux / macOS / Windows。** 產生的 `CMakeLists.txt` 要求 CMake 3.21+（`PROJECT_IS_TOP_LEVEL` 和 `TARGET_RUNTIME_DLLS` 都是 3.21 才有的；建置 dcap 本體本身只需 CMake 3.20+）。產生的專案裡沒有任何 ELF 專屬的東西了：檔名、匯出符號（`WINDOWS_EXPORT_ALL_SYMBOLS`）、執行時找得到 library（Linux/macOS 是 RUNPATH，Windows 是 build 後把被引用專案的 dll 複製到 `bin/`）都交給 CMake。本體本身（`std::filesystem` + `#embed`）也沒有平台包袱。
-
-一個 caveat：模板把輸出目錄寫死成 `bin/` 和 `lib/`，所以請用**單組態產生器**（Ninja、Unix Makefiles、MinGW Makefiles）。Visual Studio 這種多組態產生器會在後面再加一層，變成 `bin/Release/`。
+產物佈局、target 命名、本地專案互相引用、第三方函式庫與跨平台 caveat 集中在
+[`PROJECTS.md`](PROJECTS.md)。
 
 ## 給 agent 用
 
