@@ -14,6 +14,7 @@ SpecError，而不是等到 `run()` 才回字串。跟 exec 型「找不到執�
 """
 
 import importlib
+import importlib.machinery
 import importlib.util
 import json
 import os
@@ -22,6 +23,35 @@ import sys
 from .registry import register
 from .spec import SpecError, need, resolve
 from .text import clip
+
+
+_MISSING = object()
+
+
+def _path_id(path):
+    """A comparison key for source paths (including Windows' case folding)."""
+    return os.path.normcase(os.path.realpath(os.path.abspath(path)))
+
+
+def _module_source(module):
+    """Return the concrete file, or namespace-package search locations."""
+    file = getattr(module, "__file__", None)
+    if file:
+        return "file", _path_id(file)
+    locations = getattr(module, "__path__", None)
+    if locations is not None:
+        return "namespace", tuple(_path_id(one) for one in locations)
+    return None
+
+
+def _spec_source(found):
+    origin = getattr(found, "origin", None)
+    if origin and origin not in {"built-in", "frozen"}:
+        return "file", _path_id(origin)
+    locations = getattr(found, "submodule_search_locations", None)
+    if locations is not None:
+        return "namespace", tuple(_path_id(one) for one in locations)
+    return None
 
 
 def as_text(value) -> str:
@@ -72,16 +102,61 @@ class PythonBody:
         if self.path:
             need(os.path.isdir(self.path),
                  f"_extra.path 指的 {self.path!r} 不是檔案也不是資料夾")
-            if self.path not in sys.path:
-                sys.path.insert(0, self.path)
+            expected = self._find_in_directory(self.path)
+            self._check_cached(expected)
+            # `path` 是明確來源，不只是另一個候選路徑；確實把它移到最前面。
+            wanted = _path_id(self.path)
+            sys.path[:] = [one for one in sys.path
+                           if not isinstance(one, str) or _path_id(one) != wanted]
+            sys.path.insert(0, self.path)
         try:
-            return importlib.import_module(self.module)
+            module = importlib.import_module(self.module)
+            if self.path:
+                need(_module_source(module) == _spec_source(expected[-1][1]),
+                     f"import {self.module!r} 沒有使用 _extra.path 指定的來源 {self.path!r}")
+            return module
         except SpecError:
             raise
         except Exception as e:
             need(False, f"import {self.module!r} 失敗：{type(e).__name__}: {e}")
 
+    def _find_in_directory(self, root):
+        """Resolve every dotted-name component under one explicit filesystem root."""
+        # Specs and their modules are often generated in the same process.  Some
+        # FileFinders otherwise keep a just-created package out of view briefly.
+        importlib.invalidate_caches()
+        found = []
+        search = [root]
+        prefix = ""
+        for part in self.module.split("."):
+            prefix = f"{prefix}.{part}" if prefix else part
+            one = importlib.machinery.PathFinder.find_spec(prefix, search)
+            need(one is not None,
+                 f"_extra.path {root!r} 底下找不到模組 {prefix!r}")
+            found.append((prefix, one))
+            search = one.submodule_search_locations
+            if prefix != self.module:
+                need(search is not None,
+                     f"{prefix!r} 不是 package，不能載入 {self.module!r}")
+        need(_spec_source(found[-1][1]) is not None,
+             f"_extra.path {root!r} 底下的 {self.module!r} 沒有可辨識的來源")
+        return found
+
+    def _check_cached(self, expected):
+        """Refuse a cached module/package that would override an explicit source."""
+        for name, found in expected:
+            cached = sys.modules.get(name)
+            if cached is not None and _module_source(cached) != _spec_source(found):
+                need(False, f"模組 {name!r} 已從別處載入，與 _extra.path {self.path!r} 衝突")
+
     def _from_file(self, path):
+        cached = sys.modules.get(self.module)
+        wanted = ("file", _path_id(path))
+        if cached is not None:
+            need(_module_source(cached) == wanted,
+                 f"模組 {self.module!r} 已從別處載入，與 _extra.path {path!r} 衝突")
+            return cached
+        previous = sys.modules.get(self.module, _MISSING)
         try:
             # 這裡的 spec 是 importlib 的 ModuleSpec，跟 tooljson 的 Spec 沒關係；
             # 真正會跑 code 的是它的 .loader，不是它自己
@@ -92,8 +167,16 @@ class PythonBody:
             sys.modules[self.module] = module
             found.loader.exec_module(module)
         except SpecError:
+            if previous is _MISSING:
+                sys.modules.pop(self.module, None)
+            else:
+                sys.modules[self.module] = previous
             raise
         except Exception as e:
+            if previous is _MISSING:
+                sys.modules.pop(self.module, None)
+            else:
+                sys.modules[self.module] = previous
             need(False, f"載入 {path} 失敗：{type(e).__name__}: {e}")
         return module
 

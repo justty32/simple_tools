@@ -52,7 +52,7 @@ FORMAT.md 已經講過「認不認得是執行環境的性質，不是檔案的�
 | 你的情況 | 怎麼寫 | 讀取端做什麼 |
 |---|---|---|
 | 一個資料夾裡的 `.py` 檔 | `"path": "../weather.py"` | 直接從那個檔案載入，載進來的模組叫 `module` |
-| 一整個資料夾的工具 | `"path": ".."` | 把資料夾插進 `sys.path` 最前面，再 `import module` |
+| 一整個資料夾的工具 | `"path": ".."` | 從該資料夾解析 `module`，確認來源後放到 `sys.path` 最前面再 import |
 | 已經 `pip install` 的套件 | 不給 | 直接 `import module` |
 
 相對路徑以**這份 .json 自己的位置**為中心，跟 FORMAT.md 那條通則一樣。所以擺成
@@ -63,6 +63,11 @@ FORMAT.md 已經講過「認不認得是執行環境的性質，不是檔案的�
   weather.py
   specs/get_weather.json      ← 裡面寫 "path": "../weather.py"
 ```
+
+有 `path` 時，它是**指定來源**，不是額外提供一個 import 候選。如果同一個模組名（含 dotted
+name 的父 package）已經從另一個位置載進目前行程，讀取端會丟 `SpecError`，不會安靜沿用舊的
+`sys.modules` 項目，也不會把它換掉。這讓同一份 spec 的 schema 與真正 effect 不會因載入順序
+而分家。要切換到另一份同名實作，請用不同 module 名，或在乾淨的新行程載入。
 
 ## 參數就是 `**kwargs`
 

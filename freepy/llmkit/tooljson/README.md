@@ -121,6 +121,7 @@ argv 是一個 list，`shell=False`。模型給的參數值裡有 `;`、`$(...)`
 
 ```bash
 python -m tooljson._checks_spec  # schema／exec recipe，跨平台、完全不執行 tool
+python -m tooljson._checks_python  # 明確 Python 來源與 import 碰撞，跨平台
 python -m tooljson               # 45 關 exec roundtrip，不碰 LLM 也不用 proxy
 ```
 
@@ -130,8 +131,8 @@ python -m tooljson               # 45 關 exec roundtrip，不碰 LLM 也不用 
 `ok_exit`、stderr 合流、二進位輸出、截斷方向、型別轉換、limits、排序、
 「值不會被 shell 重新解析」，以及最後三關的**第三方 `_type` 登記**。
 
-第一條則專門驗證壞 schema 與 recipe 一律在 `load()` 時以 `SpecError` 拒絕；它不啟動
-process，所以 Windows、Linux、macOS 都應完整通過。
+前兩條是跨平台檢查：第一條驗證壞 schema 與 recipe 一律在 `load()` 時以 `SpecError`
+拒絕；第二條驗證明確 Python `path` 不會被同名 module 或父 package 的 import 快取改道。
 
 那些假工具在 `examples.py`，可以直接拿來看規範實際長什麼樣：
 
@@ -147,10 +148,12 @@ paths = examples.build("/tmp/demo")      # 生一份出來，開 .json 看
 | `spec.py` | 外殼：讀寫 .json、兩個保留鍵、把其餘的轉交給解析器 |
 | `registry.py` | `_type` → 解析器的註冊表，以及 body 要提供什麼 |
 | `exec_type.py` | 內建的 `_type: "exec"` 解析器 |
+| `python_type.py` | 內建的 `_type: "python"` 解析器與明確來源檢查 |
 | `args.py` | 模型給的 JSON → argv + stdin，純函式，不碰 process |
 | `invoke.py` | exec 的執行端：真的去跑 → 一個字串；守門員 hook |
 | `examples.py` | 會動的假工具和假 spec，煙霧測試和讀者都用它 |
 | `_checks_spec.py` | 跨平台的 schema／exec recipe 載入期驗證 |
+| `_checks_python.py` | 跨平台的 Python tool 明確來源／import 碰撞驗證 |
 | `__main__.py` | 離線煙霧測試 |
 
 一個檔一件事，程式和文件都在 150 行以內。多一個 `_type` 就是多一個跟
