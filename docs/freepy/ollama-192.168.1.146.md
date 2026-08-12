@@ -3,6 +3,7 @@
 測試日期：2026-08-12。這是區域網路開發機的當次快照，不是穩定規格或公開 benchmark。
 模型只經 Ollama 生成；effects 在 FreePy 所在的本機執行，包括純記憶體 `multiply(6, 7)`，以及
 暫存 workspace 內的檔案、exec 與 loopback HTTP 操作，沒有讀寫 Ollama 主機的檔案。
+這個位址只在公司網路可用，不能作為常駐測試依賴；家用環境目前只有 Gemma 4 12B 級模型。
 
 ## 環境
 
@@ -70,7 +71,9 @@
 - Qwen3 32B：4096 output tokens、16 Steps/16 calls 的正式重測通過。2 Steps、1 tool call；
   `multiply(a=6,b=7)` 回傳 `42`，最終精確回答 `TOOL_OK=42`。wall time 73.35s，input/output
   411/244 tokens。先前 256-token smoke 在產生 tool call 前就以 `length` 停止，確認只是預算
-  不足，不能拿來判定模型或 FreePy 工具鏈失敗。
+  不足，不能拿來判定模型或 FreePy 工具鏈失敗。保存成
+  [`ollama_tool_roundtrip.py`](../../freepy/examples/ollama_tool_roundtrip.py) 後再次通過：wall time
+  71.95s，input/output 411/234 tokens，且卸載後模型清單為空。
 
 ## `shells.session()` 互動控制
 
