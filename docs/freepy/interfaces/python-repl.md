@@ -1,246 +1,393 @@
-# agentloop 互動入口
+# Python REPL：直接操作 agentloop
 
-這個目錄存放讓人或其他 coding agent 互動操作 agentloop 的入口資料，包含：
+這個入口適合人在終端機裡觀察、暫停、修改並繼續一個 Round。launcher 會預載常用 API，
+但不會替你選模型、探測 endpoint、授權工具或建立 sandbox；模型服務與工具範圍都由操作者明確指定。
 
-- 各種互動環境的使用文件；
-- 把其他 coding agent 當作進一層操作入口的方式；
-- 啟動、連接或預載 agentloop 的薄腳本；
-- 可複製或直接執行的範例。
+## 從零啟動
 
-目前已有 Python 原生 REPL 用法，以及 Pi coding agent 的第一版 extension／bridge。
-這些入口都只組合 agentloop 公開 API，不為核心增加隱藏控制通道。
+在 repository 根目錄用 PowerShell：
 
-這些入口的共同目的，是讓操作者直接持有 `Handle`，自由查看或修改狀態，而不需要先把每種
-操作包成 CLI command。
-
-目前程式與文件已依用途分為：
-
-```text
-freepy/adapters/             # 可執行 control adapters
-docs/freepy/interfaces/      # 直接互動介面
-docs/freepy/adapters/        # host／protocol 文件
-```
-
-## 已記錄的入口
-
-- [Pi coding agent](../adapters/pi/README.md)：比較 Pi extension、Python bridge、RPC 與
-  launcher，並記錄已實作的第一版。
-- [Claude Code](../adapters/claude-code/README.md)：推薦使用 project-local stdio MCP server 與薄 skill。
-- [OpenAI Codex](../adapters/codex/README.md)：推薦使用 project-scoped stdio MCP server 與薄 skill。
-- [MCP](../adapters/mcp/README.md)：共用 Python MCP server 的協議、tools、events 與 lifecycle 設計。
-
-Pi 離線範例與啟動方式見 [Pi quickstart](../adapters/pi/quickstart.md)。
-
-## Python 原生 REPL
-
-## 啟動 Python
-
-從 repository 的 `freepy` 目錄執行：
-
-```bash
-PYTHONPATH=llmkit uv run python
-```
-
-或直接使用預載常用名稱的 launcher：
-
-```bash
+```powershell
+$env:PYTHONPATH = "freepy"
 python -m shells repl
 ```
 
-進入後已有 `LLM`、`Engine`、`Params`、`Controller`、`Handle`、`Assistant`、`assistant`、`toolbox`、
-`session`，以及 `llms`、`base_tools`、`agentloop` modules。launcher 保留啟動時的 cwd，並在
-啟動訊息顯示 `base_tools` 的工具 workspace；除非要縮小或切換範圍，不必先修正被 launcher
-改掉的路徑。
+已經位於 `freepy/` 目錄時可直接執行：
 
-## 準備 bot 與工具
-
-`assistant()` 可以從一個 llms preset id 與明確指定的 tools 建立配對的 bot/dispatch：
-
-```python
-base_tools.set_root(".")
-bot, dispatch = assistant(
-    "lm-gemma-4-12b", base_tools.tools(), system="先查證再回答。")
+```powershell
+python -m shells repl
 ```
 
-`assistant()` 回傳的是仍可照上面解包的 `Assistant(bot, dispatch)`。只想立即開一個互動 Round
-時，可縮成一段：
+Bash／WSL 從 repository 根目錄則是：
 
-```python
-c = assistant(
-    "lm-gemma-4-12b", base_tools.tools(), system="先查證再回答。"
-).session("檢查這個專案")
+```bash
+PYTHONPATH=freepy python -m shells repl
 ```
 
-`assistant()` 的第一個參數也可以是已建好的 `Engine`。後面每個 tool source 可以是單一
-Python callable，或 `base_tools.tools()`、`exec_tools.tools(...)`、`tooljson.tools(...)` 這種
-`(schemas, dispatch)` bundle。`toolbox()` 可單獨合併這些來源。同名工具會被拒絕，
-不會靜默改變實際 effect。
+launcher 優先使用 `freepy/.venv` 的 Python，找不到才使用目前的 Python。成功後會看到：
 
-這些 helper 不會自行掃描工具、選擇 workspace，也不提供 permission 或 sandbox。
-`dispatch` 仍是「模型要求的工具名稱」到「真正執行的 Python callable」的 mapping，
-也可以完全自行建立 `LLM` 與 mapping，再交給 `session()`。
-
-## 啟動一個可互動的 Round
-
-agentloop 核心的 `run()` 是同步函式。REPL 用 `session()` 啟動背景 runner；它預設建立
-`auto_finish=False` 的 Handle，讓自然回答停在 `waiting`：
-
-```python
-c = session(bot, dispatch, "先檢查專案")
-h = c.handle
+```text
+已就緒: LLM, Engine, Params, Controller, Handle, Assistant, assistant, toolbox, session; ...
+工具 workspace: C:\code\mine\simple_tools
 ```
 
-`auto_finish=False` 表示模型不再要求工具時，Round 進入 `waiting`，不會直接完成。
-因此操作者仍可追加內容並繼續同一個 Round。
+這些名稱與 `llms`、`base_tools`、`agentloop` modules 都已載入，不必再 import。
 
-## 查看狀態
+### cwd 與工具 workspace
+
+REPL 保留啟動 launcher 時的 cwd；`base_tools` 也以該位置作為預設 workspace。先確認再給模型工具：
 
 ```python
-c.wait()                  # waiting / paused / completed / error
-c.wait("waiting", timeout=10)
-h.now()
-h.state
-h.step
-h.message
-h.tool_calls
-h.tool_results
-h.tool_log
-h.input_tokens
-h.output_tokens
-h.cached_input_tokens
-h.err
+>>> import os
+>>> os.getcwd()
+'C:\\code\\mine\\simple_tools'
+>>> base_tools.get_root()
+WindowsPath('C:/code/mine/simple_tools')
 ```
 
-常見狀態包括：
+要縮小或切換工具可碰的範圍，明確設定一次：
 
-- `ready`：上一個 operation 已提交、下一個尚未開始；逐步 runner 的安全邊界。
+```python
+>>> base_tools.set_root("freepy")
+WindowsPath('C:/code/mine/simple_tools/freepy')
+```
+
+`base_tools` 只接受 workspace 內的路徑，但這不是 OS sandbox；REPL 與工具仍擁有目前 Python
+process 的權限。把 `run_shell` 交給模型前，應先確認 workspace 與自己的核准政策。
+
+## 選擇目前可用的模型
+
+endpoint 不是常駐依賴。公司與家中的範例只是已知設定；每次使用前仍要確認服務真的在線，
+也可以把相同寫法換成當下可用的 model、URL 與 timeout。
+
+### 家中：本機 proxy preset
+
+家中可跑的模型是 `lm-gemma-4-12b`。這個 preset 指向 `http://localhost:4000` 的本機
+LiteLLM proxy，所以要先啟動 proxy 與模型服務：
+
+```python
+>>> setup = assistant(
+...     "lm-gemma-4-12b",
+...     base_tools.tools(),
+...     system="先查證再回答；需要修改前先說明。",
+... )
+```
+
+這個 id 不是遠端 fallback；`localhost:4000` 沒有服務時仍會失敗。
+
+### 公司：直連 Ollama
+
+公司網路目前可直接使用 Ollama 的 OpenAI-compatible API。不要在家中或離線測試假定這個
+LAN 位址存在：
+
+```python
+>>> engine = Engine(
+...     model="qwen2.5:14b-instruct-q4_K_M",
+...     url="http://192.168.1.146:11434/v1",
+...     key="ollama",
+...     timeout=120,
+...     params=Params(temperature=0, max_tokens=4096),
+... )
+>>> setup = assistant(
+...     engine,
+...     base_tools.tools(),
+...     system="先查證再回答；需要修改前先說明。",
+... )
+```
+
+模型名稱必須和當下 `GET http://192.168.1.146:11434/api/tags` 的結果一致。若改走本機 proxy，
+則改用它提供的 preset id；不要把 Ollama 原生名稱與 proxy alias 混用。
+
+## `Assistant` 與工具配對
+
+`assistant()` 回傳 `Assistant(bot, dispatch)`，把送給模型的 tool schemas 和真正執行 effect 的
+Python callables 配在一起：
+
+```python
+>>> setup = assistant("lm-gemma-4-12b", base_tools.tools())
+>>> bot, dispatch = setup                 # 仍可像 tuple 一樣解包
+>>> setup.bot is bot
+True
+```
+
+第一個參數可以是 preset id、自己建立的 `Engine`，或 `None`。後續每個 tool source 可以是
+單一 callable，或 `base_tools.tools()`、`exec_tools.tools(...)`、`tooljson.tools(...)` 這類
+`(schemas, dispatch)` bundle。需要先合併時使用 `toolbox()`：
+
+```python
+>>> schemas, dispatch = toolbox(one_callable, base_tools.tools())
+```
+
+重複工具名稱以及 schema／dispatch 名稱不一致會立即報錯，避免同名 effect 被靜默取代。
+helper 不會自行掃描工具、選擇 workspace 或提供 permission policy。
+
+## 啟動互動 Round
+
+最短寫法是從配好的 `Assistant` 直接開 session：
+
+```python
+>>> c = setup.session("先讀 README，說明這個專案目前能做什麼")
+>>> h = c.handle
+```
+
+等價的完整寫法是：
+
+```python
+>>> bot, dispatch = setup
+>>> c = session(bot, dispatch, "先讀 README，說明這個專案目前能做什麼")
+>>> h = c.handle
+```
+
+`session()` 建立一條背景 runner thread，新的 Handle 預設 `auto_finish=False`。模型自然回答完且
+不再要求工具時會停在 `waiting`，讓你檢查並追加輸入，而不是直接結束 Round。
+
+## 等待與查看狀態
+
+```python
+>>> c.wait()                         # 等到可介入或已終止
+True
+>>> print(c.now())
+第 2 步，等待繼續，1 個工具，... tokens，...
+>>> h.state
+'waiting'
+```
+
+無參數的 `c.wait()` 等待 `waiting`、`paused`、`completed` 或 `error`；即使 Round 很快結束，
+也不會因只等 `waiting` 而卡住。要等明確狀態或限制時間：
+
+```python
+>>> c.wait("waiting", timeout=10)          # 抵達回 True，逾時回 False
+True
+>>> c.wait("paused", "completed", timeout=2)
+False
+```
+
+指定 states 時完全保留 `Handle.wait_for_state()` 的 bool 語意。`timeout` 不會取消正在進行的
+模型請求或工具，只代表這次等待停止。
+
+常見狀態：
+
+- `idle`：Controller 尚未啟動。
+- `ready`：上一個 operation 已提交、下一個尚未開始，是安全邊界。
 - `running_step`：模型正在產生下一則 message。
 - `running_tools`：正在執行一批工具。
-- `waiting`：模型自然靜止，等待外部繼續。
-- `paused`：controller 主動暫停。
-- `completed`：Round 已正常結束。
-- `error`：Round 因錯誤結束。
+- `waiting`：模型自然靜止，等待外部輸入。
+- `paused`：操作者要求暫停後抵達安全邊界。
+- `completed`：Round 已正常且永久結束。
+- `error`：endpoint、callback 或 runner operation 失敗。
 
-## 暫停、修改與繼續
-
-```python
-h.pause()
-h.wait_until_paused()
-
-with h.edit():
-    h.prompt = "改成檢查另一個目標"
-    h.tool_calls.clear()
-
-h.resume()
-```
-
-`pause()` 是合作式操作，不會切斷正在執行的模型請求或工具批次：
-
-- 已在 `ready`／parked：立即成為 `paused`。
-- Step 中要求暫停：完成 Step 與 `after_step` callbacks，停在 tools 前。
-- tools 中要求暫停：完成整批 tools 與 `after_tools` callbacks，停在下一個 Step 前。
-
-`pause()` 立即返回；需要確認已經真正停住時，使用 `wait_until_paused()`。
-
-## 在 waiting 時追加輸入
+### 回答、記憶與工具紀錄
 
 ```python
-c.wait("waiting")
-
-c.send("再檢查 Windows 的情況")
+>>> h.message             # 最新 Step 的純文字；h.text 是同值方便欄位
+>>> h.reply               # 最新的 llms.Reply
+>>> h.history             # bot 的持續對話記憶，同一個 live list
+>>> h.tool_calls           # 最新 message 提出的 tool calls
+>>> h.tool_results         # 目前邊界尚待送回模型的 call-id -> result
+>>> h.tool_log             # 累積 (step, tool name, args, output)
+>>> h.calls, h.used        # 累積工具次數，以及依名稱統計
+>>> h.input_tokens, h.output_tokens, h.cached_input_tokens
+>>> h.finish_reason, h.stop, h.err
 ```
 
-不特別指定 states 時，`c.wait()` 會等到可供操作者介入的 `waiting`／`paused`，
-或已終止的 `completed`／`error`。指定 states 與 `timeout=` 時，它直接保留
-`Handle.wait_for_state()` 的 bool 語意。
+`message`／`tool_calls`／`tool_results` 是目前邊界的 live state，之後的 operation 可能覆寫或清空；
+需要回顧整輪工具 effect 看累積的 `tool_log`，需要回顧對話看 `history`。`h.now()` 是給人快速看的
+摘要，不取代這些欄位。
 
-修改公開資料本身不會喚醒 runner。只有明確呼叫 `resume()` 或 `c.send()` 才會繼續。
+## 追加、暫停、恢復與結束
 
-如果希望這次回答後自然完成，可以在恢復前設定：
+Round 在 `waiting` 或 `paused` 時，可以送下一筆 prompt 並恢復：
 
 ```python
-c.send("整理最後結論", finish=True)
+>>> c.send("再檢查 Windows 的測試", finish=False)
+>>> c.wait()
+True
 ```
 
-## 安全結束
-
-不打算再繼續這個 Round 時：
+`send()` 不是任意時刻可寫入的 queue；在其他 state 呼叫會拋出 `RuntimeError`。`finish=True`
+會把 `auto_finish` 改成 `True`，讓下一次自然回答後完成：
 
 ```python
-c.end(reason="operator")
-result = c.join()
+>>> c.send("整理最終結論", finish=True)
+>>> result = c.join(timeout=120)
+>>> result.state
+'completed'
 ```
 
-`end()` 與 `pause()` 使用相同的安全邊界：
-
-- 已在 `ready`／`waiting`／`paused`：立即完成，並在需要時喚醒 parked runner。
-- 正在執行 Step：完成 Step 與 callbacks，在 tools 前結束。
-- 正在執行 tool batch：完成整批與 callbacks，再結束。
-
-`c.join()` 等待背景 runner 返回，並取得同一個 Handle。若 Round 還在
-`waiting`／`paused` 且沒有先 `resume()` 或 `end()`，`join()` 會繼續等待。
-
-## 直接修改公開狀態
-
-Handle 刻意暴露資料，REPL 可以直接增刪查改：
+要在下一個安全邊界暫停：
 
 ```python
-with h.edit():
-    h.dispatch["new_tool"] = new_tool
-    h.ask_options["tool_choice"] = "required"
-    h.tool_results["call_1"] = "人工改寫的結果"
+>>> c.pause()                         # 立即返回，只提出 cooperative request
+True
+>>> h.wait_until_paused(timeout=120) # 確認真的抵達 paused
+True
+>>> c.resume()
+True
 ```
 
-外部操作者承擔修改錯誤、資料不一致與安全 policy 的風險。跨 thread 一次修改多個欄位
-或 nested list/dict 時，使用 `with h.edit()`；單純讀取或能接受競態風險時，可以直接操作。
+已在 `ready`／`waiting` 時會立即暫停；模型 request 已開始就等該 Step 完成，tool batch 已開始就
+等整批 tools 完成。agentloop 不會切斷執行到一半的 operation。
 
-## Callback
-
-可以在啟動 Round 前註冊 callback：
+不再需要這個 Round 時要明確結束，避免背景 thread 永遠停在 `waiting`：
 
 ```python
-def inspect_calls(handle):
-    print(handle.tool_calls)
-    return agentloop.CONTINUE
-
-def inspect_results(handle):
-    print(handle.tool_results)
-    return agentloop.CONTINUE
-
-h = agentloop.Handle(auto_finish=False)
-h.after_step.append(inspect_calls)
-h.after_tools.append(inspect_results)
-c = session(bot, dispatch, "開始", handle=h)
+>>> c.end(reason="operator")
+True
+>>> result = c.join(timeout=30)
+>>> result.state, result.stop
+('completed', 'operator')
 ```
 
-callbacks 在 runner thread 同步執行，而且持有 Handle 的 `RLock`。不要在 callback 裡
-建立另一條需要操作同一個 Handle 的 thread，然後立刻 `join()` 它，否則可能互相等待。
+`join(timeout=...)` 的 timeout 會拋出 `TimeoutError`，不是回傳 `False`。若 Round 仍在
+`waiting`／`paused` 且沒有先 `resume()`、`send()` 或 `end()`，`join()` 會繼續等。
 
-## 一段完整流程
+## 在 REPL 修改公開狀態
+
+Handle 刻意暴露資料。跨 thread 一次修改多個欄位或 nested collection 時使用 `edit()`：
 
 ```python
-c = session(bot, dispatch, "分析目前專案")
-h = c.handle
-
-c.wait()
-h.now()
-h.message
-h.tool_log
-
-if h.state in {"waiting", "paused"}:
-    c.send("再檢查測試是否完整", finish=True)
-
-result = c.join()
-result.now()
+>>> with h.edit():
+...     h.dispatch["new_tool"] = new_tool
+...     h.ask_options["tool_choice"] = "required"
+...     h.tool_results["call_1"] = "人工覆寫的結果"
 ```
+
+修改資料本身不會喚醒 runner，完成後仍要明確 `c.resume()` 或在 parked state 用 `c.send()`。
+操作者必須自行承擔 schema／dispatch 不一致、竄改 history 或重做副作用的風險。
+
+需要在 operation 邊界自動檢查時，可以在啟動前傳入自己的 Handle：
+
+```python
+>>> def inspect_results(handle):
+...     print(handle.tool_results)
+...     return agentloop.CONTINUE
+...
+>>> h = Handle(auto_finish=False)
+>>> h.after_tools.append(inspect_results)
+>>> c = setup.session("檢查專案", handle=h)
+```
+
+callbacks 在 runner thread 持有 Handle 的 `RLock` 同步執行；不要在 callback 裡啟動另一條需要
+同一 Handle 的 thread 後立刻 `join()`，否則可能互相等待。
+
+## 一段可直接照做的完整流程
+
+以下只假定 `lm-gemma-4-12b` 的本機 proxy 此刻在線；在公司可把 `setup` 換成前面的 Ollama
+`Engine` 寫法。先從不給工具的唯讀對話開始，確認連線後再加 tools：
+
+```python
+>>> setup = assistant(
+...     "lm-gemma-4-12b",
+...     system="回答精簡；不知道就明說。",
+... )
+>>> c = setup.session("只回答 REPL_CONNECT_OK")
+>>> if not c.wait(timeout=120):
+...     c.end(reason="operator-timeout")
+...     raise TimeoutError("模型在 120 秒內沒有抵達可操作狀態")
+...
+>>> h = c.handle
+>>> print(h.now())
+>>> if h.state == "error":
+...     print(repr(h.err))
+... elif h.state in {"waiting", "paused"}:
+...     print(h.message)
+...     c.send("現在用一句中文說明剛才做了什麼", finish=True)
+...
+>>> if h.state not in {"completed", "error"}:
+...     c.wait(timeout=120)
+...
+>>> if h.state not in {"completed", "error"}:
+...     c.end(reason="operator-timeout")
+...
+>>> result = c.join(timeout=30)
+>>> print(result.now())
+>>> print(result.message)
+```
+
+確認模型與 endpoint 正常後，再建立有工具的新 Round：
+
+```python
+>>> base_tools.set_root(".")
+>>> setup = assistant(
+...     "lm-gemma-4-12b",
+...     base_tools.tools(),
+...     system="先讀取查證；未經要求不要修改檔案。",
+... )
+>>> c = setup.session("讀 README，只列出三個已存在的事實")
+>>> c.wait(timeout=180)
+True
+>>> print(c.handle.message)
+>>> print(c.handle.tool_log)
+>>> c.end(reason="operator")
+True
+>>> c.join(timeout=30).state
+'completed'
+```
+
+一個 Handle 只能執行一個 Round，也只能有一條 runner。要開下一個 Round 就建立新的 session；
+若沿用同一個 `setup.bot`，它的 history 會延續，所以也不要同時用同一個 bot 跑兩個 session。
+
+## 錯誤排查
+
+### 啟動時找不到 `shells`
+
+你可能位於 repository 根目錄但沒有設定 module path。PowerShell 先執行：
+
+```powershell
+$env:PYTHONPATH = "freepy"
+python -m shells repl
+```
+
+或先 `Set-Location freepy` 再執行 launcher。
+
+### `ModuleNotFoundError: openai`
+
+確認 `freepy/.venv` 已建立且依賴已安裝。launcher 找不到該 venv 時會退回目前 Python；此時目前
+environment 也必須裝有 FreePy 所需依賴。
+
+### `Connection refused`、timeout 或 `h.state == "error"`
+
+先看真正錯誤：
+
+```python
+>>> h.state
+'error'
+>>> repr(h.err)
+```
+
+再確認你選的是當下環境：家中 `lm-gemma-4-12b` 要有 localhost proxy；公司 Ollama 要在公司
+網路且 `192.168.1.146:11434` 可達。兩者都不是永遠在線。也要核對 Ollama `/api/tags` 或
+proxy 的 model list，確認模型名稱仍存在。提高 timeout 只能處理慢速載入，不能修好離線 endpoint。
+
+### `c.wait(...)` 回 `False`
+
+這只是 timeout；先用 `h.state`／`h.now()` 看 runner 在哪裡。不要立刻再開第二條 runner。
+若決定不等，呼叫 `c.end()`；合作式 end 仍會讓已開始的模型請求或 tool batch 走到安全邊界。
+
+### `Controller.send() requires a waiting or paused Round`
+
+先 `c.wait()`，再檢查 state。Round 若已 `completed`／`error` 就不能重開，請建立新 session；
+若仍是 `running_step`／`running_tools`，等到 parked boundary 後再送。
+
+### `join()` 一直等或拋 `TimeoutError`
+
+互動 session 預設停在 `waiting`。要繼續用 `send()`，要自然完成就用
+`send(..., finish=True)`，不要了就 `end()`，之後才 `join()`。
+
+### 模型沒有呼叫工具
+
+先確認 `setup.bot.tools` 不是空的、工具已明確傳給 `assistant()`，以及所選模型／endpoint 支援
+tool calling。模型能力未知時 FreePy 會放行，但這不保證後端真的做得好；小模型不呼叫工具也
+可能只是模型品質問題。從一個簡單、可驗證的唯讀工具任務開始。
 
 ## 能力邊界
 
-- 這不是 sandbox；REPL 與 tools 擁有目前 Python process 的權限。
-- Handle 只供同一個 process 內的 threads 共用，不支援跨 process 傳遞。
-- 一個 Handle 只能執行一個 Round，而且只能有一條 runner thread。
+- REPL 不是 sandbox、permission system、scheduler 或 durable task service。
+- Handle 只供同一 process 內的 threads 共用，不支援跨 process 傳遞。
 - paused／waiting Round 會持續占用原 runner thread。
-- REPL 不提供 scheduler、thread pool、持久化或多 agent 管理。
+- pause／end 都是合作式控制，不能強制中止已開始的 endpoint request 或工具。
+- 外部修改 Handle 公開資料時，資料一致性與 effect 安全由操作者負責。
 
-核心控制語意見 [Round 與 Step](../../../freepy/agentloop/ROUNDS.md)，背景 thread 細節見
+核心狀態與 callback 語意見 [Round 與 Step](../../../freepy/agentloop/ROUNDS.md)，Controller API
+見 [Controller](../../../freepy/agentloop/CONTROLLER.md)，背景 thread 細節見
 [`agentloop.threading`](../../../freepy/agentloop/threading/README.md)。
