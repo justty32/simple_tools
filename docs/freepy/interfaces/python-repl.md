@@ -41,12 +41,14 @@ Pi 離線範例與啟動方式見 [Pi quickstart](../adapters/pi/quickstart.md)�
 PYTHONPATH=llmkit uv run python
 ```
 
-接著載入 agentloop：
+或直接使用預載常用名稱的 launcher：
 
-```python
-import agentloop
-from agentloop.threading import start
+```bash
+python -m shells repl
 ```
+
+進入後已有 `LLM`、`Engine`、`Params`、`Controller`、`Handle`、`session`，以及 `llms`、
+`base_tools`、`agentloop` modules。
 
 ## 準備 bot 與工具
 
@@ -65,12 +67,12 @@ dispatch = {
 
 ## 啟動一個可互動的 Round
 
-agentloop 核心的 `run()` 是同步函式。若 REPL 還要同時接受人工操作，應使用內建的
-threading 方便工具，讓 runner 在背景 thread 執行：
+agentloop 核心的 `run()` 是同步函式。REPL 用 `session()` 啟動背景 runner；它預設建立
+`auto_finish=False` 的 Handle，讓自然回答停在 `waiting`：
 
 ```python
-h = agentloop.Handle(auto_finish=False)
-runner = start(bot, dispatch, "先檢查專案", handle=h)
+c = session(bot, dispatch, "先檢查專案")
+h = c.handle
 ```
 
 `auto_finish=False` 表示模型不再要求工具時，Round 進入 `waiting`，不會直接完成。
@@ -128,21 +130,15 @@ h.resume()
 ```python
 h.wait_for_state("waiting")
 
-with h.edit():
-    h.prompt = "再檢查 Windows 的情況"
-
-h.resume()
+c.send("再檢查 Windows 的情況")
 ```
 
-修改公開資料本身不會喚醒 runner。只有明確呼叫 `resume()` 才會繼續。
+修改公開資料本身不會喚醒 runner。只有明確呼叫 `resume()` 或 `c.send()` 才會繼續。
 
 如果希望這次回答後自然完成，可以在恢復前設定：
 
 ```python
-with h.edit():
-    h.prompt = "整理最後結論"
-    h.auto_finish = True
-h.resume()
+c.send("整理最後結論", finish=True)
 ```
 
 ## 安全結束
@@ -150,8 +146,8 @@ h.resume()
 不打算再繼續這個 Round 時：
 
 ```python
-h.end(reason="operator")
-result = runner.join()
+c.end(reason="operator")
+result = c.join()
 ```
 
 `end()` 與 `pause()` 使用相同的安全邊界：
@@ -160,7 +156,7 @@ result = runner.join()
 - 正在執行 Step：完成 Step 與 callbacks，在 tools 前結束。
 - 正在執行 tool batch：完成整批與 callbacks，再結束。
 
-`runner.join()` 等待背景 runner 返回，並取得同一個 Handle。若 Round 還在
+`c.join()` 等待背景 runner 返回，並取得同一個 Handle。若 Round 還在
 `waiting`／`paused` 且沒有先 `resume()` 或 `end()`，`join()` 會繼續等待。
 
 ## 直接修改公開狀態
@@ -193,7 +189,7 @@ def inspect_results(handle):
 h = agentloop.Handle(auto_finish=False)
 h.after_step.append(inspect_calls)
 h.after_tools.append(inspect_results)
-runner = start(bot, dispatch, "開始", handle=h)
+c = session(bot, dispatch, "開始", handle=h)
 ```
 
 callbacks 在 runner thread 同步執行，而且持有 Handle 的 `RLock`。不要在 callback 裡
@@ -202,11 +198,8 @@ callbacks 在 runner thread 同步執行，而且持有 Handle 的 `RLock`。不
 ## 一段完整流程
 
 ```python
-import agentloop
-from agentloop.threading import start
-
-h = agentloop.Handle(auto_finish=False)
-runner = start(bot, dispatch, "分析目前專案", handle=h)
+c = session(bot, dispatch, "分析目前專案")
+h = c.handle
 
 h.wait_for_state("waiting", "paused", "completed", "error")
 h.now()
@@ -214,12 +207,9 @@ h.message
 h.tool_log
 
 if h.state in {"waiting", "paused"}:
-    with h.edit():
-        h.prompt = "再檢查測試是否完整"
-        h.auto_finish = True
-    h.resume()
+    c.send("再檢查測試是否完整", finish=True)
 
-result = runner.join()
+result = c.join()
 result.now()
 ```
 

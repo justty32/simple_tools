@@ -29,6 +29,8 @@ result = c.join()
 - `.run()`：在目前 thread 一直跑到 Round 結束；語意等同 `agentloop.run()`。
 - `.start()`／`.join()`／`.is_alive()`：包裝 `agentloop.threading` 的單一背景 thread，不是 pool。
 - `.state`／`.now()`／`.pause()`／`.resume()`／`.end()`：常用狀態與控制的簡寫。
+- `.send(prompt, finish=False)`：只在 `waiting`／`paused` 邊界設定下一個 prompt 並恢復；返回
+  Controller 自己，方便 REPL 使用。它不是任意時刻收件的 queue。
 
 `ready` 已是安全邊界；此時 `pause()` 會立即成為 `paused`，`end()` 會立即完成，不必再補一次
 `.advance()` 才提交控制要求。

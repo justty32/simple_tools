@@ -10,7 +10,10 @@ import sys
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
-NAMES = sorted(p.stem for p in HERE.glob("*.py") if p.stem not in ("__main__", "common"))
+NAMES = sorted(
+    p.stem for p in HERE.glob("*.py")
+    if not p.stem.startswith("_") and p.stem != "common"
+)
 
 name = sys.argv[1] if len(sys.argv) > 1 else ""
 if name not in NAMES:

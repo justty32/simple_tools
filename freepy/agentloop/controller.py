@@ -79,6 +79,21 @@ class Controller:
     def resume(self):
         return self.handle.resume()
 
+    def send(self, prompt, *, finish=False):
+        """Set the next prompt at a parked boundary and resume the Round.
+
+        This is a REPL convenience, not a message queue: it only accepts a
+        Controller that is currently ``waiting`` or ``paused``.
+        """
+        with self.handle.edit():
+            if self.handle.state not in {"waiting", "paused"}:
+                raise RuntimeError(
+                    "Controller.send() requires a waiting or paused Round")
+            self.handle.prompt = prompt
+            self.handle.auto_finish = bool(finish)
+            self.handle.resume()
+        return self
+
     def end(self, safe=True, reason="ended"):
         return self.handle.end(safe=safe, reason=reason)
 

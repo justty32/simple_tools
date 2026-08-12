@@ -155,6 +155,9 @@ agentloop.advance(handle=h)                  # 下一次才跑一整批 tools �
 `.start()`。它不取代 Handle，也不宣稱是安全或耐久化 service；完整邊界見
 [CONTROLLER.md](CONTROLLER.md)。
 
+互動環境可用 `shells.session()` 直接建立會停在 `waiting` 的背景 Controller，再用
+`.send(prompt, finish=False)` 繼續；Handle 仍在 `.handle`。
+
 ## Limits
 
 `Limits` 位於 `agentloop.limits`，是附加在 `after_step` 的便利 callback policy：

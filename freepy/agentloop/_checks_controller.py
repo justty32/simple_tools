@@ -26,6 +26,25 @@ def controller():
     check("背景 Controller 返回同一個 Handle", str(result is c.handle), "True")
     check("背景 Controller 已完成", result.stop, "done")
 
+    c = agentloop.Controller(
+        FakeBot(response("先等待"), response("互動完成")), TOOLS,
+        handle=agentloop.Handle(auto_finish=False))
+    c.start()
+    c.handle.wait_for_state("waiting", timeout=1)
+    sent = c.send("繼續", finish=True)
+    result = c.join(1)
+    check("send 在 parked boundary 設定下一個 prompt 並恢復",
+          f"{sent is c} {c.bot.asked[1][0]} {result.text} {result.stop}",
+          "True 繼續 互動完成 done")
+
+    try:
+        c.send("太晚了")
+    except RuntimeError:
+        rejected = True
+    else:
+        rejected = False
+    check("send 不假裝是任意時刻可投遞的 queue", str(rejected), "True")
+
     c = agentloop.Controller(FakeBot(response("x")), TOOLS)
     c.advance()
     try:

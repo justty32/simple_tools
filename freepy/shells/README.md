@@ -4,7 +4,7 @@
 不包裝、不攔輸出、不加參數。
 
 ```bash
-python -m shells repl        # python REPL，llms 和 base_tools 已經 import 好
+python -m shells repl        # Python REPL，FreePy 本地 API 已預載
 python -m shells pi          # pi coding agent
 python -m shells claude      # claude code
 
@@ -29,7 +29,22 @@ python -m shells pi -c       # 名字後面的參數整包轉給它，這行等�
 對這個特別敏感。
 
 `repl` 會優先用 `freepy/.venv` 裡的 python，不然從沒 activate 的 shell 叫進來會找不到
-`openai`。找不到 venv 就退回當前的 python。
+`openai`。找不到 venv 就退回當前的 python。進入後可直接使用 `LLM`、`Engine`、`Params`、
+`Controller`、`Handle`、`session`，以及 `llms`、`base_tools`、`agentloop` modules。
+
+`session()` 是 Python library helper，不只限 launcher 裡使用。它建立預設
+`auto_finish=False` 的 Handle、Controller 和一條背景 runner：
+
+```python
+from shells import session
+
+c = session(bot, dispatch, "先檢查專案")
+c.handle.wait_for_state("waiting")
+c.send("整理結論", finish=True)
+result = c.join()
+```
+
+若傳入自己的 `handle=`，其 `auto_finish` 與 callbacks 都保持原樣。
 
 ## 加一個新入口
 

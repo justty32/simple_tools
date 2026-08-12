@@ -46,6 +46,9 @@ database、ACL 或 sandbox 保證。
 把「import、建 bot、掛 tools、啟動、查看、繼續」收成小型 Python library／REPL helpers。廣義上
 GUI、vim、Pi extension 都是互動 shell；若取 Unix 薄殼原義，Python REPL／CLI 才是最接近的入口。
 
+第一版已有 `shells.session()`、Controller `.send()`，且 launcher 會預載常用名稱；先用真實任務
+驗證這組詞彙，再決定是否值得包裝 bot／tools 的建立方式。
+
 Gate：使用者在 REPL 只需少量語句就能啟動與控制 Round；底層 Handle 仍可直接取得。
 
 ### 3. 整理基礎函式庫
