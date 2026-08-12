@@ -5,17 +5,20 @@
 
 ```python
 import base_tools
-from llms import LLM
+from llms import Engine, LLM
 
 base_tools.set_root("/tmp/workspace")     # 模型只能在這底下動手腳
 schemas, dispatch = base_tools.tools()
 
-bot = LLM(model="deepseek-chat", system="你是一個會用工具處理檔案的助手。")
-result, err = bot.ask("把 a/b.txt 裡的 two 改成 TWO", tools=schemas)
-while isinstance(result, list):           # 模型要叫工具就照做，結果送回去，直到它給文字答案
-    results = {c["id"]: dispatch[c["name"]](**c["args"]) for c in result}
-    result, err = bot.ask(tool_results=results, tools=schemas)
-print(result)
+bot = LLM(Engine(model="deepseek-chat"), tools=schemas,
+          system="你是一個會用工具處理檔案的助手。")
+reply = bot.ask("把 a/b.txt 裡的 two 改成 TWO")
+while reply.calls:                         # 模型要叫工具就照做，結果送回去直到文字答案
+    results = {c["id"]: dispatch[c["name"]](**c["args"]) for c in reply.calls}
+    reply = bot.ask(tool_results=results)
+if not reply:
+    raise reply.err
+print(reply.text)
 ```
 
 ## 四個工具

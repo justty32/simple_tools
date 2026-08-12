@@ -36,6 +36,11 @@
 **`_extra` 送不出去。** 多掛一個未知的鍵，OpenAI、LiteLLM、LM Studio 三邊各有各的
 嫌法。所以進 `tools=` 之前一定要剝掉，剝完剩下的就是乾淨的 schema。
 
+載入器不改寫這半邊，但會驗證執行端共同依賴的 object 形狀，避免壞設定拖到第一次呼叫
+才炸：`description` 若有必須是字串；`parameters` 若有必須是 `type: "object"`；
+`properties` 必須把非空參數名映到 schema object；`required` 必須是沒有重複的字串 list，
+而且每個名稱都要存在於 `properties`。其餘 JSON Schema 關鍵字仍原封不動交給模型端。
+
 ## 後半：`_extra`
 
 只有兩個 `_` 開頭的**保留鍵**。標準庫先讀這兩個，其餘的鍵一律交給 `_type` 指定的
@@ -134,6 +139,8 @@ git，一個資料夾自我完備。
 7. **送給模型之前剝掉 `_extra`。**
 8. **壞掉的 .json 用丟的，執行的結果用回的**（連錯誤也是字串）—— 前者是設定錯，
    給人看；後者會變成 tool message，給模型看。
+9. **載入時驗證執行所依賴的 schema 形狀**，不可讓 malformed `properties`／`required`
+   變成第一次 tool call 才出現的 host-language exception。
 
 第 4 條是最容易漏的：少了它，使用者要加一種執行方式就得改你的程式，
 這份規範就退化成「某個 lib 的設定檔格式」了。

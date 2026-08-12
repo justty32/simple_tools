@@ -9,6 +9,7 @@
 規範見 EXEC.md，這裡是把它寫成程式。
 """
 
+import math
 import os
 import shutil
 
@@ -20,6 +21,11 @@ CLIPS = ("head", "tail")
 MODES = ("merge", "ignore", "only")
 
 
+def _number(value):
+    return (isinstance(value, (int, float)) and not isinstance(value, bool)
+            and math.isfinite(value))
+
+
 class ExecBody:
     """一份 exec 型 spec 的執行配方。建構時把格式和路徑都算完。"""
 
@@ -29,10 +35,7 @@ class ExecBody:
         self._exec(spec.dir)
         self._bindings(spec.props)
         self._stdio(spec.props)
-        self.limits = self.extra.get("limits") or {}
-        self.timeout = self.extra.get("timeout") or 60
-        cwd = self.extra.get("cwd")  # None = 繼承呼叫端；模型傳的相對路徑全靠它解讀
-        self.cwd = resolve(cwd, spec.dir) if cwd else None
+        self._runtime(spec.props, spec.dir)
 
     def _exec(self, base_dir):
         raw = self.extra.get("exec")
@@ -50,8 +53,14 @@ class ExecBody:
             need(param in props, f"_extra.argv 綁了 {param!r}，但 parameters 裡沒這個")
             unknown = sorted(set(bind) - set(BINDING))
             need(not unknown, f"_extra.argv[{param!r}] 有不認得的鍵 {unknown}，可用的是 {list(BINDING)}")
-            need(isinstance(bind.get("position", 0), int), f"{param!r} 的 position 要是整數")
+            position = bind.get("position", 0)
+            need(isinstance(position, int) and not isinstance(position, bool),
+                 f"{param!r} 的 position 要是整數")
             need(isinstance(bind.get("flag", ""), str), f"{param!r} 的 flag 要是字串")
+            need(isinstance(bind.get("separate", True), bool),
+                 f"{param!r} 的 separate 要是 boolean")
+            need(isinstance(bind.get("repeat", False), bool),
+                 f"{param!r} 的 repeat 要是 boolean")
         #: 排序規則寫死才跨得了語言：position 小到大，同號的照參數名的碼位排
         self.order = sorted(argv.items(), key=lambda kv: (kv[1].get("position", 0), kv[0]))
 
@@ -59,17 +68,56 @@ class ExecBody:
         sin = self.extra.get("stdin")
         need(sin is None or (isinstance(sin, dict) and isinstance(sin.get("param"), str)),
              '_extra.stdin 要嘛是 null，要嘛是 {"param": "..."}')
+        need(sin is None or set(sin) == {"param"},
+             "_extra.stdin 只能有 param")
         self.stdin_param = sin["param"] if sin else None
         need(self.stdin_param is None or self.stdin_param in props,
              f"_extra.stdin 指了 {self.stdin_param!r}，但 parameters 裡沒這個")
-        self.clip = (self.extra.get("stdout") or {}).get("clip", "head")
+        stdout = self.extra.get("stdout")
+        need(stdout is None or isinstance(stdout, dict), "_extra.stdout 要是 object")
+        need(stdout is None or set(stdout) <= {"clip"}, "_extra.stdout 只能有 clip")
+        self.clip = (stdout or {}).get("clip", "head")
         need(self.clip in CLIPS, f"_extra.stdout.clip 是 {self.clip!r}，只認得 {list(CLIPS)}")
-        self.stderr = (self.extra.get("stderr") or {}).get("mode", "merge")
+        stderr = self.extra.get("stderr")
+        need(stderr is None or isinstance(stderr, dict), "_extra.stderr 要是 object")
+        need(stderr is None or set(stderr) <= {"mode"}, "_extra.stderr 只能有 mode")
+        self.stderr = (stderr or {}).get("mode", "merge")
         need(self.stderr in MODES, f"_extra.stderr.mode 是 {self.stderr!r}，只認得 {list(MODES)}")
         ok = self.extra.get("ok_exit", [0])
-        need(isinstance(ok, list) and all(isinstance(x, int) for x in ok),
+        need(isinstance(ok, list) and all(
+            isinstance(x, int) and not isinstance(x, bool) for x in ok),
              "_extra.ok_exit 要是整數 list")
         self.ok_exit = ok or [0]
+
+    def _runtime(self, props, base_dir):
+        timeout = self.extra.get("timeout", 60)
+        need(isinstance(timeout, (int, float)) and not isinstance(timeout, bool)
+             and math.isfinite(timeout) and timeout > 0,
+             "_extra.timeout 要是大於 0 的有限秒數")
+        self.timeout = timeout
+        cwd = self.extra.get("cwd")
+        need(cwd is None or (isinstance(cwd, str) and cwd),
+             "_extra.cwd 要嘛是 null，要嘛是非空路徑字串")
+        self.cwd = resolve(cwd, base_dir) if cwd is not None else None
+
+        limits = self.extra.get("limits")
+        need(limits is None or isinstance(limits, dict), "_extra.limits 要是 object")
+        self.limits = limits or {}
+        unknown = sorted(set(self.limits) - set(props))
+        need(not unknown, f"_extra.limits 有未知參數 {unknown}")
+        for name, rule in self.limits.items():
+            need(isinstance(rule, dict), f"_extra.limits[{name!r}] 要是 object")
+            unknown = sorted(set(rule) - {"max_bytes", "min", "max"})
+            need(not unknown, f"_extra.limits[{name!r}] 有不認得的鍵 {unknown}")
+            cap = rule.get("max_bytes")
+            need(cap is None or (isinstance(cap, int) and not isinstance(cap, bool)
+                                 and cap >= 0),
+                 f"_extra.limits[{name!r}].max_bytes 要是非負整數")
+            low, high = rule.get("min"), rule.get("max")
+            need(low is None or _number(low), f"_extra.limits[{name!r}].min 要是數字")
+            need(high is None or _number(high), f"_extra.limits[{name!r}].max 要是數字")
+            need(low is None or high is None or low <= high,
+                 f"_extra.limits[{name!r}] 的 min 不可大於 max")
 
     @property
     def target(self):

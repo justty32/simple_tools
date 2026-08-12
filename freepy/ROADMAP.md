@@ -57,7 +57,8 @@ Gate：使用者在 REPL 只需少量語句就能啟動與控制 Round；底層 
 ### 3. 整理基礎函式庫
 
 沿 `llmkit → tooljson → tools` 補齊底層能力；read/write、process 與第一版 typed network effect
-已有基線，deterministic discovery 已落在 `exec_tools`。每個
+已有基線，deterministic discovery 已落在 `exec_tools`，tool schema 與 exec recipe 也有
+跨平台的載入期驗證。每個
 library 都要分開描述：資料格式、真正 effect、成本／不確定性，以及誰負責 permission／approval。
 
 Gate：schema 與執行分離；工具來源明確；輸出有界；不把 root check 或 callback 說成 sandbox。

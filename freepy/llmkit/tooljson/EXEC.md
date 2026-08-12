@@ -135,3 +135,7 @@ Unicode 碼位排**，沒寫當 `0`。
 
 `source` 是產 spec 當下那個執行檔的指紋，用來判斷 spec 過期沒（`True` / `False` /
 `None` 不知道）。**過期不自動重產**，重產要花 LLM，那是上層的決定。
+
+以上 recipe 的型別與引用關係都在載入時檢查。像 `stdout` 寫成字串、`argv` 綁到不存在
+的參數、`timeout` 非正有限數字、`limits` 引用未知參數或 `min > max`，都是設定錯，
+直接丟 `SpecError`；不能等模型第一次呼叫時才變成 `AttributeError` 或 process 錯誤。

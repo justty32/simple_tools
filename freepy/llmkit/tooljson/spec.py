@@ -56,6 +56,33 @@ def fingerprint(path):
     return {"size": stat.st_size, "mtime": int(stat.st_mtime), "sha256": digest}
 
 
+def _parameters(function):
+    """Validate the object-shaped subset every execution body depends on."""
+    if "description" in function:
+        need(isinstance(function["description"], str),
+             "function.description 要是字串")
+    if "parameters" not in function:
+        return {}, []
+    parameters = function["parameters"]
+    need(isinstance(parameters, dict), "function.parameters 要是 object")
+    need(parameters.get("type", "object") == "object",
+         "function.parameters.type 只能是 'object'")
+    props = parameters.get("properties", {})
+    need(isinstance(props, dict), "function.parameters.properties 要是 object")
+    need(all(isinstance(name, str) and name and isinstance(rule, dict)
+             for name, rule in props.items()),
+         "function.parameters.properties 要把非空參數名映到 schema object")
+    required = parameters.get("required", [])
+    need(isinstance(required, list)
+         and all(isinstance(name, str) and name for name in required),
+         "function.parameters.required 要是非空字串 list")
+    need(len(required) == len(set(required)),
+         "function.parameters.required 不可有重複名稱")
+    unknown = sorted(set(required) - set(props))
+    need(not unknown, f"function.parameters.required 有未知參數 {unknown}")
+    return props, required
+
+
 class Spec:
     """一份 spec。保留鍵在這裡，`_type` 專屬的東西在 `spec.body`。"""
 
@@ -79,8 +106,7 @@ class Spec:
              f"自己的執行方式用 tooljson.register() 加進來")
         self.function, self.extra, self.name = fn, extra, fn["name"]
         self.version, self.kind = extra["_version"], extra["_type"]
-        self.props = (fn.get("parameters") or {}).get("properties") or {}
-        self.required = (fn.get("parameters") or {}).get("required") or []
+        self.props, self.required = _parameters(fn)
         self.body = make(self)
 
     @property
@@ -95,7 +121,8 @@ class Spec:
     @property
     def stale(self):
         """產 spec 當下那個來源變了沒。沒記 source 或來源不見了都回 None（不知道）。"""
-        old = (self.extra.get("source") or {}).get("sha256")
+        source = self.extra.get("source")
+        old = source.get("sha256") if isinstance(source, dict) else None
         target = self.body.target
         now = fingerprint(target) if old and target else None
         return None if now is None else now["sha256"] != old
