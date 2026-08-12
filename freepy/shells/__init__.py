@@ -1,5 +1,25 @@
 """Small helpers for human-facing FreePy shells."""
 
+from typing import NamedTuple
+
+
+class Assistant(NamedTuple):
+    """A bot and its matching tool dispatch, ready to start local sessions.
+
+    The tuple shape keeps existing ``bot, dispatch = assistant(...)`` code
+    working while :meth:`session` removes that unpacking boilerplate in a REPL.
+    """
+
+    bot: object
+    dispatch: dict
+
+    def session(self, prompt=None, *, handle=None, images=None, daemon=False,
+                name=None):
+        """Start an interactive Round using this matched bot and dispatch."""
+        return session(
+            self.bot, self.dispatch, prompt, handle=handle, images=images,
+            daemon=daemon, name=name)
+
 
 def toolbox(*sources):
     """Combine explicit Python callables and ``(schemas, dispatch)`` bundles.
@@ -44,7 +64,8 @@ def assistant(engine=None, *tool_sources, system=None):
     elif engine is not None and not isinstance(engine, Engine):
         raise TypeError("engine must be an Engine, preset id, or None")
     schemas, dispatch = toolbox(*tool_sources)
-    return LLM(engine=engine, system=system, tools=schemas or None), dispatch
+    return Assistant(
+        LLM(engine=engine, system=system, tools=schemas or None), dispatch)
 
 
 def session(bot, dispatch=None, prompt=None, *, handle=None, images=None,
@@ -63,4 +84,4 @@ def session(bot, dispatch=None, prompt=None, *, handle=None, images=None,
     ).start(daemon=daemon, name=name)
 
 
-__all__ = ["assistant", "session", "toolbox"]
+__all__ = ["Assistant", "assistant", "session", "toolbox"]

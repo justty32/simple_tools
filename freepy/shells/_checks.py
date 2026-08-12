@@ -1,10 +1,14 @@
 """Offline checks for the human-facing shell helpers."""
 
 import base_tools
+import shells as shell_api
 
+from agentloop import Handle
+from agentloop._testing import FakeBot, response
 from llms import Engine, to_tools
 
-from . import assistant, toolbox
+from . import Assistant, assistant, toolbox
+from . import common
 
 
 def read_file(path: str) -> str:
@@ -50,6 +54,34 @@ def main():
           "assistant preserves explicit engine and system")
     check(bot.tools == schemas and set(dispatch) == {"read_file", "write_file"},
           "assistant returns a matched bot and dispatch")
+    setup = assistant(engine, read_file)
+    check(isinstance(setup, Assistant) and tuple(setup) == (setup.bot,
+                                                            setup.dispatch),
+          "assistant remains unpackable while exposing a session helper")
+    original_session = shell_api.session
+    forwarded = []
+    try:
+        shell_api.session = lambda *args, **kwargs: forwarded.append(
+            (args, kwargs)) or "controller"
+        controller = setup.session(
+            "inspect", daemon=True, name="repl-check")
+    finally:
+        shell_api.session = original_session
+    check(controller == "controller"
+          and forwarded == [((setup.bot, setup.dispatch, "inspect"), {
+              "handle": None, "images": None, "daemon": True,
+              "name": "repl-check"})],
+          "Assistant.session forwards the matched pair and runner options")
+    interactive = Assistant(
+        FakeBot(response("first"), response("final")), {})
+    controller = interactive.session(
+        "inspect", handle=Handle(auto_finish=False))
+    controller.handle.wait_for_state("waiting", timeout=1)
+    controller.send("summarize", finish=True)
+    result = controller.join(1)
+    check(result.stop == "done" and result.text == "final"
+          and interactive.bot.asked[1][0] == "summarize",
+          "Assistant.session supports a waiting and send REPL flow")
 
     preset_bot, base_dispatch = assistant(
         "lm-gemma-4-12b", base_tools.tools())
@@ -58,6 +90,22 @@ def main():
           "documented preset and base-tools setup stays offline")
     check(rejects(lambda: assistant(object()), "Engine"),
           "assistant rejects ambiguous engine values")
+
+    chdirs = []
+    executions = []
+    old_chdir, old_execvpe = common.os.chdir, common.os.execvpe
+    try:
+        common.os.chdir = chdirs.append
+        common.os.execvpe = lambda program, argv, env: executions.append(
+            (program, argv, env))
+        common.enter("python", "-i", cwd=None)
+        check(not chdirs and executions[-1][1] == ["python", "-i"],
+              "REPL entry can preserve the operator working directory")
+        common.enter("pi")
+        check(chdirs == [common.FREEPY],
+              "coding-agent entries retain the FreePy working directory")
+    finally:
+        common.os.chdir, common.os.execvpe = old_chdir, old_execvpe
 
 
 if __name__ == "__main__":

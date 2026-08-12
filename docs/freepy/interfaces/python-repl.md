@@ -47,8 +47,10 @@ PYTHONPATH=llmkit uv run python
 python -m shells repl
 ```
 
-進入後已有 `LLM`、`Engine`、`Params`、`Controller`、`Handle`、`assistant`、`toolbox`、
-`session`，以及 `llms`、`base_tools`、`agentloop` modules。
+進入後已有 `LLM`、`Engine`、`Params`、`Controller`、`Handle`、`Assistant`、`assistant`、`toolbox`、
+`session`，以及 `llms`、`base_tools`、`agentloop` modules。launcher 保留啟動時的 cwd，並在
+啟動訊息顯示 `base_tools` 的工具 workspace；除非要縮小或切換範圍，不必先修正被 launcher
+改掉的路徑。
 
 ## 準備 bot 與工具
 
@@ -58,6 +60,15 @@ python -m shells repl
 base_tools.set_root(".")
 bot, dispatch = assistant(
     "lm-gemma-4-12b", base_tools.tools(), system="先查證再回答。")
+```
+
+`assistant()` 回傳的是仍可照上面解包的 `Assistant(bot, dispatch)`。只想立即開一個互動 Round
+時，可縮成一段：
+
+```python
+c = assistant(
+    "lm-gemma-4-12b", base_tools.tools(), system="先查證再回答。"
+).session("檢查這個專案")
 ```
 
 `assistant()` 的第一個參數也可以是已建好的 `Engine`。後面每個 tool source 可以是單一

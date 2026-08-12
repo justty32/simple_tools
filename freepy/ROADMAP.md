@@ -31,7 +31,8 @@ tools，抵達下一個 safe boundary 後返回。
 - `agentloop`：Round／Step、Handle、callbacks、Limits、parked runner 與安全 pause/end。
 - `advance()`：一個本地 operation；保留公開狀態在 parked boundary 的可編輯性。
 - `Controller`：組合 Handle、前景／背景／逐步 runner 的第一版本地 API。
-- Pi bridge：Pi extension 經 JSONL 控制獨立 Python agentloop；不借 Pi endpoint，也不接管 Pi loop。
+- Pi bridge：Pi extension 經 JSONL 控制獨立 Python agentloop；launcher 在 factory 明確設定時
+  自動載入 extension，不借 Pi endpoint，也不接管 Pi loop。
 
 ## 現在：讓本地層真的好用
 
@@ -50,7 +51,8 @@ GUI、vim、Pi extension 都是互動 shell；若取 Unix 薄殼原義，Python 
 
 第一版已有 `shells.session()`、Controller `.send()`，且 launcher 會預載常用名稱。
 真實任務顯示 bot／tools 組裝值得收斂，因此增加 `shells.assistant()` 與 `toolbox()`；
-工具來源、workspace 與 effect policy 仍由呼叫者明確決定。
+`repl` 會保留操作者的 cwd 並顯示工具 workspace，`assistant(...).session(...)` 可直接啟動
+配對好的 bot/dispatch；工具來源、workspace 與 effect policy 仍由呼叫者明確決定。
 
 Gate：使用者在 REPL 只需少量語句就能啟動與控制 Round；底層 Handle 仍可直接取得。
 

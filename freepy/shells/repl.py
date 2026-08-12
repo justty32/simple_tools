@@ -13,4 +13,4 @@ VENV = FREEPY / ".venv" / NAME
 
 os.environ["PYTHONSTARTUP"] = str(Path(__file__).with_name("_startup.py"))
 
-enter(str(VENV) if VENV.exists() else sys.executable, "-i")
+enter(str(VENV) if VENV.exists() else sys.executable, "-i", cwd=None)

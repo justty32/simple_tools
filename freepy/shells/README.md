@@ -12,25 +12,29 @@ python -m shells claude      # claude code
 python -m shells pi -c       # 名字後面的參數整包轉給它，這行等於 pi -c
 ```
 
+Pi 若已設定 `AGENTLOOP_PI_FACTORY`，launcher 會自動加入 FreePy adapter；未設定時仍是原本的
+純 pass-through。設定與離線示範見 [Pi launcher](PI.md)。
+
 `python -m shells` 不帶名字會印出目前有哪些入口（名單是掃資料夾算出來的，
 新增一個 `.py` 就自動出現在裡面）。
 
 ## 它們到底做了什麼
 
-三件事，就這樣：
+共同部分是兩件事：
 
-1. `os.chdir` 到 `freepy/`，所以不管你從哪裡叫，agent 看到的工作目錄都一樣
-2. `PYTHONPATH` 前面補上 `freepy` 和隔壁的 `llmkit`，`import base_tools` /
+1. `PYTHONPATH` 前面補上 `freepy` 和隔壁的 `llmkit`，`import base_tools` /
    `import llms` 才會通（`llms` 和 `tooljson` 已經落地到 `llmkit/`）
-3. `os.execvp` **把自己換成目標程式**，不是開子 process
+2. `os.execvp` **把自己換成目標程式**，不是開子 process
 
-第三點是重點：換掉自己之後 Ctrl-C、TTY、退出碼全部直通，中間沒有人插手。
+第二點是重點：換掉自己之後 Ctrl-C、TTY、退出碼全部直通，中間沒有人插手。
 開子 process 的話這三樣都要自己轉一遍，而且轉不乾淨 —— TUI 程式（pi、claude 都是）
 對這個特別敏感。
 
-`repl` 會優先用 `freepy/.venv` 裡的 python，不然從沒 activate 的 shell 叫進來會找不到
-`openai`。找不到 venv 就退回當前的 python。進入後可直接使用 `LLM`、`Engine`、`Params`、
-`Controller`、`Handle`、`assistant`、`toolbox`、`session`，以及 `llms`、`base_tools`、
+`pi` 與 `claude` 另外會把 cwd 固定在 `freepy/`；`repl` 則保留啟動時的 cwd，讓
+`base_tools` 的預設 workspace 就是操作者所在的專案。`repl` 會優先用 `freepy/.venv` 裡的
+python，不然從沒 activate 的 shell 叫進來會找不到 `openai`。找不到 venv 就退回當前的
+python。進入後會印出工具 workspace，並可直接使用 `LLM`、`Engine`、`Params`、
+`Controller`、`Handle`、`Assistant`、`assistant`、`toolbox`、`session`，以及 `llms`、`base_tools`、
 `agentloop` modules。
 
 `assistant()` 把建 bot 與掛 tools 的重複樣板收在一起；它只接受明確列出的 Python
@@ -38,13 +42,24 @@ callable 或既有的 `(schemas, dispatch)` bundle，不會掃描 `PATH`、選 w
 sandbox：
 
 ```python
+# 預設已是啟動 repl 的目錄；要縮到子目錄或改目標時再明確設定
 base_tools.set_root(".")
 bot, dispatch = assistant("lm-gemma-4-12b", base_tools.tools(), system="先查證再回答。")
 c = session(bot, dispatch, "檢查這個專案")
 ```
 
+在 REPL 裡可省掉解包，直接從配對結果啟動：
+
+```python
+c = assistant(
+    "lm-gemma-4-12b", base_tools.tools(), system="先查證再回答。"
+).session("檢查這個專案")
+```
+
 第一個參數也可以是自己建的 `Engine`；`toolbox()` 可單獨合併 callable 與多組 bundle。
-工具同名或 schema/dispatch 名稱不一致時會立即拒絕，避免 effect 被靜默取代。
+`assistant()` 的結果是可解包的 `Assistant(bot, dispatch)`；舊寫法保持不變，`.session()` 則會
+使用同一組 bot/dispatch。工具同名或 schema/dispatch 名稱不一致時會立即拒絕，避免 effect
+被靜默取代。
 
 `session()` 是 Python library helper，不只限 launcher 裡使用。它建立預設
 `auto_finish=False` 的 Handle、Controller 和一條背景 runner：

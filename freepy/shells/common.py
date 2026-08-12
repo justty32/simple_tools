@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""common.py — 三個入口共用的那幾行：固定工作目錄、PYTHONPATH、然後換掉自己。"""
+"""Shell entry helpers: prepare PYTHONPATH and replace the current process."""
 
 import os
 import sys
@@ -10,11 +10,17 @@ FREEPY = Path(__file__).resolve().parent.parent
 LLMKIT = FREEPY / "llmkit"
 
 
-def enter(program, *args):
-    """換掉自己（execvp，不開子 process），Ctrl-C、TTY、退出碼全部直通。"""
+def enter(program, *args, cwd=FREEPY):
+    """Replace this process, optionally changing directory first.
+
+    Coding-agent launchers keep the historical ``FREEPY`` default.  Callers
+    such as the Python REPL can pass ``cwd=None`` to preserve the directory in
+    which the operator started the shell.
+    """
     env = dict(os.environ, PYTHONPATH=os.pathsep.join(
         filter(None, [str(FREEPY), str(LLMKIT), os.environ.get("PYTHONPATH")])))
-    os.chdir(FREEPY)
+    if cwd is not None:
+        os.chdir(cwd)
     try:
         os.execvpe(program, [program, *args, *sys.argv[1:]], env)
     except FileNotFoundError:
