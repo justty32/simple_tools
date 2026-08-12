@@ -11,7 +11,7 @@
 | context / memory | [memory tools](memory-tools/PLAN.md) |
 | organization | [team tools](team-tools/PLAN.md) |
 | durable messages | [communication tools](communication-tools/PLAN.md) |
-| tool discovery | [exec tools](exec-tools/PLAN.md) |
+| LLM-assisted tool description | [exec tools](exec-tools/PLAN.md) |
 | effective-state view | [introspection tools](introspection-tools/PLAN.md) |
 
 實作順序仍以 [`freepy/ROADMAP.md`](../../../freepy/ROADMAP.md) 為準。目前 durable data boundary

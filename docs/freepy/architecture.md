@@ -16,7 +16,7 @@ Controller                        第一個較有結構的本地封裝（像 C�
   REPL、GUI、vim 式介面、Pi extension、MCP 等
   人或另一個 coding agent 操作 Controller／Handle 的介面
 
-llmkit / tooljson / base_tools    系統函式庫與 adapters（像 /usr/lib）
+llmkit / tooljson / tools         系統函式庫與 adapters（像 /usr/lib）
   endpoint、訊息／tool 格式、read/write、shell、socket 等能力
 
 durable application/control plane 外圍服務
@@ -49,7 +49,7 @@ library + REPL／CLI；Pi bridge、MCP 等則較準確叫 *control adapter*，�
 protocol、timeout 與 lifecycle。
 
 這些入口都不擁有 agentloop 的真實狀態，而是以明確 protocol 操作本地 Controller／Handle。
-llmkit、tooljson 和工具 packages 是未來 Agent Machine 的基礎函式庫：提供 endpoint、tool format、
+llmkit、tooljson、base_tools、exec_tools 等 packages 是未來 Agent Machine 的基礎函式庫：提供 endpoint、tool format、
 檔案／process／網路等能力。它們和 `/usr/lib` 的相似處是供上層重用；差異在於 endpoint 的成本、
 可用度、延遲與不確定性要由外層資源管理。工具副作用、權限與 sandbox 則仍由 tool/runtime adapter
 負責，不能因 library 類比而被省略。

@@ -90,8 +90,8 @@ test -f a.txt && echo '...' ; test -d backup && echo '...'
 （「不做規範了，畢竟 linux 該有的都有」），只是沒人講明它是**前提**而不是**觀察**。
 原型的價值就在這 —— 讓一個沒說出口的假設用壞掉的方式現身。
 
-目前另有兩個停放中的實驗：[`agent_machine_m0/`](agent_machine_m0/README.md) 是不完整的 durable
-domain 骨架；[`exec_tools/`](exec_tools/README.md) 保存尚未升格的工具 discovery。
+目前另有一個停放中的實驗：[`agent_machine_m0/`](agent_machine_m0/README.md) 是不完整的 durable
+domain 骨架。工具 discovery 已升格到 [`exec_tools`](../exec_tools/README.md)。
 
 ### 2. 思考型模型的空回合會白燒掉探查次數
 
