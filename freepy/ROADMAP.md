@@ -27,6 +27,7 @@ tools，抵達下一個 safe boundary 後返回。
 - `tooljson`：工具描述、載入、參數轉譯與 dispatch。
 - `base_tools`：檔案與 POSIX shell 基礎能力；不是 sandbox。
 - `exec_tools`：從明確的工具目錄發現 specs；不掃 `PATH` 或自動猜 schema。
+- `http_tools`：固定 endpoint 的 typed HTTP effect；不收模型提供的任意 URL。
 - `agentloop`：Round／Step、Handle、callbacks、Limits、parked runner 與安全 pause/end。
 - `advance()`：一個本地 operation；保留公開狀態在 parked boundary 的可編輯性。
 - `Controller`：組合 Handle、前景／背景／逐步 runner 的第一版本地 API。
@@ -54,8 +55,8 @@ Gate：使用者在 REPL 只需少量語句就能啟動與控制 Round；底層 
 
 ### 3. 整理基礎函式庫
 
-沿 `llmkit → tooljson → tools` 補齊 read/write、process、network 等能力；第一版 deterministic
-discovery 已落在 `exec_tools`。每個
+沿 `llmkit → tooljson → tools` 補齊底層能力；read/write、process 與第一版 typed network effect
+已有基線，deterministic discovery 已落在 `exec_tools`。每個
 library 都要分開描述：資料格式、真正 effect、成本／不確定性，以及誰負責 permission／approval。
 
 Gate：schema 與執行分離；工具來源明確；輸出有界；不把 root check 或 callback 說成 sandbox。

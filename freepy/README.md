@@ -10,6 +10,7 @@ FreePy 是一組由小到大疊起來的 agent 元件。這個目錄現在以「
 | [`llmkit/`](llmkit/README.md) | `llms` endpoint client、LiteLLM proxy、`tooljson` 格式與 dispatch |
 | [`base_tools/`](base_tools/README.md) | 讀寫、編輯檔案與 POSIX shell 的基礎工具 |
 | [`exec_tools/`](exec_tools/README.md) | 從明確指定的目錄發現 tooljson specs |
+| [`http_tools/`](http_tools/README.md) | 固定 endpoint、typed parameters 的 HTTP effect |
 | [`agentloop/`](agentloop/README.md) | 單一 Round 的 `run()`、`advance()`、Handle、Limits 與 Controller |
 | [`shells/`](shells/README.md) | Python REPL 與 coding-agent 的薄 launcher |
 
@@ -41,6 +42,7 @@ wrapper，不是持久化 control plane。完整分層見
 cd freepy
 PYTHONPATH=llmkit uv run python -m base_tools
 PYTHONPATH=llmkit uv run python -m exec_tools
+PYTHONPATH=llmkit uv run python -m http_tools
 PYTHONPATH=llmkit uv run python -m agentloop
 uv run python adapters/pi/check_pi_bridge.py
 cd llmkit && uv run python -m tooljson

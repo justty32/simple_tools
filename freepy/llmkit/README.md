@@ -61,7 +61,7 @@ uv run python -m llms                   # 五關：記憶／串流／思考／�
 | `llms` 的記憶／串流／思考／工具／後設 | 對 DeepSeek 雲端和本機 LM Studio 各跑過一輪五關 |
 | `caps` 七項全部 | 兩邊各實打一次才宣告，**不抄 litellm 的內建資料庫** |
 | 串流的 `stream_options` usage | DeepSeek 和 LM Studio 都拿得到 |
-| `ollama-*` 那批 | **沒驗**，那台機器連不到；yaml 裡不宣告，一律 `None` 放行 |
+| `ollama-*` 那批 | 2026-08-12 已直連驗證文字與 Qwen tool calling；完整證據見 [`../../docs/freepy/ollama-192.168.1.146.md`](../../docs/freepy/ollama-192.168.1.146.md) |
 | tool JSON 的 wire format | **故意還在 `0.1.0`** —— 只有一個語言的實作，還不知道規則寫得夠不夠死（[FORMAT.md](tooljson/FORMAT.md)） |
 
 實打抓到的一個真錯：litellm 說 DeepSeek `supports_response_schema` 是 `True`，

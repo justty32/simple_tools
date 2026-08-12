@@ -63,6 +63,9 @@
 | `"exec"` | 跑一個 linux 檔案，argv + stdin/out/err | [EXEC.md](EXEC.md) |
 | `"python"` | 叫一個 python 物件（**python 專屬**，別的語言讀到是壞檔） | [PYTHON.md](PYTHON.md) |
 
+上一層已有 [`http_tools`](../../http_tools/README.md) 用公開 registry 登記 `"http"`；它不是
+tooljson 內建型別，需先 import 該 package 才能讀相應 spec。
+
 其餘由使用者自己定義並在標準庫登記（python 版是 `tooljson.register()`）。
 C++ include、HTTP API 這些都可以這樣長出來，各自是一份平行的文件，
 `_extra` 底下的鍵也各自換一套。**內建的 `exec` 沒有特權**，走的是同一道門。
