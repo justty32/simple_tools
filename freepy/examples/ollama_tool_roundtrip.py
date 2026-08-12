@@ -14,7 +14,8 @@ sys.path[:0] = [str(ROOT), str(ROOT / "llmkit")]
 from _ollama_probe import manual_probe, progress  # noqa: E402
 from agentloop import Controller, Handle  # noqa: E402
 from agentloop.limits import Limits  # noqa: E402
-from llms import Engine, LLM, Params, to_tools  # noqa: E402
+from llms import Engine, Params  # noqa: E402
+from shells import assistant  # noqa: E402
 
 LIMITS = {
     "max_tokens_per_step": 4096,
@@ -30,14 +31,13 @@ def multiply(a: int, b: int) -> str:
 
 
 def run_round(host, model):
-    schemas, dispatch = to_tools(multiply)
     engine = Engine(
         model, url=host + "/v1", key="ollama", timeout=300,
         params=Params(
             temperature=0, max_tokens=LIMITS["max_tokens_per_step"]),
         caps={"tools": True})
-    bot = LLM(
-        engine, tools=schemas,
+    bot, dispatch = assistant(
+        engine, multiply,
         system=("You are a strict integration-test agent. You must use the "
                 "provided tool; never calculate the answer yourself."))
     handle = Handle()

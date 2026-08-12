@@ -17,7 +17,8 @@ import exec_tools  # noqa: E402
 import http_tools  # noqa: E402,F401 - registers the HTTP tooljson type
 from agentloop import Controller, Handle  # noqa: E402
 from agentloop.limits import Limits  # noqa: E402
-from llms import Engine, LLM, Params, to_tools  # noqa: E402
+from llms import Engine, Params, to_tools  # noqa: E402
+from shells import assistant  # noqa: E402
 
 EXPECTED = "project=cedar\nregion=TW\nunits=50\nshipping=7\ngrand=57\nstatus=verified"
 LIMITS = {
@@ -98,15 +99,15 @@ def execute_round(host, model, work, catalog):
     if found.errors or set(found.specs) != {"sum_numbers", "quote_shipping"}:
         raise RuntimeError(f"bad discovery result: {found}")
     effect_schema, effect_dispatch = exec_tools.tools([catalog])
-    schemas = base_schema + effect_schema
-    dispatch = {**base_dispatch, **effect_dispatch}
     engine = Engine(
         model, url=host + "/v1", key="ollama", timeout=300,
         params=Params(
             temperature=0, max_tokens=LIMITS["max_tokens_per_step"]),
         caps={"tools": True})
-    bot = LLM(engine, tools=schemas, system=(
-        "你是嚴格的整合測試 agent。不得自行計算或省略步驟；工具輸出才是事實。"))
+    bot, dispatch = assistant(
+        engine, (base_schema, base_dispatch),
+        (effect_schema, effect_dispatch), system=(
+            "你是嚴格的整合測試 agent。不得自行計算或省略步驟；工具輸出才是事實。"))
     handle = Handle()
     Limits(
         steps=LIMITS["steps"], calls=LIMITS["calls"],

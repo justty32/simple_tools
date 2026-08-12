@@ -30,7 +30,21 @@ python -m shells pi -c       # 名字後面的參數整包轉給它，這行等�
 
 `repl` 會優先用 `freepy/.venv` 裡的 python，不然從沒 activate 的 shell 叫進來會找不到
 `openai`。找不到 venv 就退回當前的 python。進入後可直接使用 `LLM`、`Engine`、`Params`、
-`Controller`、`Handle`、`session`，以及 `llms`、`base_tools`、`agentloop` modules。
+`Controller`、`Handle`、`assistant`、`toolbox`、`session`，以及 `llms`、`base_tools`、
+`agentloop` modules。
+
+`assistant()` 把建 bot 與掛 tools 的重複樣板收在一起；它只接受明確列出的 Python
+callable 或既有的 `(schemas, dispatch)` bundle，不會掃描 `PATH`、選 workspace 或建立
+sandbox：
+
+```python
+base_tools.set_root(".")
+bot, dispatch = assistant("lm-gemma-4-12b", base_tools.tools(), system="先查證再回答。")
+c = session(bot, dispatch, "檢查這個專案")
+```
+
+第一個參數也可以是自己建的 `Engine`；`toolbox()` 可單獨合併 callable 與多組 bundle。
+工具同名或 schema/dispatch 名稱不一致時會立即拒絕，避免 effect 被靜默取代。
 
 `session()` 是 Python library helper，不只限 launcher 裡使用。它建立預設
 `auto_finish=False` 的 Handle、Controller 和一條背景 runner：

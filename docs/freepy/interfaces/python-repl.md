@@ -47,23 +47,27 @@ PYTHONPATH=llmkit uv run python
 python -m shells repl
 ```
 
-進入後已有 `LLM`、`Engine`、`Params`、`Controller`、`Handle`、`session`，以及 `llms`、
-`base_tools`、`agentloop` modules。
+進入後已有 `LLM`、`Engine`、`Params`、`Controller`、`Handle`、`assistant`、`toolbox`、
+`session`，以及 `llms`、`base_tools`、`agentloop` modules。
 
 ## 準備 bot 與工具
 
-REPL 不會自行建立 `bot` 或 `dispatch`。呼叫者需要先依自己的應用程式準備：
+`assistant()` 可以從一個 llms preset id 與明確指定的 tools 建立配對的 bot/dispatch：
 
 ```python
-bot = ...
-
-dispatch = {
-    "read_file": read_file,
-    "write_file": write_file,
-}
+base_tools.set_root(".")
+bot, dispatch = assistant(
+    "lm-gemma-4-12b", base_tools.tools(), system="先查證再回答。")
 ```
 
-`dispatch` 是「模型要求的工具名稱」到「真正執行的 Python callable」的 mapping。
+`assistant()` 的第一個參數也可以是已建好的 `Engine`。後面每個 tool source 可以是單一
+Python callable，或 `base_tools.tools()`、`exec_tools.tools(...)`、`tooljson.tools(...)` 這種
+`(schemas, dispatch)` bundle。`toolbox()` 可單獨合併這些來源。同名工具會被拒絕，
+不會靜默改變實際 effect。
+
+這些 helper 不會自行掃描工具、選擇 workspace，也不提供 permission 或 sandbox。
+`dispatch` 仍是「模型要求的工具名稱」到「真正執行的 Python callable」的 mapping，
+也可以完全自行建立 `LLM` 與 mapping，再交給 `session()`。
 
 ## 啟動一個可互動的 Round
 
