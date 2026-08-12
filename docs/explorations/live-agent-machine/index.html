@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Live Agent Machine 頭腦風暴報告的離線導覽：versioned world form、assurance 與 Image Workbench。">
+  <title>Live Agent Machine｜導覽</title>
+  <link rel="stylesheet" href="guide.css">
+</head>
+<body>
+  <a class="skip" href="#main">跳到主要內容</a>
+  <header class="masthead">
+    <nav class="nav" aria-label="文件導覽">
+      <a class="brand" href="../../index.html">docs / live-agent-machine</a>
+      <span class="nav-links"><a href="README.md">文字索引</a><a href="../../freepy/future/agent-machine/README.md">Agent Machine 規格</a></span>
+    </nav>
+    <p class="eyebrow">RESEARCH MAP · 2026-08-11</p>
+    <h1>讓 agent 在持續變動的世界中，仍能可靠地求值</h1>
+    <p class="lead">這份導覽連接報告的八個章節：從 workspace form 與版本邊界，走到 evidence、人工介入與未來的 Image Workbench。</p>
+    <p class="statement"><span aria-hidden="true">◉</span> Agent Machine 是一台對 <strong>versioned world form</strong> 持續求值的慢速機率 machine；每次改動先經 typed intent、generation check 與 settlement，才成為下一次可見的新定義。</p>
+  </header>
+
+  <main id="main">
+    <section aria-labelledby="insights-title">
+      <div class="section-head"><p class="eyebrow">THREE CONSEQUENCES</p><h2 id="insights-title">命題帶來的三項洞見</h2></div>
+      <div class="insights">
+        <article><p class="number">01</p><h3>程式是 live world</h3><p>prompt 是入口；workspace、namespace、capability、memory 與 goal 才構成 closure。</p></article>
+        <article><p class="number">02</p><h3>資源也是 assurance</h3><p>token、成本、證據與人類注意力需要一起調度，且不能被壓成一個信心分數。</p></article>
+        <article><p class="number">03</p><h3>編輯器需要多種 lens</h3><p>除了檔案，還要能追問時間、因果、context、effect、權限與證據。</p></article>
+      </div>
+    </section>
+
+    <section class="architecture" aria-labelledby="architecture-title">
+      <div class="section-head"><p class="eyebrow">EVALUATION FLOW</p><h2 id="architecture-title">一個可提交的 world transition</h2></div>
+      <ol class="flow">
+        <li><strong>編輯 world form</strong><span>source · mount · tool · memory · goal</span></li>
+        <li><strong>編譯固定 view</strong><span>versioned image → Step manifest</span></li>
+        <li><strong>提出並驗證 intent</strong><span>proposal → capability / policy / verifier</span></li>
+        <li><strong>settle 成新 generation</strong><span>commit · evidence · replayable event</span></li>
+      </ol>
+      <p class="crosscut">全程橫跨：cost ledger、assurance graph、human intervention network。</p>
+    </section>
+
+    <section aria-labelledby="chapters-title">
+      <div class="section-head"><p class="eyebrow">EIGHT CHAPTERS</p><h2 id="chapters-title">依問題切入報告</h2></div>
+      <div class="chapters">
+        <article class="chapter"><p>01 · FORM</p><h3><a href="01-world-function.md">世界作為函數</a></h3><span>從資料夾到受版本與權限約束的 world view。</span></article>
+        <article class="chapter"><p>02 · TIME</p><h3><a href="02-live-evaluation.md">持續求值與版本語意</a></h3><span>Step pin、safe boundary、commit、replay 與 fork。</span></article>
+        <article class="chapter"><p>03 · ECONOMY</p><h3><a href="03-resource-economy.md">Assurance、成本與可互動性</a></h3><span>把保證、預算與人類注意力拆成正確型別。</span></article>
+        <article class="chapter"><p>04 · NETWORK</p><h3><a href="04-assurance-network.md">千萬 agent 的 assurance 網路</a></h3><span>來源、關聯、失效傳播與稀疏的人類穩定節點。</span></article>
+        <article class="chapter"><p>05 · WORKBENCH</p><h3><a href="05-image-workbench.md">超越檔案瀏覽器的 Image Workbench</a></h3><span>以 form、cause、context、effect 與 evidence 導航。</span></article>
+        <article class="chapter"><p>06 · SYSTEM</p><h3><a href="06-system-architecture.md">系統架構與固化飛輪</a></h3><span>讓 evaluator、reducer、adapter 與 Linux 各守邊界。</span></article>
+        <article class="chapter"><p>07 · DIRECTIONS</p><h3><a href="07-new-directions.md">十二個新方向</a></h3><span>從 Workspace Form Compiler 到 Evidence-native Git。</span></article>
+        <article class="chapter"><p>08 · TEST</p><h3><a href="08-risks-experiments.md">風險、反證與最小實驗</a></h3><span>用可證偽實驗，讓模型不只是一個漂亮隱喻。</span></article>
+      </div>
+    </section>
+
+    <section class="paths" aria-labelledby="paths-title">
+      <div class="section-head"><p class="eyebrow">START HERE</p><h2 id="paths-title">建議閱讀路徑</h2></div>
+      <div class="path-grid">
+        <article><h3>先建立共同語言</h3><p><a href="01-world-function.md">01 世界作為函數</a> → <a href="02-live-evaluation.md">02 持續求值</a> → <a href="06-system-architecture.md">06 系統架構</a></p></article>
+        <article><h3>關心可靠性與治理</h3><p><a href="03-resource-economy.md">03 資源經濟</a> → <a href="04-assurance-network.md">04 assurance 網路</a> → <a href="08-risks-experiments.md">08 最小實驗</a></p></article>
+        <article><h3>設計工具或介面</h3><p><a href="05-image-workbench.md">05 Image Workbench</a> → <a href="07-new-directions.md">07 新方向</a> → <a href="08-risks-experiments.md">08 反證</a></p></article>
+      </div>
+    </section>
+  </main>
+  <footer><span>這是離線導覽層，不取代正式規格。</span><a href="../../index.html">回到 docs 首頁</a><a href="../../freepy/future/agent-machine/README.md">Agent Machine README</a></footer>
+</body>
+</html>

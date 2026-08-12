@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Agent World：系統工程師導讀</title>
+<link rel="stylesheet" href="guide.css">
+</head>
+<body>
+<a class="skip" href="#main">跳到主要內容</a>
+<nav class="top" aria-label="文件導覽"><a href="index.html">報告首頁</a><a href="README.md">正式總覽</a><a href="../../research/agent-frameworks/guide.html">框架導讀</a></nav>
+<main id="main">
+<p class="eyebrow">PATH · VIEW · HANDLE · EVENT</p>
+<h1>Agent World 是一套 logical runtime，不是一棵神奇目錄</h1>
+<p class="lead">若你熟悉 Unix、Go service 或韌體控制面，可把它看成：為每個 agent 組一個私有、可稽核的 service namespace；模型只在有限 working set 中提出動作，supervisor 才提交真正狀態與副作用。</p>
+
+<section aria-labelledby="request"><h2 id="request">一次操作穿過五個不同責任</h2>
+<div class="flow" role="img" aria-label="actor 從私有 namespace 找到 path，開啟 capability handle，由 provider 解析資料，supervisor 驗證操作，runtime 或 Linux 執行">
+<div class="node"><b>Actor</b>誰在操作</div><div class="node"><b>Namespace</b>他看見的 view</div><div class="node"><b>Handle</b>已核驗 capability</div><div class="node"><b>Supervisor</b>狀態與 policy</div><div class="node"><b>Runtime</b>實際 effect</div>
+</div>
+<p class="small"><code>/tools/search</code> 只像 symbol 或 service name；open 後的 handle 才像綁定 principal、generation 與 rights 的 fd。provider 是資料真源，agentfs 只是 projection；Linux namespace/cgroup/seccomp 才是實體 enforcement。</p></section>
+
+<section aria-labelledby="vocab"><h2 id="vocab">六個常被壓成同一件事的概念</h2><div class="grid">
+<article class="card"><h3><span class="term">Agent identity</span></h3><p>穩定的 canonical path，例如 <code>/root/build/tests</code>；回答「我是誰」，不自帶全域可見性。</p></article>
+<article class="card"><h3><span class="term">Private view</span></h3><p><code>/self</code>、<code>/tools</code>、<code>/memory</code> 是 supervisor 為當次 actor/session 組出的 environment。</p></article>
+<article class="card"><h3><span class="term">Object / instance</span></h3><p>memory hash 或 live instance 指向特定版本；重啟後可換 incarnation，同一路徑不代表同一實體。</p></article>
+<article class="card"><h3><span class="term">Handle / fid</span></h3><p>類似 fd 加 capability token。舊 generation 被撤回後必須 stale，不能偷偷解析到同名新 instance。</p></article>
+<article class="card"><h3><span class="term">Status / events</span></h3><p>status 像 materialized view；events 像 append-only journal。前者答現在，後者答怎麼走到現在。</p></article>
+<article class="card"><h3><span class="term">Declared / effective / observed</span></h3><p>需求宣告、實際授予、runtime 量測三者分開；requested network 絕不能冒充已獲授權。</p></article>
+</div></section>
+
+<section aria-labelledby="clock"><h2 id="clock">三種時鐘，不要共用一個 step counter</h2><div class="table-wrap"><table><thead><tr><th>尺度</th><th>工程邊界</th><th>具體例子</th></tr></thead><tbody>
+<tr><td><strong>Step</strong></td><td>一次 provider <code>ask → message</code></td><td>一次 ADC sample/計算量子；tool 在兩個 Step 之間執行</td></tr>
+<tr><td><strong>Round</strong></td><td>單一 agent 由指令啟動到主動停止</td><td>一次 transaction attempt；可含多個 Step、tool 與追加指令</td></tr>
+<tr><td><strong>tick</strong></td><td>多 actor/world 的同步與 commit 邊界</td><td>控制迴圈的一拍；可收集多個 Round、script 與 intervention</td></tr>
+</tbody></table></div>
+<p>重播 Step 只固定 model input；重播 Round 還要固定 tool/environment；重播 tick 還要固定 schedule、介入與世界狀態。三者不是別名。</p></section>
+
+<section aria-labelledby="memory"><h2 id="memory">記憶像 backing store，context 像本拍 working set</h2>
+<div class="flow" role="img" aria-label="不可變 source trace 提升為 memory object，經由 context compiler 選成 manifest，送入一個 model Step">
+<div class="node"><b>Source trace</b>不可變證據</div><div class="node"><b>Memory object</b>hash + provenance</div><div class="node"><b>Compiler</b>ACL + budget + LOD</div><div class="node"><b>Manifest</b>實際順序與 view</div><div class="node"><b>Step</b>模型真正看見</div>
+</div>
+<p>compact 不是刪 history，而是重新編譯 view。card、summary、section、full 都是同一 object 的載入層級；AI 猜測先是 hypothesis，經 review 成 accepted grounding 後才可當確定性前提。</p></section>
+
+<section aria-labelledby="limits"><h2 id="limits">類比的失效點</h2>
+<p class="callout"><strong>路徑不是權限、projection 不是資料庫、namespace 不是 sandbox、container 也不是 Agent World 本身。</strong>任何 control write 都要轉成 typed operation，重新檢查 actor、scope、instance、generation 與 idempotency；沒有 OS enforcement 時不得回報「已隔離」。</p></section>
+
+<section aria-labelledby="next"><h2 id="next">接著讀正式文件</h2><ul>
+<li><a href="01-path-world.md">Path、private view 與 handle</a>：命名、能力和快慢路徑。</li>
+<li><a href="02-nine-axes.md">九軸契約</a>：如何組合 resource、guarantee 與 environment。</li>
+<li><a href="03-memory-context.md">Memory/context</a>：evidence graph、manifest 與 LOD。</li>
+<li><a href="04-time-agency.md">Step、Round、tick</a> 與 <a href="05-protocol-security.md">協定安全</a>。</li>
+</ul></section>
+<footer>本頁是跨領域導讀，不取代規格。已收斂的實作方向以 <a href="../../freepy/future/agent-machine/README.md">Agent Machine</a> 為準；來源可信度見 <a href="SOURCES.md">SOURCES</a>。完全離線、無 JavaScript 或外部資源。</footer>
+</main></body></html>

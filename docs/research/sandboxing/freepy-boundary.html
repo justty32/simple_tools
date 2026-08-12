@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="freepy 的安全邊界與 sandbox 落地順序。">
+<title>freepy 的現況與 Sandbox 落地</title>
+<link rel="stylesheet" href="site.css">
+</head>
+<body>
+<a class="skip" href="#main">跳到主要內容</a>
+<header>
+  <div class="topbar">
+    <a class="brand" href="../../index.html">simple_tools · docs</a>
+    <nav class="topnav" aria-label="Sandbox 文件">
+      <a href="index.html">觀念</a>
+      <a href="mechanisms.html">機制</a>
+      <a href="freepy-boundary.html" aria-current="page">落地</a>
+      <a href="03-recommendation.md">正式規格</a>
+    </nav>
+  </div>
+  <p class="eyebrow">Security boundary · 03</p>
+  <h1>誠實標示目前的邊界</h1>
+  <p class="lead"><code>freepy</code> 已有預算與部分路徑檢查，但 OS sandbox 仍在規劃。要分清「防誤用」和「隔離 hostile code」。</p>
+</header>
+
+<main id="main">
+  <section aria-labelledby="today">
+    <h2 id="today">今天真正成立的保證</h2>
+    <div class="compare">
+      <div>
+        <p class="kicker">EFFECTIVE</p><h3>已有效</h3>
+        <ul class="plain-list">
+          <li>迴圈計算 Round、tool call、時間、token 與 model 預算。</li>
+          <li>工具呼叫統一結算，超額時拒絕執行。</li>
+          <li>狹窄檔案工具檢查 resolved path，可阻擋一般路徑越界。</li>
+          <li><code>shell=False</code> 的 argv 避免 shell 二次解析。</li>
+        </ul>
+      </div>
+      <div>
+        <p class="kicker">NOT PROVIDED</p><h3>尚未提供</h3>
+        <ul class="plain-list">
+          <li><code>run_shell</code> 的 filesystem、network 或 child-process 隔離。</li>
+          <li>同一 Python process 中每個 agent／tool 的不同 OS 權限。</li>
+          <li>任意 executable 或未審查 Python tool 的 hostile-code isolation。</li>
+          <li>每 agent 的 mount、user、network namespace 與 cgroup lifecycle。</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section aria-labelledby="shell">
+    <h2 id="shell"><code>run_shell</code> 為何是高權限工具</h2>
+    <pre aria-label="run shell 目前以 shell true 和工作目錄執行">subprocess.run(command, shell=True,
+               cwd=str(get_root()), ...)</pre>
+    <p><code>cwd</code> 只決定起始目錄，沒有建立 mount namespace。子程序仍能碰宿主路徑、網路與其他 process；approval 和 timeout 只是額外防線。</p>
+    <div class="callout danger"><strong>命令黑名單不是邊界。</strong> 同一副作用可由變數、腳本、替代命令或語言 runtime 表達。</div>
+  </section>
+
+  <section aria-labelledby="threads">
+    <h2 id="threads">Thread 不是隔離單位</h2>
+    <p><code>agentloop.run()</code> 在呼叫它的 process 內執行 Python dispatch；搬進 worker thread 仍無 process 隔離。Thread 共用 address space、environment、descriptors 與宿主權限：</p>
+    <div class="grid">
+      <article class="card"><h3>不能做每 agent 路徑視野</h3><p>Agent A 與 B 若同 process，就不能靠 thread 讓兩者分別只見 A/B 目錄。</p></article>
+      <article class="card"><h3><code>rlimit</code> 會波及 supervisor</h3><p>per-process 限制套在同 process 工具上，也會限制負責管理與回收它的可信任控制面。</p></article>
+      <article class="card"><h3>Global state 會互相影響</h3><p>工具可使用 <code>os</code>、socket 或第三方函式庫，亦可能破壞其他 agent 共用的程序狀態。</p></article>
+    </div>
+  </section>
+
+  <section aria-labelledby="target">
+    <h2 id="target">建議的正式邊界</h2>
+    <pre role="img" aria-label="freepy supervisor 控制每個 agent 各自的 rootless Podman container">freepy supervisor（可信任）
+├─ immutable SandboxPolicy
+├─ create / start / stop / inspect
+├─ secret broker（長效 key 不下放）
+└─ effective policy / exit / cleanup evidence
+                     │
+                     ▼
+每個 agent 一個 rootless Podman container
+├─ /workspace/task               rw
+├─ /workspace/reference/*        ro
+├─ read-only root + bounded tmpfs
+├─ non-root + drop capabilities
+└─ network none / internal only</pre>
+    <p>要隔離完整 agent，就必須把 <code>agentloop + tools</code> 一起移進 container；只包住 shell，而 Python tools 和 LLM client 留在宿主 process，不能宣稱每實例隔離。</p>
+  </section>
+
+  <section aria-labelledby="mvp">
+    <h2 id="mvp">最小版本：刻意做窄</h2>
+    <div class="grid">
+      <article class="card"><p class="kicker">FILES</p><h3>只掛需要的路徑</h3><p>一個 task workspace 為 <code>rw</code>，零到多個 reference mount 為 <code>ro</code>；root filesystem 唯讀。</p></article>
+      <article class="card"><p class="kicker">NETWORK</p><h3>先從 none 開始</h3><p>第一版用 <code>--network=none</code>。需要 LLM 時再加入 internal broker，而不是先給外網再嘗試封鎖。</p></article>
+      <article class="card"><p class="kicker">IDENTITY</p><h3>rootless、非 root</h3><p>drop all capabilities、no-new-privileges、private IPC，不掛 Podman/Docker socket 或宿主 SSH agent。</p></article>
+      <article class="card"><p class="kicker">RESOURCE</p><h3>硬上限與 timeout</h3><p>限制 CPU、RAM、PID、core dump 與 tmpfs；宿主 supervisor 能停止整個 container 並收割所有 children。</p></article>
+      <article class="card"><p class="kicker">EVIDENCE</p><h3>驗證 effective state</h3><p>啟動 agent 前實測 mount、identity、resource 和 deny network；結束後記錄 cleanup 是否完整。</p></article>
+      <article class="card"><p class="kicker">PLATFORM</p><h3>先做 Linux／Podman</h3><p>不要同時承諾 Windows backend。WSL 可承載 Linux Podman，但 WSL 本身不是每 agent 的隔離邊界。</p></article>
+    </div>
+  </section>
+
+  <section aria-labelledby="sequence">
+    <h2 id="sequence">落地順序</h2>
+    <ol class="steps">
+      <li><strong>Policy 與 renderer：</strong>定義 immutable <code>SandboxPolicy</code>，以 argv list 產生 Podman 命令並做純單元測試。</li>
+      <li><strong>離線 container probes：</strong>驗 mount、identity、resource 與 <code>network=none</code> 的實際行為。</li>
+      <li><strong>Supervisor lifecycle：</strong>timeout、停止整個 container、清理 owned resources，保存 evidence。</li>
+      <li><strong>完整 worker 移入：</strong>以狹窄 IPC 溝通；完成後才可宣稱每個 agent 實例彼此隔離。</li>
+      <li><strong>有限網路：</strong>有需求時再加入 internal LiteLLM broker、短效 session token、allowlist proxy。</li>
+    </ol>
+    <div class="callout good"><strong>安全完成條件不是「Podman 成功啟動」。</strong> 必須證明拒絕路徑確實失敗、允許路徑可用、沒有直接出口，並且停止後資源已清除。</div>
+  </section>
+
+  <section aria-labelledby="specs">
+    <h2 id="specs">回到正式規格</h2>
+    <div class="grid">
+      <article class="card"><h3><a href="02-current-boundary.md">目前權限邊界</a></h3><p>逐項說明 <code>Limits</code>、file tools、shell、exec、Python thread 與 OS 機制。</p></article>
+      <article class="card"><h3><a href="03-recommendation.md">建議架構與里程碑</a></h3><p>Podman 參數、啟動/清理順序、secret、bwrap、Windows/WSL 與實作階段。</p></article>
+      <article class="card"><h3><a href="../../freepy/future/agent-runtime/PLAN.md">agent_runtime PLAN</a></h3><p>freepy runtime 的 package 邊界、worker lifecycle 與 OS enforcement 規劃。</p></article>
+    </div>
+  </section>
+
+  <a class="next" href="index.html"><span>回到起點 ↺</span><br><strong>用「限制放在哪裡」重新檢查整個設計</strong></a>
+</main>
+
+<footer>離線導覽，不是功能宣告；現況以程式與相鄰 README 為準。</footer>
+</body>
+</html>

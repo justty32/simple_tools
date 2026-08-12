@@ -1,0 +1,11 @@
+<!doctype html>
+<html lang="zh-Hant"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Roadmap 導讀：Agent Machine</title><link rel="stylesheet" href="site.css">
+<body><a class="skip" href="#main">跳到內容</a><nav><a href="index.html">Roadmap 地圖</a><a href="agentloop.html">agentloop</a><a href="later.html">後續</a></nav><main id="main"><p class="eyebrow">ROADMAP GUIDE · AGENT MACHINE</p><h1>Agent Machine：將來的外圍協調服務</h1>
+<p class="lead">它的目標是管理慢、昂貴、可能失敗的模型與工具工作：排隊、記帳、恢復、驗證。現在它仍是規劃，不是 Controller 的另一個名字。</p>
+<section><h2>先切開本地與外圍</h2><pre>本地：agentloop（loop + Handle + Limits）；Controller（較舒服的本地封裝）。外圍：Agent Machine / durable service；store、scheduler、worker、resource、verifier。</pre><p>Controller 不負責跨重啟、多人或多 process；若將來確實有這些需求，外圍服務可以把本地 Controller／Handle 當 runtime adapter，但不把資料庫術語塞回它的日常 API。</p></section>
+<section><h2>ROADMAP 的後續概念</h2><div class="grid"><article><h3>Command / Event</h3><p>command 是請求做事；event 是驗證後記下的事實。請求可拒絕，事實不可任意改寫。</p></article><article><h3>Store / transaction</h3><p>store 保存資料。transaction 是一組更新要嘛全成功、要嘛都沒發生，避免「已結算但忘了排下一件事」。SQLite 是可考慮的單檔資料庫。</p></article><article><h3>queue / scheduler / lease</h3><p>queue 放待辦；scheduler 決定誰先跑；lease 是 worker 暫時取得執行權。它們處理多 worker，不是單一 Handle 的工作。</p></article><article><h3>Candidate / evidence / verifier</h3><p>模型可提 Candidate；evidence 是測試輸出、hash 或人工核准；verifier 才決定 Goal 是否真的達標。</p></article></div></section>
+<section><h2>為何不能 crash 就 retry？</h2><p>讀檔與多數模型請求通常可重試；寄信、付款、部署、刪資料等工具可能已成功但回覆遺失，叫 <strong>unknown effect</strong>。恢復時要查證或人工處理，而不是盲目重跑。這也是將來 service 必須記錄 effect 狀態與 operation id 的原因。</p></section>
+<section><h2>資源與安全仍是另一條線</h2><p>endpoint 有成本、延遲、額度與不確定性；工具有權限與外部副作用。資源帳本可處理預算與 slot，但它不是 sandbox。真正的檔案、網路、CPU 與 process 隔離，仍要由 runtime、OS、container 或 VM 負責。</p></section>
+<section><h2>與 Pi bridge 的界線</h2><p>Pi bridge 是 Pi extension 與 Python child process 的 JSONL control adapter。Pi 可操作一個獨立的 agentloop Round；它不借 Pi 的模型 endpoint，也不干預 Pi 本身的 agent loop。現階段它直接操作 Handle；未來若有 durable service，再另定 adapter protocol。</p></section>
+<footer>這是 ROADMAP 導讀；正式規劃見 <a href="../../../freepy/ROADMAP.md">ROADMAP</a> 與 <a href="../../freepy/architecture.md">分層記錄</a>。</footer></main></body></html>

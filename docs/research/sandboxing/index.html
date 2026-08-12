@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="以電機與系統程式設計視角理解 agent sandbox 的信任邊界、隔離機制與驗證方法。">
+<title>Sandbox：限制放在哪裡才算數</title>
+<link rel="stylesheet" href="site.css">
+</head>
+<body>
+<a class="skip" href="#main">跳到主要內容</a>
+<header>
+  <div class="topbar">
+    <a class="brand" href="../../index.html">simple_tools · docs</a>
+    <nav class="topnav" aria-label="Sandbox 文件">
+      <a href="index.html" aria-current="page">觀念</a>
+      <a href="mechanisms.html">機制</a>
+      <a href="freepy-boundary.html">落地</a>
+      <a href="README.md">正式規格</a>
+    </nav>
+  </div>
+  <p class="eyebrow">Security boundary · 01</p>
+  <h1>限制放錯位置，就不叫限制</h1>
+  <p class="lead">Sandbox 不是判斷程式「看起來危不危險」，而是先建立一個它改不到的物理邊界，再讓它於其中執行。這和保護電路的道理相同：不能要求被保護的負載自行決定何時跳脫。</p>
+</header>
+
+<main id="main">
+  <section aria-labelledby="one-rule">
+    <h2 id="one-rule">先記住唯一原則</h2>
+    <div class="callout">
+      <strong>限制必須由受信任、位於 sandbox 外的 supervisor 執行。</strong>
+      <p>受限程式不能修改 policy、取得宿主憑證，或在驗證失敗時偷偷退回 unrestricted mode。</p>
+    </div>
+    <div class="compare">
+      <div>
+        <h3>電機類比：保護元件在功率路徑之外</h3>
+        <p>保險絲、斷路器、硬體 interlock 不由負載韌體控制。就算控制程式錯誤，硬體上限仍然存在。</p>
+      </div>
+      <div>
+        <h3>軟體對應：host supervisor 建立邊界</h3>
+        <p>supervisor 建立 container、mount、network 和 cgroup，驗證實際效果後，才啟動不可信任的 agent。</p>
+      </div>
+    </div>
+  </section>
+
+  <section aria-labelledby="not-boundary">
+    <h2 id="not-boundary">四個常見但不構成 sandbox 的東西</h2>
+    <div class="grid">
+      <article class="card wide"><p class="kicker">CWD</p><h3><code>cwd=/workspace</code></h3><p>只像指定程式上電後的初始位址。程式仍可用絕對路徑走到宿主使用者看得到的其他檔案。</p></article>
+      <article class="card wide"><p class="kicker">PARSING</p><h3><code>shell=False</code></h3><p>避免 shell 再解讀 <code>;</code>、<code>$(...)</code> 等字元，但成功啟動的 executable 仍繼承原 process 的檔案與網路權限。</p></article>
+      <article class="card wide"><p class="kicker">POLICY HINT</p><h3><code>HTTP_PROXY</code></h3><p>這只是環境設定。若 container 仍有 default route，程式可忽略 proxy，直接連線。</p></article>
+      <article class="card wide"><p class="kicker">OPERATION SAFETY</p><h3>approval／工具白名單</h3><p>很適合降低誤操作，卻不能抵抗惡意程式、被攻陷的依賴，或同 process 中能直接呼叫 OS API 的工具。</p></article>
+    </div>
+  </section>
+
+  <section aria-labelledby="mental-model">
+    <h2 id="mental-model">正確的心智模型</h2>
+    <ol class="flow" aria-label="Sandbox 啟動流程">
+      <li><strong>宣告</strong><br><span class="muted">不可變 policy</span></li>
+      <li><strong>建立</strong><br><span class="muted">mount、net、cgroup</span></li>
+      <li><strong>驗證</strong><br><span class="muted">允許與拒絕探針</span></li>
+      <li><strong>執行</strong><br><span class="muted">不可信 workload</span></li>
+      <li><strong>清理</strong><br><span class="muted">資源與證據</span></li>
+    </ol>
+    <p>這條流程中，「產生了正確設定」不等於「限制真的生效」。如同控制系統不只看 command，也要量測 effective output；啟動前必須從 container 內實測允許路徑可用、拒絕路徑不可用、沒有旁路網路。</p>
+  </section>
+
+  <section aria-labelledby="domains">
+    <h2 id="domains">先分清兩種限制</h2>
+    <div class="compare">
+      <div><p class="kicker">APPLICATION</p><h3>邏輯預算</h3><p>Round、token、tool-call 次數、可用模型。由 <code>agentloop</code> 看得到並計數，避免成本或迴圈失控。</p></div>
+      <div><p class="kicker">OPERATING SYSTEM</p><h3>存取與資源邊界</h3><p>可見檔案、網路路徑、process identity、CPU、RAM、PID、capability。必須由 OS/runtime enforcement。</p></div>
+    </div>
+    <div class="callout danger"><strong>兩者互補，不可互相冒充。</strong> Tool-call 上限不能阻止一個已獲准的 shell command 讀取整個 home；container 也不會自動理解 LLM token 預算。</div>
+  </section>
+
+  <section aria-labelledby="trust">
+    <h2 id="trust">信任邊界圖</h2>
+    <pre role="img" aria-label="受信任宿主 supervisor 經狹窄 IPC 控制不可信任 agent container">受信任 host
+┌──────────────────────────────────────┐
+│ supervisor：policy、生命週期、驗證   │
+│ secret broker：保存長效 credential   │
+└──────────────────┬───────────────────┘
+                   │ 狹窄 IPC / session token
+                   ▼
+┌──────────────────────────────────────┐
+│ 不可信 agent container               │
+│ 只見獲准 mount · 無直接外網 · 有上限 │
+└──────────────────────────────────────┘</pre>
+    <p class="muted">「不可信任」不是說 agent 一定惡意，而是架構不依賴它永遠正確。這與 fail-safe 設計相同。</p>
+  </section>
+
+  <a class="next" href="mechanisms.html"><span>下一頁 02 →</span><br><strong>Namespace、cgroup、capability 與網路到底各管什麼</strong></a>
+</main>
+
+<footer>本頁是易讀導覽。精確規格與來源以 <a href="README.md">sandboxing/README.md</a> 及其三份研究文件為準。</footer>
+</body>
+</html>

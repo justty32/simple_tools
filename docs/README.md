@@ -1,29 +1,18 @@
 # 文件索引
 
-`docs/` 放跨 package 的研究與架構報告。實際 API、執行方式與局部設計仍以程式旁的
-README／docstring 為準。
+`docs/` 依文件角色分目錄；實際 API 與局部契約仍以程式旁 README／docstring 為準。
 
-## 架構主線
-
-| 文件 | 性質 | 用途 |
+| 區域 | 內容 | 入口 |
 |---|---|---|
-| [Agent Machine](../freepy/agent_machine/README.md) | 實作規格 | 慢速機率求值、OS 資源管理、Plan 9／Lisp 與里程碑 |
-| [Agent World](agent-world/README.md) | 設計底圖 | path、namespace、memory、Round／Step 與安全邊界 |
-| [Agent framework 調查](agent-framework-review/README.md) | 參考研究 | 比較七套框架並擷取可採用的設計切片 |
-| [Sandboxing](sandboxing/README.md) | 安全研究 | 現有邊界、容器隔離與落地建議 |
+| `guides/` | 白話、可視化導讀；不是規格 | [Roadmap](guides/roadmap/index.html)、[Agent Machine](guides/agent-machine/index.html) |
+| `freepy/` | FreePy 跨 package 架構、adapters、future specs | [FreePy 文件地圖](freepy/README.md) |
+| `design/` | 已形成系統模型的跨領域設計 | [Agent World](design/agent-world/README.md) |
+| `explorations/` | 尚在發散、用來產生問題的想法 | [Live Agent Machine](explorations/live-agent-machine/README.md) |
+| `research/` | 外部系統、語言與安全研究 | [Agent frameworks](research/agent-frameworks/README.md)、[Sandboxing](research/sandboxing/README.md) |
+| `archive/` | 已被取代、只供追溯的材料 | [archive](archive/) |
+| `development/` | 本機與開發環境說明 | [FreePy environment](development/freepy-environment.md) |
 
-## 跨語言固化
+跨語言研究另有 [C／C++](research/languages/cpp/README.md) 與
+[Lisp／Janet](research/languages/janet/README.md)。瀏覽器首頁是 [index.html](index.html)。
 
-這兩份是替代方案評估，不表示已決定重寫：
-
-| 文件 | 結論摘要 |
-|---|---|
-| [C／C++ 固化](cpp-solidification/README.md) | C++ 適合穩定語意核心與 native adapter；目前不宜整套重寫 |
-| [Lisp／Janet 固化](lisp-solidification/README.md) | Janet 適合穩定的資料與 reduction 核心；OS／provider glue 留在 adapter |
-
-## 歷史材料
-
-- [`archive/cpp-streaming-client-notes.md`](archive/cpp-streaming-client-notes.md)：
-  2026-08-05 的 C++ HTTP／SSE client 草稿；僅供追溯，不代表目前實作。
-
-文件角色、更新優先序與註解準則見 [`DOCUMENTATION.md`](DOCUMENTATION.md)。
+文件角色、權威順序與大小限制見 [CONVENTIONS.md](CONVENTIONS.md)。

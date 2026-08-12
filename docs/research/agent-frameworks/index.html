@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Agent framework 參考調查</title>
+<style>
+:root{color-scheme:dark;--bg:#09111d;--panel:#111d2d;--line:#263a53;--ink:#eaf2ff;--muted:#a8b8cc;--a:#67d6c0;--b:#ffcf70}*{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at 15% 0,#17304b 0,transparent 38%),var(--bg);color:var(--ink);font:16px/1.65 system-ui,"Noto Sans TC",sans-serif}main{max-width:1050px;margin:auto;padding:4rem 1.2rem 5rem}h1{font-size:clamp(2rem,5vw,4.3rem);line-height:1.05;margin:.2rem 0 1rem;max-width:850px}h2{font-size:1.15rem;margin:.4rem 0}.eyebrow,.n{color:var(--a);font-weight:750;letter-spacing:.08em;text-transform:uppercase}.lead{max-width:800px;color:var(--muted);font-size:1.12rem}.map{margin:2rem 0;padding:1.2rem;border:1px solid var(--line);border-radius:16px;background:#0b1625cc;font-family:ui-monospace,monospace;color:#d6e7ff;overflow:auto}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:1rem;margin:2rem 0}.card{display:block;min-height:155px;padding:1.15rem;text-decoration:none;color:inherit;border:1px solid var(--line);border-radius:16px;background:linear-gradient(145deg,#132238,#0d1827);transition:.15s transform,.15s border-color}.card:hover{transform:translateY(-3px);border-color:var(--a)}.card p{color:var(--muted);margin:.5rem 0 0}.summary{border-left:4px solid var(--b);padding:.2rem 1rem;color:#dce8f8}footer{margin-top:3rem;color:var(--muted);font-size:.92rem}code{color:var(--b)}
+</style>
+</head>
+<body><main>
+<div class="eyebrow">Research report · 2026-08-10</div>
+<h1>七個 agent framework，拆成可用的設計零件</h1>
+<p class="lead">Swarm、Instructor、MiniChain、PocketFlow、LightAgent、LangGraph、CrewAI 的 source-level 比較，以及它們如何接到 freepy 的 Round／Step、agent path、memory、runtime 與 agentfs。</p>
+<div class="map">schema → model attempt / Round<br>intent → policy → approval → sandbox effect → receipt<br>workflow step → pending writes → checkpoint<br>all state → per-actor agentfs projection</div>
+<p class="summary">結論：不選一套框架作底座。取 Instructor 的契約、LightAgent 的政策與 trace、LangGraph 的 durability、PocketFlow 的小 lifecycle，再保留 freepy 自己的 namespace 與 OS enforcement。</p>
+<nav class="grid" aria-label="報告章節">
+<a class="card" href="guide.html"><span class="n">ENGINEER'S GUIDE</span><h2>框架零件與 runtime 邊界</h2><p>從 schema、handoff、checkpoint、outbox 與 sandbox 判斷哪些概念值得取用。</p></a>
+<a class="card" href="README.md"><span class="n">00 · Summary</span><h2>結論與導覽</h2><p>先做什麼、為何不是功能最多者勝。</p></a>
+<a class="card" href="01-method.md"><span class="n">01 · Evidence</span><h2>方法與快照</h2><p>固定 commits、規模差異、證據限制與本地基準。</p></a>
+<a class="card" href="02-landscape.md"><span class="n">02 · Map</span><h2>定位比較</h2><p>schema、handoff、graph、durability 與安全邊界。</p></a>
+<a class="card" href="03-swarm-instructor.md"><span class="n">03 · Boundary</span><h2>Swarm / Instructor</h2><p>極小 handoff loop 與結構化輸出契約。</p></a>
+<a class="card" href="04-minimal-frameworks.md"><span class="n">04 · Kernel</span><h2>MiniChain / PocketFlow</h2><p>lazy chain 與 100 行 workflow kernel。</p></a>
+<a class="card" href="05-integrated-frameworks.md"><span class="n">05 · Runtime</span><h2>LightAgent / CrewAI</h2><p>policy、review、Task、Flow 與整合型框架代價。</p></a>
+<a class="card" href="06-langgraph.md"><span class="n">06 · Durable</span><h2>LangGraph</h2><p>Pregel step、reducer、pending writes、interrupt/resume。</p></a>
+<a class="card" href="07-freepy-fit.md"><span class="n">07 · Fit</span><h2>映射到 freepy</h2><p>Round/Step、agentfs、memory 與 sandbox effect。</p></a>
+<a class="card" href="08-adoption.md"><span class="n">08 · Build</span><h2>採用順序</h2><p>從 event vocabulary 到 durable workflow 的 gates。</p></a>
+<a class="card" href="09-risks.md"><span class="n">09 · Resist</span><h2>風險與非目標</h2><p>hidden calls、retry、authority、telemetry、framework gravity。</p></a>
+</nav>
+<footer>每個報告檔案皆以 8 KiB 為上限。HTML 不依賴外部資源或 JavaScript。</footer>
+</main></body></html>

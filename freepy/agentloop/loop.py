@@ -1,7 +1,62 @@
-"""The small synchronous driver: Step, callbacks, tools, callbacks, repeat."""
+"""The small synchronous driver and one-safe-boundary runner operation."""
 
 from .calling import perform
-from .handle import Handle
+from .handle import Handle, _RunnerContractError
+
+
+def advance(bot=None, dispatch=None, prompt=None, handle=None, images=None):
+    """Advance a Round by one Step or one complete tool batch, without parking.
+
+    On the first call provide ``bot`` (and optional initial inputs); later calls
+    need only the same ``handle``.  A paused/waiting/completed Handle is returned
+    unchanged.  This is also the runner operation used by ``Controller``.
+    """
+    h = handle or Handle()
+    if h.state == "idle":
+        if bot is None:
+            raise ValueError("the first advance() needs a bot")
+        table = dict(h.dispatch)
+        table.update(dispatch or {})
+        h._begin(bot, table, prompt, images)
+    elif any(value is not None for value in (bot, dispatch, prompt, images)):
+        raise ValueError("later advance() calls take only handle=")
+
+    if h.done():
+        return h
+    try:
+        started = h._start_next()
+    except _RunnerContractError:
+        raise
+    except Exception as err:
+        return h._fail(err)
+    if started is None:
+        return h
+    action, payload = started
+    try:
+        if action == "tools":
+            calls, current_dispatch, seed = payload
+            results, records = _perform_all(calls, current_dispatch, seed)
+            h._commit_tools(calls, results, records)
+            return h
+
+        step_prompt, step_images, results, options = payload
+        reply = h.bot.ask(prompt=step_prompt, images=step_images,
+                          tool_results=results or None, **options)
+        text = getattr(reply, "text", "")
+        calls = getattr(reply, "calls", [])
+        finish_reason = getattr(reply, "finish_reason", None)
+        committed = bool(text or calls or finish_reason is not None)
+        if not committed:
+            err = getattr(reply, "err", None) or RuntimeError(
+                "bot.ask() returned no message")
+            return h._fail(err)
+        h._commit_step(reply, text, calls, finish_reason,
+                       getattr(reply, "usage", None))
+        if getattr(reply, "err", None) is not None:
+            return h._fail(reply.err)
+        return h
+    except Exception as err:
+        return h._fail(err)
 
 
 def run(bot, dispatch=None, prompt=None, handle=None, images=None):
@@ -15,41 +70,13 @@ def run(bot, dispatch=None, prompt=None, handle=None, images=None):
     table = dict(h.dispatch)
     table.update(dispatch or {})
     h._begin(bot, table, prompt, images)
-
-    try:
-        action = "tools" if h.tool_calls else "step"
-        while True:
-            if action == "tools":
-                started = h._start_tools()
-                if started is None:
-                    return h
-                calls, current_dispatch, seed = started
-                results, records = _perform_all(calls, current_dispatch, seed)
-                if not h._commit_tools(calls, results, records):
-                    return h
-
-            started = h._start_step()
-            if started is None:
-                return h
-            step_prompt, step_images, results, options = started
-            reply = bot.ask(prompt=step_prompt, images=step_images,
-                            tool_results=results or None, **options)
-            text = getattr(reply, "text", "")
-            calls = getattr(reply, "calls", [])
-            finish_reason = getattr(reply, "finish_reason", None)
-            committed = bool(text or calls or finish_reason is not None)
-            if not committed:
-                err = getattr(reply, "err", None) or RuntimeError(
-                    "bot.ask() returned no message")
-                return h._fail(err)
-            action = h._commit_step(
-                reply, text, calls, finish_reason, getattr(reply, "usage", None))
-            if getattr(reply, "err", None) is not None:
-                return h._fail(reply.err)
-            if action == "end":
-                return h
-    except Exception as err:
-        return h._fail(err)
+    while not h.done():
+        advance(handle=h)
+        if h.done():
+            break
+        if h.state in {"waiting", "paused"} and not h._wait_until_ready():
+            break
+    return h
 
 
 def _perform_all(calls, dispatch, seed):

@@ -1,115 +1,78 @@
 # FreePy 實作路線
 
-這份只排跨 package 的依賴與驗收順序；各層資料模型和關卡見自己的 `PLAN.md`。所有新規劃檔
-維持 8 KB 以下。
+這份只回答「接下來做哪一層」。目前分層的唯一入口是
+[`docs/freepy/architecture.md`](../docs/freepy/architecture.md)；未來規格不能反過來宣稱自己是
+現況 API。
 
-目前的上層執行與資源模型以 [Agent Machine](agent_machine/README.md) 為準；Plan 9、Lisp、path、
-memory 與多 agent 世界的廣泛設計背景見 [Agent World](../docs/agent-world/README.md)。
-
-## 依賴圖
+## 由內向外
 
 ```text
-                         agent_machine core
-                 records / events / resources / goals
-                                  │ ports
-            ┌───────────┬─────────┼──────────┬───────────┐
-            ▼           ▼         ▼          ▼           ▼
-       agentloop    llmkit     runtime     memory      team/comm
-       Round runner  endpoint   OS worker   context     organization
-            │                      │           │           │
-            └──────────────────────┴───────────┴───────────┘
-                                   │
-                         introspection / agentfs
+agentloop：loop + Handle + Limits       原始本地核心
+    └─ Controller                       較好用的本地 wrapper
+
+interfaces / control adapters           REPL、CLI、GUI、Pi、MCP
+foundation libraries                    llmkit、tooljson、read/write/exec/socket
+
+durable services                        persistence、scheduler、Candidate、Goal…
+runtime enforcement                     permission、sandbox、resource isolation
 ```
 
-`agent_machine` 是 userspace domain kernel：它協調各層但不吸收 provider、sandbox、memory store
-或 organization 的實作。核心只依賴 ports 與純資料 schema。
+前兩層是現在；後兩層要由實際需求推動。`Controller` 不等於 durable control plane，
+`agentloop.advance()` 也不產生 durable commands：它只在 owner runner thread 執行一個 Step 或一整批
+tools，抵達下一個 safe boundary 後返回。
 
-`agent_identity.py` 仍是 communication、runtime、team、agentfs 共用的 logical path parser；
-agent path 不等於 OS PID、host path、authority 或 cgroup path。
+## 已完成的底座
 
-## Milestone 0：Agent Machine 純核心
+- `llmkit`：一次模型請求、Reply、endpoint preset、tool schema。
+- `tooljson`：工具描述、載入、參數轉譯與 dispatch。
+- `base_tools`：檔案與 POSIX shell 基礎能力；不是 sandbox。
+- `agentloop`：Round／Step、Handle、callbacks、Limits、parked runner 與安全 pause/end。
+- `advance()`：一個本地 operation；保留公開狀態在 parked boundary 的可編輯性。
+- `Controller`：組合 Handle、前景／背景／逐步 runner 的第一版本地 API。
+- Pi bridge：Pi extension 經 JSONL 控制獨立 Python agentloop；不借 Pi endpoint，也不接管 Pi loop。
 
-完成 [`agent_machine/PLAN.md`](agent_machine/PLAN.md) 的 M0 + M1：records、commands、events、
-reducer、resource ledger、fake clock 與 fake stochastic endpoint。此階段不 import `agentloop`，
-也不用模型、Podman、FUSE 或網路。
+## 現在：讓本地層真的好用
 
-Gate：event replay 決定性；generation CAS；operation 冪等；父子資源不超賣；lease late result 無效；
-公平 queue 不飢餓；false completion 不會變 goal achieved；10,000 dormant bots 的 active state 有界。
+### 1. 以使用回饋演進 Controller
 
-## Milestone 1：Round control 與逐步 runner
+先用現有 `Controller` 做真實小任務，收集重複樣板，再決定哪些常用狀態、Limits preset、callback
+組合值得升格。Handle 永遠保留；其他人也可在 Handle 上建立不同抽象。
 
-`agentloop` 的 lock、completion/enqueue、安全邊界、settlement 與 exception 修正已完成；
-下一步抽一次只前進到下一 safe boundary 的 runner protocol，保留既有 `run()`
-作 convenience loop。現行語意見 [`agentloop/ROUNDS.md`](agentloop/ROUNDS.md)。
+Gate：Handle ownership、parked edits、pause/end boundary、並行誤用都有回歸測試；Controller 不暗示
+database、ACL 或 sandbox 保證。
 
-Gate：現有離線案例全過；追加指令不丟；pause/stop 不多放行 Step；tool pairing 不重做；runner
-能產生 `AskStep`、`RunToolBatch`、`Candidate` 等 durable commands。
+### 2. 做真正直接的 Python 互動入口
 
-## Milestone 2：durable control plane
+把「import、建 bot、掛 tools、啟動、查看、繼續」收成小型 Python library／REPL helpers。廣義上
+GUI、vim、Pi extension 都是互動 shell；若取 Unix 薄殼原義，Python REPL／CLI 才是最接近的入口。
 
-用 transaction store 保存 event、ledger、outbox 與 snapshots；接 Agent Machine scheduler 與 Round
-runner。Bot record 可 dormant，queued Round 不需一 Round 一 task，只有取得 lease 的
-Step attempt 進 runtime；留下 message 後才提交成 Step。
+Gate：使用者在 REPL 只需少量語句就能啟動與控制 Round；底層 Handle 仍可直接取得。
 
-Gate：每個 transition crash injection 後可恢復；queued work 不丟；effect unknown 可辨識；舊
-instance/lease 不污染新 generation；endpoint 恢復時沒有 retry herd。
+### 3. 整理基礎函式庫
 
-## Milestone 3：Goal、evidence 與 restart
+沿 `llmkit → tooljson → tools` 補齊未成型的 discover、read/write、process、network 等能力。每個
+library 都要分開描述：資料格式、真正 effect、成本／不確定性，以及誰負責 permission／approval。
 
-加入 completion claim、mechanical verifier、probabilistic evidence 與 user authority。採 Lisp
-condition/restart 形狀，但 restart 是 typed policy operation，模型只能建議。
+Gate：schema 與執行分離；工具來源明確；輸出有界；不把 root check 或 callback 說成 sandbox。
 
-Gate：模型自稱完成不能過關；evidence 過期使 decision 失效；retry/repair/switch-engine/escalate
-都有 budget 與 audit；未知副作用不能普通重試。
+## 之後：control adapters
 
-## Milestone 4：identity、communication 與 runtime enforcement
+Pi bridge 已有第一版；MCP、Claude Code、Codex 等仍是設計資料。它們是跨 process lifecycle 與
+protocol adapters，不擁有 agentloop 真實狀態。只有共同操作成熟後，才抽共享 server/API。
 
-1. `agent_identity.py`：canonical path、parent、ancestor、reserved `.agent`。
-2. communication vertical slice：兩個 identity 的 durable mailbox。
-3. `agent_runtime` fake backend：policy derivation、budget reserve/refund、instance lifecycle。
-4. Linux adapter：獨立 tool executor、pidfd、delegated cgroup、namespace、seccomp/Landlock；再評估
-   rootless Podman。
+Gate：protocol 錯誤、timeout、child cleanup、allowlisted edit 與 host lifecycle 有離線證據。
 
-Gate：path prefix 陷阱、sender 偽造、child 升權、資源超賣、PID reuse、cleanup 與 sandbox
-effective-state 全有離線／整合證據。沒有 sandbox 時不得聲稱已隔離。
+## 延後：durable application／Agent Machine
 
-## Milestone 5：memory 與 context pager
+只有出現跨重啟、多 process、大量 dormant bot、可靠排程或可驗證完成的實際需求後，才定義
+可序列化 command/event、transaction store、worker lease、Candidate、Goal/evidence/verifier。
+不能保存活的 Handle、callback 或 Python callable；外圍 service 應透過 adapter 使用本地 runtime。
 
-memory 先做 address/store 與 immutable source span，再接每步 context manifest。依 Agent Machine
-resource controller 做 pinned/working/linked/cold、load budget、hysteresis 與 pressure eviction。
+相關想法保存在 [`docs/freepy/future/`](../docs/freepy/future/README.md)。早期 M0 Python 骨架已停放在
+[`prototypes/agent_machine_m0/`](prototypes/agent_machine_m0/README.md)，不代表正式 package 或下一步。
 
-Gate：JSON `$ref`、Markdown link/heading、ACL、cycle/depth/bytes/token 上限；source trace 不變；
-current instruction 與未閉合 tool pairing 永遠 pinned；同一 Step manifest 可重建。
+## 同樣延後：runtime、memory、team、projection
 
-## Milestone 6：team resource hierarchy
-
-依序完成 member/grant、allocation、task/report、communication notification，最後才做
-`spawn_subordinate` saga。organization path 對應 cognitive resource pool hierarchy；OS cgroup 只
-對應實體 worker，不冒充 token controller。
-
-Gate：權限單調縮減、資源守恆、task transition 冪等；通知失敗不丟 task；父子 cancellation、
-orphan/zombie、deadlock wait graph 有明確處理。
-
-## Milestone 7：Plan 9 projection
-
-先以 `agent_list/read/stat` 驗 per-actor namespace、provider、generation 與 capability；投影 Agent
-Machine 的 goals、rounds、resources、conditions、restarts、events。`ctl` 只能翻譯成既有 typed
-operation。需求證明後再選 FUSE 或 9P adapter。
-
-Gate：self/ancestor/peer view、revocation、secret、snapshot、bytes/list limit、flush/clunk；任何
-projection write 都不能直接 mutation 真源。
-
-## 第一個可動手的切片
-
-目前下一個提交是 Agent Machine M0 + M1 的最窄 vertical slice：
-
-```text
-records + events + reducer
-resource pools + reservation/lease/settlement
-fair scheduler + fake clock + fake stochastic endpoint
-```
-
-完整完成定義見 [`agent_machine/PLAN.md`](agent_machine/PLAN.md#第一個提交切片)。這一步刻意不接
-真模型或現有 `agentloop`：先用 scripted results 證明資源守恆、late result、false completion、
-verification failure 與公平性，再進下一個 milestone。
+permission 與 sandbox 是獨立的 runtime 邊界；endpoint／token／context 要有資源管理；memory 要有
+來源、ACL 與 context budget；team 要有 identity、grant 與資源守恆；agentfs 只能投影既有真源。
+這些依賴 durable 邊界的部分先保留規格，不與 Controller 同時開工。

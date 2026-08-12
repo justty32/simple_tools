@@ -13,10 +13,12 @@ thread until another thread calls ``resume()``. Optional conveniences live in
 """
 
 from .calling import MAX_OUTPUT, perform
+from .controller import Controller
 from .handle import CONTINUE, END, PAUSE, Decision, Handle
-from .loop import run
+from .loop import advance, run
 
 __all__ = [
     "CONTINUE", "PAUSE", "END", "Decision", "Handle", "MAX_OUTPUT",
-    "perform", "run",
+    "Controller",
+    "perform", "advance", "run",
 ]

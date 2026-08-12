@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Janet 固化：跨領域工程師導讀</title>
+<link rel="stylesheet" href="guide.css">
+</head>
+<body>
+<a class="skip" href="#main">跳到主要內容</a>
+<nav class="top" aria-label="文件導覽"><a href="index.html">報告首頁</a><a href="README.md">正式總覽</a><a href="../cpp/guide.html">C++ 路線</a></nav>
+<main id="main">
+<p class="badge">Janet · data + reduction · typed effects</p>
+<h1>Janet 固化，是把規則做成一台小型語意機器</h1>
+<p class="lead">對熟悉 C++、Go 或 Lua 的人，Janet 的價值不是括號或 REPL，而是用很小的資料模型表達狀態、規則與組合。它適合控制面；TLS、process、container 與 mount 仍交給有實證的 adapter 和 Linux。</p>
+
+<section aria-labelledby="map"><h2 id="map">核心像離散時間控制器</h2>
+<div class="loop" role="img" aria-label="事件和目前狀態進入 Janet reducer，產生新狀態及 typed intent，再由 adapter 執行並送回結果事件">
+<div class="node"><b>State + Event</b>可序列化輸入</div><div class="arrow" aria-hidden="true">→</div><div class="node"><b>Janet reducer</b>純規則與不變條件</div><div class="arrow" aria-hidden="true">→</div><div class="node"><b>State + Intent</b>交給 effect adapter</div>
+</div>
+<p class="small">adapter 的 result 再成為下一個 event。如此可以 replay、差分測試，也能在不碰真模型或真 process 時驗證控制邏輯。</p></section>
+
+<section aria-labelledby="terms"><h2 id="terms">跨領域術語對照</h2><div class="grid">
+<article class="card"><h3><span class="term">Semantic core</span></h3><p>像協定狀態機加 policy engine：擁有 path、permission、Round、ledger、context manifest 的決策，不擁有外部世界。</p></article>
+<article class="card"><h3><span class="term">Reduction</span></h3><p><code>state + event -&gt; state + intents</code>。不是任意求值；同一輸入應產生可比較的 transition。</p></article>
+<article class="card"><h3><span class="term">Environment / namespace</span></h3><p>類似每個 task 的 symbol table 加可見資源表；決定看得到什麼，但「看得到路徑」不代表已授權。</p></article>
+<article class="card"><h3><span class="term">Binding / handle</span></h3><p>handle 是解析後且帶 authority 的 reference，應綁 actor、instance、grant generation；不是一條可猜的名稱。</p></article>
+<article class="card"><h3><span class="term">Quote / checked dereference</span></h3><p>memory 內容先當 data；load 時重驗 ACL、depth 與 budget。文字長得像指令，也不會自動升權。</p></article>
+<article class="card"><h3><span class="term">Intent / effect</span></h3><p>Janet 只提「要 spawn」的 typed request；supervisor 依 policy 重建 argv、mount、network，再執行 OS effect。</p></article>
+</div></section>
+
+<section aria-labelledby="boundary"><h2 id="boundary">語言邊界不是能力清單</h2><div class="table-wrap"><table><thead><tr><th>層</th><th>Janet 適合擁有</th><th>應留在 adapter／OS</th></tr></thead><tbody>
+<tr><td>資料與規則</td><td>schema、canonical path、permission subset、狀態轉移</td><td>durable transaction、真實 telemetry</td></tr>
+<tr><td>Agent loop</td><td>Step、pending debt、budget、stop reason</td><td>provider SDK、HTTPS/SSE、blocked I/O</td></tr>
+<tr><td>執行安全</td><td>policy derivation、typed operation、resource ledger</td><td>process、namespace、cgroup、seccomp、FUSE</td></tr>
+<tr><td>記憶</td><td>address、provenance、manifest、load limits</td><td>object store、search、large bytes</td></tr>
+</tbody></table></div>
+<p class="warning"><strong>類比不是 enforcement。</strong>Plan 9 path、Lisp environment 與 capability binding 能讓設計更清楚，但不能取代 kernel 隔離；Janet core 小，也不代表 supervisor、adapter 與設定不在 TCB。</p></section>
+
+<section aria-labelledby="why"><h2 id="why">為何不直接全面 Janet 化</h2>
+<p>「API 存在」不等於「production backend 已證明」。現有實證支援 JSON、fake HTTP/tool loop、fiber/channel 與 CLI；反證則包括 HTTP 無 TLS/SSE、Windows subprocess access violation，以及 FUSE/9P、cgroup 尚未落地。因此合理結論是：<strong>語意核心很合適，effect backend 逐項驗證</strong>。</p>
+<p>第一刀仍是 <code>tooljson</code>：用共同 fixtures 驗 parser、strict validation、registry 與 argv decision。先讓 Janet 當 CLI shadow，差異分類為 Python bug、Janet bug、規格空白或平台差異；不要只改 fixture 求綠燈。</p></section>
+
+<section aria-labelledby="choose"><h2 id="choose">決策快速檢查</h2><ul>
+<li>外部行為能否完整表示成 JSON、bytes、argv 與 event trace？</li>
+<li>pure decision 是否已與 filesystem、network、process effect 分離？</li>
+<li>是否有正常、錯誤、重播、crash/retry fixtures，而非只連真模型？</li>
+<li>若 adapter 失敗，idempotency、deadline、cancel 與 fail-closed 是否有明文語意？</li>
+</ul></section>
+
+<section aria-labelledby="next"><h2 id="next">接著讀正式規格</h2><ul>
+<li><a href="01-method.md">方法與判準</a>：A–D 評級及固化門檻。</li>
+<li><a href="04-janet-evidence.md">Janet 實證</a>：能力與反證分開看。</li>
+<li><a href="05-process.md">Python → Janet 流程</a>：從 probe 到 default。</li>
+<li><a href="06-architecture.md">架構與語言邊界</a>：namespace、protocol 與 TCB。</li>
+</ul></section>
+<footer>本頁是導讀，不取代正式規格；比例、平台證據與採用順序以 <a href="README.md">README</a> 及章節文件為準。完全離線、無 JavaScript 或外部資源。</footer>
+</main></body></html>

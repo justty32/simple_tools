@@ -124,7 +124,8 @@ python -m tooljson          # 45 關，全離線，不碰 LLM 也不用 proxy
 ```
 
 臨時資料夾裡放五個假工具連 spec 一起寫出來，走完整條路：讀 .json → 組 argv →
-跑 → 收字串。涵蓋 positional / option / switch / repeat / separate、stdin、
+跑 → 收字串。執行的假工具是 POSIX scripts，因此完整 45 關請在 Linux／WSL 跑；Windows
+原生無法直接執行這組 fixtures。涵蓋 positional / option / switch / repeat / separate、stdin、
 `ok_exit`、stderr 合流、二進位輸出、截斷方向、型別轉換、limits、排序、
 「值不會被 shell 重新解析」，以及最後三關的**第三方 `_type` 登記**。
 

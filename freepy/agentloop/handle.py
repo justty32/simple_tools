@@ -19,6 +19,10 @@ PAUSE = Decision.PAUSE
 END = Decision.END
 
 
+class _RunnerContractError(RuntimeError):
+    """The caller violated one-Handle/one-runner ownership."""
+
+
 class Handle:
     """Live, deliberately mutable state for one ``run()``.
 
@@ -35,6 +39,10 @@ class Handle:
         self._finished = None
         self._pause_requested = False
         self._end_requested = False
+        # Which committed boundary the runner will continue from.  This records
+        # structure, not a frozen decision: public tool_calls/tool_results may
+        # still be edited while parked or between advance() calls.
+        self._boundary = None
 
         # Control and callbacks.
         self.auto_finish = bool(auto_finish)
@@ -120,15 +128,15 @@ class Handle:
                 f"{elapsed:.0f}s")
 
     def pause(self, safe=True):
-        """Request a pause at the next Step/tool boundary; never cut an operation."""
+        """Pause at a boundary, or request the next one; never cut an operation."""
         if not safe:
             raise ValueError("agentloop only supports safe cooperative pause")
         with self._condition:
             if self.done():
                 return False
             self._pause_requested = True
-            if self.state == "waiting":
-                self.state = "paused"
+            if self.state in {"waiting", "ready"}:
+                self._park_unlocked("paused")
             self._condition.notify_all()
             return True
 
@@ -145,14 +153,14 @@ class Handle:
             return True
 
     def end(self, safe=True, reason="ended"):
-        """End at the next safe boundary, or immediately when already parked."""
+        """End at the next safe boundary, or immediately when already at one."""
         if not safe:
             raise ValueError("agentloop only supports safe cooperative end")
         with self._condition:
             if self.done():
                 return False
             self.end_reason = reason
-            if self.state in {"waiting", "paused"}:
+            if self.state in {"waiting", "paused", "ready"}:
                 self._end_unlocked(reason)
             else:
                 self._end_requested = True
@@ -175,34 +183,94 @@ class Handle:
         with self._condition:
             if self._runner is not None or self._started is not None:
                 raise RuntimeError("handle already used")
+
+            # Bot properties are extension points and may run arbitrary Python.
+            # Snapshot all of them before claiming this one-shot Handle so a
+            # broken getter/iterator cannot leave an idle-looking half-runner.
+            history = getattr(bot, "history", None)
+            tools = self.tools
+            if tools is None:
+                tools = getattr(bot, "tools", None)
+            tool_calls = list(getattr(bot, "pending_calls", None) or [])
+
             self._runner = threading.get_ident()
             self._started = time.monotonic()
             self.bot = bot
-            self.history = getattr(bot, "history", None)
+            self.history = history
             self.dispatch = dispatch
             if self.tools is None:
-                self.tools = getattr(bot, "tools", None)
+                self.tools = tools
             if prompt is not None:
                 self.prompt = prompt
             if images is not None:
                 self.images = images
-            self.tool_calls = list(getattr(bot, "pending_calls", None) or [])
+            self.tool_calls = tool_calls
+            self._boundary = "start"
             self.state = "ready"
-
-    def _start_step(self):
-        with self._condition:
-            if not self._await_ready_unlocked():
-                return None
-            self.state = "running_step"
-            if self.tools is not None:
-                self.bot.tools = self.tools
-            inputs = (self.prompt, self.images, dict(self.tool_results),
-                      dict(self.ask_options))
-            self.prompt = None
-            self.images = None
-            self.tool_results = {}
             self._condition.notify_all()
-            return inputs
+
+    def _start_next(self):
+        """Atomically claim and snapshot the next runner operation."""
+        with self._condition:
+            if self.done():
+                return None
+            if self._runner != threading.get_ident():
+                raise _RunnerContractError(
+                    "only the Handle's runner thread may advance it")
+            if self._end_requested:
+                self._end_unlocked(self.end_reason or "ended")
+                return None
+            if self._pause_requested:
+                self._park_unlocked("paused")
+                return None
+            if self.state in {"waiting", "paused"}:
+                return None
+            if self.state != "ready":
+                raise _RunnerContractError(
+                    "a runner operation is already in progress")
+
+            action = self._choose_next_unlocked()
+            if action is None:
+                return None
+            if action == "step":
+                if self.tools is not None:
+                    self.bot.tools = self.tools
+                payload = (self.prompt, self.images, dict(self.tool_results),
+                           dict(self.ask_options))
+                self._boundary = None
+                self.state = "running_step"
+                self.prompt = None
+                self.images = None
+                self.tool_results = {}
+            else:
+                payload = (list(self.tool_calls), dict(self.dispatch),
+                           dict(self.tool_results))
+                self._boundary = None
+                self.state = "running_tools"
+            self._condition.notify_all()
+            return action, payload
+
+    def _choose_next_unlocked(self):
+        if self._boundary == "start":
+            return "tools" if self.tool_calls else "step"
+        if self._boundary == "after_tools":
+            return "step"
+        if self._boundary == "waiting":
+            return "tools" if self.tool_calls else "step"
+        if self._boundary == "after_step":
+            if self.tool_calls:
+                return "tools"
+            if self.tool_results:
+                return "step"
+            if self.auto_finish:
+                reason = self.end_reason or (
+                    "length" if self.finish_reason == "length" else "done")
+                self._end_unlocked(reason)
+            else:
+                self._boundary = "waiting"
+                self._park_unlocked("waiting")
+            return None
+        raise RuntimeError("Handle has no committed runner boundary")
 
     def _commit_step(self, reply, text, calls, finish_reason, usage):
         with self._condition:
@@ -212,6 +280,7 @@ class Handle:
             self.finish_reason = finish_reason
             self.usage = usage
             self.tool_calls = list(calls)
+            self._boundary = "after_step"
             self.step += 1
             input_tokens = (usage or {}).get("prompt") or 0
             output_tokens = (usage or {}).get("completion") or 0
@@ -232,34 +301,26 @@ class Handle:
                 self._end_unlocked(self.end_reason or "ended")
                 return "end"
             if decision == PAUSE or self._pause_requested or self.state == "paused":
-                if not self._park_unlocked("paused"):
-                    return "end"
-            if self.tool_calls:
-                return "tools"
-            if self.tool_results:
-                return "step"
+                self._park_unlocked("paused")
+                return "parked"
+            if self.tool_calls or self.tool_results:
+                self.state = "ready"
+                self._condition.notify_all()
+                return "ready"
             if self.auto_finish:
                 reason = self.end_reason or (
                     "length" if self.finish_reason == "length" else "done")
                 self._end_unlocked(reason)
                 return "end"
-            if not self._park_unlocked("waiting"):
-                return "end"
-            return "tools" if self.tool_calls else "step"
-
-    def _start_tools(self):
-        with self._condition:
-            if not self._await_ready_unlocked():
-                return None
-            self.state = "running_tools"
-            snapshot = (list(self.tool_calls), dict(self.dispatch), dict(self.tool_results))
-            self._condition.notify_all()
-            return snapshot
+            self._boundary = "waiting"
+            self._park_unlocked("waiting")
+            return "parked"
 
     def _commit_tools(self, calls, results, records):
         with self._condition:
             self.tool_calls = list(calls)
             self.tool_results = dict(results)
+            self._boundary = "after_tools"
             for call, out, ran in records:
                 name = call.get("name")
                 self.tool_log.append((self.step, name, call.get("args"), out))
@@ -269,6 +330,8 @@ class Handle:
             decision = self._callbacks_unlocked(self.after_tools)
             if self.state == "error":
                 return False
+            if self.state == "running_tools":
+                self.state = "ready"
             if decision == END:
                 self._end_unlocked(self.end_reason or "ended", self.err)
                 return False
@@ -296,29 +359,20 @@ class Handle:
             return END
         return decision
 
-    def _await_ready_unlocked(self):
-        if self.done():
-            return False
-        if self._end_requested:
-            self._end_unlocked(self.end_reason or "ended")
-            return False
-        if self._pause_requested:
-            return self._park_unlocked("paused")
-        while self.state in {"waiting", "paused"}:
-            self._condition.wait()
-            if self.done():
-                return False
-        return True
-
     def _park_unlocked(self, state):
         self.state = state
         self._pause_requested = state == "paused"
         self._condition.notify_all()
-        while self.state in {"waiting", "paused"}:
-            self._condition.wait()
-            if self.done():
-                return False
         return True
+
+    def _wait_until_ready(self):
+        """Runner-only blocking half of parked-runner compatibility mode."""
+        with self._condition:
+            while self.state in {"waiting", "paused"}:
+                self._condition.wait()
+                if self.done():
+                    return False
+            return not self.done()
 
     def _fail(self, err):
         with self._condition:

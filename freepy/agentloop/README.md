@@ -12,6 +12,9 @@ ask() → message/tool calls
       → 下一次 ask(tool results)
 ```
 
+完整時間／狀態語意見 [ROUNDS.md](ROUNDS.md)；runner ownership 與中止見
+[RUNNER.md](RUNNER.md)。
+
 ## 最小使用方式
 
 ```python
@@ -32,7 +35,7 @@ print(h.text, h.stop)
 
 不另造 CLI 也可以直接在 Python 互動環境持有 Handle。REPL 目錄後續也會
 收納把其他 coding agent 當作操作入口的文件、腳本與範例；見
-[`agentloop` 互動入口](repl/README.md)。
+[`agentloop` 互動入口](../../docs/freepy/interfaces/python-repl.md)。
 
 兩者都只使用核心的公開 API；核心 `run()` 不認識它們，也不替它們保留特殊分支。
 
@@ -100,12 +103,13 @@ with h.edit():
 h.resume()
 ```
 
-`pause(safe=True)` 只提出合作式暫停要求，立即返回：
+`pause(safe=True)` 立即返回，且不切斷 operation：
 
+- 已在 `ready`／parked 安全邊界：立即成為 `paused`。
 - Step 中收到 pause：Step 與 `after_step` 完成後暫停，不執行 tools。
 - tool batch 中收到 pause：整批 tools 與 `after_tools` 完成後暫停，不開始下個 Step。
 
-可用 `wait_until_paused()` 等待要求真正生效。`resume()` 只在 `waiting`／`paused`（或取消
+running 時可用 `wait_until_paused()` 等待要求真正生效。`resume()` 只在 `waiting`／`paused`（或取消
 尚未生效的 pause）時回 `True`；其他狀態是明確的 no-op。
 
 一個 Handle 同時只准一個 runner，且只能用於一個 Round。Thread pool、scheduler 與
@@ -133,7 +137,23 @@ parked-runner ownership 都沒有因此改變。
 `end(safe=True, reason="ended")` 是 controller 對應 callback `END` 的操縱桿。
 若 Round 正在執行 Step，它會在 Step 與 `after_step` 完成後、tools 開始前
 結束；若正在執行 tool batch，則完成整批與 `after_tools` 後結束。已在
-`waiting`／`paused` 時會立即結束並喚醒 runner。
+`ready`／`waiting`／`paused` 安全邊界時會立即結束，並在需要時喚醒 runner。
+
+## `advance()` 與 Controller
+
+`run()` 是便利迴圈；若上層只要執行一個 safe boundary，可使用 `advance()`。第一次提供
+bot 與輸入，後續只傳同一個 Handle：
+
+```python
+h = agentloop.Handle()
+agentloop.advance(bot, dispatch, "開始", h)  # 一次 Step
+agentloop.advance(handle=h)                  # 下一次才跑一整批 tools 或 Step
+```
+
+`advance()` 不會在 `waiting` 或 `paused` 阻塞。`agentloop.Controller` 則是上面的本地方便
+封裝：它收好 bot、初始輸入和同一個 Handle，提供 `.advance()`、`.run()` 或單一背景 thread 的
+`.start()`。它不取代 Handle，也不宣稱是安全或耐久化 service；完整邊界見
+[CONTROLLER.md](CONTROLLER.md)。
 
 ## Limits
 

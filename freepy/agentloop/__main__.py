@@ -7,6 +7,9 @@ from agentloop import Handle
 from agentloop.limits import Limits
 
 from ._checks_contracts import contracts
+from ._checks_controller import (
+    advance_boundaries, advance_protocol, begin_is_atomic, controller,
+)
 from ._checks_core import basics, broken, budgets, policies
 from ._checks_live import resuming, steering
 from ._checks_inputs import dynamic_inputs, step_commit
@@ -51,6 +54,10 @@ def main():
     step_commit()
     stop_boundaries()
     contracts()
+    advance_protocol()
+    begin_is_atomic()
+    advance_boundaries()
+    controller()
     if len(sys.argv) > 1:
         real(sys.argv[1])
     print("\n全部通過" if not FAILED else f"\n沒過的關: {FAILED}")

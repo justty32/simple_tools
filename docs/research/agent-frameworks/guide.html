@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Agent framework：系統工程師導讀</title>
+<link rel="stylesheet" href="guide.css">
+</head>
+<body>
+<a class="skip" href="#main">跳到主要內容</a>
+<nav class="top" aria-label="文件導覽"><a href="index.html">報告首頁</a><a href="README.md">正式總覽</a><a href="../../design/agent-world/guide.html">Agent World 導讀</a></nav>
+<main id="main">
+<p class="eyebrow">CONTRACT · CONTROL FLOW · DURABILITY · EFFECT</p>
+<h1>不要選一套「萬能 Agent framework」</h1>
+<p class="lead">七套框架像七種不同的 runtime 元件：有的校驗 wire data，有的切換 actor，有的排 workflow，有的保存 checkpoint。工程問題不是誰功能最多，而是每個責任有沒有清楚 owner、identity、authority 與 crash 語意。</p>
+
+<section aria-labelledby="path"><h2 id="path">真正值得先做的是 effect gate</h2>
+<div class="flow" role="img" aria-label="模型回應經 schema 驗證後形成 intent，再經 grant policy approval，由 sandbox executor 執行並留下 receipt 和 checkpoint">
+<div class="node"><b>Response</b>不可信輸出</div><div class="node"><b>Schema</b>normalize / validate</div><div class="node"><b>Intent</b>尚未執行</div><div class="node"><b>Policy</b>grant / approval</div><div class="node"><b>Executor</b>sandboxed effect</div><div class="node"><b>Receipt</b>event / checkpoint</div>
+</div>
+<p class="small">這條路同時吸收 Instructor、LightAgent 與 LangGraph 的優點，也保留 freepy 的 Round/Step、typed operation 與 OS enforcement。</p></section>
+
+<section aria-labelledby="parts"><h2 id="parts">七套框架，拆成六種零件</h2><div class="grid">
+<article class="card"><h3><span class="term">Schema compiler</span></h3><p><strong>Instructor</strong>：provider response 先 normalize、validate；re-ask 是新的真模型 Step，不是免費 parser retry。</p></article>
+<article class="card"><h3><span class="term">Handoff intent</span></h3><p><strong>Swarm</strong>：把換 agent 表成普通 tool result；target name/path 只是請求，不能創造 grant 或 budget。</p></article>
+<article class="card"><h3><span class="term">Small workflow AST</span></h3><p><strong>PocketFlow</strong>：<code>prep → exec → post</code> 與 action edge 清楚；shared mutable dict 不適合 durability。</p></article>
+<article class="card"><h3><span class="term">Lazy operation graph</span></h3><p><strong>MiniChain</strong>：描述與求值分離、保留 snapshot；global context 與 shell backend 不採用。</p></article>
+<article class="card"><h3><span class="term">Policy / task layer</span></h3><p><strong>LightAgent / CrewAI</strong>：借 hook、approval receipt、trace、Task output contract；不搬大 agent object 與 prompt routing。</p></article>
+<article class="card"><h3><span class="term">Durable graph runtime</span></h3><p><strong>LangGraph</strong>：借 reducer、pending writes、interrupt/checkpoint；不等於外部 effect exactly-once。</p></article>
+</div></section>
+
+<section aria-labelledby="not"><h2 id="not">五組最重要的「不是」</h2><div class="table-wrap"><table><thead><tr><th>看起來像</th><th>其實不是</th><th>缺的工程契約</th></tr></thead><tbody>
+<tr><td>Checkpoint</td><td>transcript、semantic memory 或 transaction</td><td>各自 storage owner；外部 effect 另有 outbox/receipt</td></tr>
+<tr><td>Retry / resume</td><td>自動 recovery 或 exactly-once</td><td>effect 分類、idempotency key、unknown outcome reconciliation</td></tr>
+<tr><td>Router / handoff</td><td>authority 或 spawn</td><td>actor、instance、grant、scope、budget 驗證</td></tr>
+<tr><td>Hook / guardrail</td><td>sandbox</td><td>process、filesystem、network、CPU/RAM 的 OS enforcement</td></tr>
+<tr><td>Shared dict</td><td>durable concurrent state</td><td>version、single writer/reducer、transaction、crash replay</td></tr>
+</tbody></table></div></section>
+
+<section aria-labelledby="ids"><h2 id="ids">時間與 identity 要正交</h2>
+<p>一個 workflow node 可能完全不叫模型，也可能包含多個 model Steps；validation re-ask 會增加 Step，retry attempt 卻不該偷換 task identity。因此 event 可同時帶：</p>
+<p class="callout"><code>round_id · step_no · workflow_run_id · workflow_node_no · task_id · tool_call_id · attempt_no</code><br>框架內部名稱進 freepy 邊界時必須 normalize；不要把 turn、node、attempt 全壓進同一個 counter。</p></section>
+
+<section aria-labelledby="adopt"><h2 id="adopt">採用順序：從可觀測到 durable</h2><ol>
+<li><strong>共同 records：</strong>ModelAttempt、Intent、PolicyDecision、Approval、Receipt、Checkpoint、Interrupt。</li>
+<li><strong>結構化模型邊界：</strong>bounded re-ask，raw response 與 usage 都留下。</li>
+<li><strong>工具閘門：</strong>schema → grant → policy → approval → sandbox executor。</li>
+<li><strong>最小 workflow：</strong>sequential、branch、subflow、bounded retry、interrupt/resume；先不做 generic Pregel。</li>
+<li><strong>task/handoff：</strong>handoff、delegate、spawn 使用三種 typed operation。</li>
+</ol>
+<p>第一個可驗收切片應讓每次 effect 都能回答「誰要求、看見什麼、誰批准、實際做了什麼、結果是否已知」，而不是先支援七套 API。</p></section>
+
+<section aria-labelledby="next"><h2 id="next">接著讀正式調查</h2><ul>
+<li><a href="02-landscape.md">定位比較</a>：四條軸與 freepy 分層取樣。</li>
+<li><a href="03-swarm-instructor.md">Swarm / Instructor</a> 與 <a href="04-minimal-frameworks.md">MiniChain / PocketFlow</a>。</li>
+<li><a href="06-langgraph.md">LangGraph durability</a>：checkpoint、pending writes、interrupt 真實語意。</li>
+<li><a href="07-freepy-fit.md">映射到 freepy</a>、<a href="08-adoption.md">採用 gates</a>、<a href="09-risks.md">反例</a>。</li>
+</ul></section>
+<footer>本頁是導讀，不取代 source-level 調查；框架 commits、測試證據與限制以 <a href="01-method.md">方法頁</a>及各正式章節為準。完全離線、無 JavaScript 或外部資源。</footer>
+</main></body></html>

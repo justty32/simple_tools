@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>C++ 固化：跨領域工程師導讀</title>
+<link rel="stylesheet" href="guide.css">
+</head>
+<body>
+<a class="skip" href="#main">跳到主要內容</a>
+<nav class="top" aria-label="文件導覽"><a href="index.html">報告首頁</a><a href="README.md">正式總覽</a><a href="../janet/guide.html">Janet 路線</a></nav>
+<main id="main">
+<p class="badge">C++23 · semantic core · native supervisor</p>
+<h1>C++ 固化，不是把 Python 翻成 C++</h1>
+<p class="lead">若你熟悉韌體、驅動或 Go service，可以把「固化」理解成：把已量測、已定義的控制律，從方便試驗的 bench 搬進可長期驗證的 controller。真正要選的是責任邊界，不是語言勝負。</p>
+
+<section aria-labelledby="map"><h2 id="map">先看訊號怎麼流</h2>
+<div class="flow" role="img" aria-label="Python 觀察行為，凍結契約，C++ 核心決策，adapter 執行副作用，Linux 強制隔離">
+<div class="node"><b>Python oracle</b>探索與量測</div><div class="node"><b>JSON / events</b>凍結外部契約</div><div class="node"><b>C++ core</b>算下一狀態</div><div class="node"><b>typed intent</b>交給 adapter</div><div class="node"><b>Linux</b>執行與強制</div>
+</div>
+<p class="small">這是責任流，不一定是五個 process。重點是 core 不在 getter 裡偷做 HTTP、spawn 或改檔。</p></section>
+
+<section aria-labelledby="terms"><h2 id="terms">把術語翻成工程語言</h2><div class="grid">
+<article class="card"><h3><span class="term">Reducer</span>／狀態轉移</h3><p>類似離散狀態機：<code>state + event -&gt; new state + intents</code>。輸出 effect 請求，但不親自碰硬體或網路。</p></article>
+<article class="card"><h3><span class="term">Invariant</span>／永遠要成立的約束</h3><p>像電流、能量或 buffer ownership 的守恆條件；例如 child 權限不能比 parent 大、budget 不能重複退款。</p></article>
+<article class="card"><h3><span class="term">Adapter</span>／帶副作用的驅動層</h3><p>把 typed intent 轉成 HTTP、SQLite、process、cgroup 或 FUSE 操作，再回報 result event。</p></article>
+<article class="card"><h3><span class="term">TCB</span>／可信計算基底</h3><p>出錯就可能破壞安全承諾的全集。C++ binary、parser、adapter、設定與 kernel 都可能在內；native 不等於安全。</p></article>
+<article class="card"><h3><span class="term">Differential oracle</span></h3><p>同一批 golden vectors 同時餵 Python 與 C++，比較 normalized output、transition、error kind，而不是只測兩邊都「能跑」。</p></article>
+<article class="card"><h3><span class="term">C ABI</span>／邊界格式</h3><p>跨 compiler 或語言只露 opaque handle、bytes 與明確 allocator；不讓 STL、exception、物件 lifetime 穿越邊界。</p></article>
+</div></section>
+
+<section aria-labelledby="choose"><h2 id="choose">什麼該搬，什麼先別搬</h2><div class="table-wrap"><table><thead><tr><th>問題</th><th>傾向 C++ core</th><th>留在 Python／adapter</th></tr></thead><tbody>
+<tr><td>契約</td><td>versioned schema、path、ledger、Round state 已穩定</td><td>message shape 或 provider quirks 還在探索</td></tr>
+<tr><td>工作型態</td><td>純決策、高頻 event、需嵌入或低 idle RSS</td><td>LLM／外部工具等待主導，搬語言不會變快</td></tr>
+<tr><td>能力</td><td>可用 fixtures 重播，ownership 與 cancel 已寫清楚</td><td>依賴 Python reflection、任意 callable 或 SDK 隱藏行為</td></tr>
+<tr><td>風險</td><td>sanitizer、fuzz、雙 compiler CI 可長期維護</td><td>UB、ABI、thread race 會讓 TCB 反而變大</td></tr>
+</tbody></table></div></section>
+
+<section aria-labelledby="slice"><h2 id="slice">為何第一刀是 tooljson</h2>
+<p class="decision"><strong>它像一塊可單獨上測試台的數位模組。</strong>輸入是 versioned JSON，輸出是 validation、argv/stdin decision 或 typed error；不必先處理 TLS、SSE、模型延遲與 sandbox。先做 15–20 個 vectors，讓 C++ 只讀 fixture、不跑 production effect，再 shadow、opt-in、成為 default。</p>
+<p>若這一刀連 canonical output、unknown-field policy、Linux/Windows pure-core gate 與 parser fuzz 都守不住，就應停止擴張，而不是用更多 framework 掩蓋契約空白。</p></section>
+
+<section aria-labelledby="next"><h2 id="next">接著讀正式規格</h2><ul>
+<li><a href="01-method.md">方法與固化門檻</a>：如何判定 production owner。</li>
+<li><a href="05-process.md">Python → C++ 流程</a>：從 probe 到切流量。</li>
+<li><a href="06-architecture.md">架構、ABI 與 plugin</a>：真正的 runtime 邊界。</li>
+<li><a href="08-risks.md">反證與風險</a>：什麼情況不值得 native 化。</li>
+</ul></section>
+<footer>本頁是導讀，不取代正式規格；數字、平台證據與決策以 <a href="README.md">README</a> 及章節文件為準。完全離線、無 JavaScript 或外部資源。</footer>
+</main></body></html>

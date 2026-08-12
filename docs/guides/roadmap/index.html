@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="FreePy 路線圖白話導覽：現在在哪裡、下一步為何，以及各元件如何接起來。">
+  <title>FreePy 路線圖｜白話導覽</title>
+  <link rel="stylesheet" href="site.css">
+</head>
+<body>
+  <a class="skip" href="#main">跳到內容</a>
+  <header>
+    <nav class="nav" aria-label="文件導覽"><a class="brand" href="../../README.md">docs / roadmap-guide</a><span class="crumbs"><a href="agentloop.html">agentloop</a><a href="machine.html">Machine</a><a href="later.html">後續</a></span></nav>
+    <p class="eyebrow">PLAIN-LANGUAGE MAP · 2026-08</p>
+    <h1>FreePy 到底要往哪裡長？</h1>
+    <p class="lead">這份是 <code>ROADMAP.md</code> 的翻譯機。它不是另一套規格，而是先幫你分清楚：現在已經能做什麼、正在補哪個可靠性缺口、後面那些 package 又各自負責什麼。</p>
+    <p class="promise"><strong>一句話：</strong>先把「一個 agent 做事」變得可檢查、可恢復，再慢慢加上資源、多人、記憶與 OS 隔離；不會反過來先堆一個很大的平台。</p>
+  </header>
+  <main id="main">
+    <section>
+      <p class="eyebrow">THE MAP</p><h2>核心不是取代一切，而是把各層接好</h2>
+      <div class="map"><article class="node"><h3>Agent Machine</h3><p>未來的協調核心：記錄發生過什麼、算資源、排下一件工作、判斷結果能不能採信。它只定規則與資料，不自己變成模型供應商、沙箱或記憶體資料庫。</p></article><div class="arrow" aria-hidden="true">→</div><article class="node"><h3>各專職元件</h3><p>實際跑模型、呼叫工具、留記憶、啟 worker、送訊息的地方。核心透過明確接口叫它們做事。</p></article><div class="branches"><div><strong>agentloop</strong>單一 bot 的 Round runner</div><div><strong>llmkit</strong>模型 endpoint 與工具格式</div><div><strong>runtime</strong>OS worker／隔離</div><div><strong>memory</strong>context 與資料來源</div><div><strong>team / comm</strong>組織、授權與訊息</div></div></div>
+      <p class="note">所以「Agent Machine」不是一隻比較聰明的 agent；它比較像交通規則加帳本。真正做事的 agentloop、模型與工具仍各守自己的工作。</p>
+    </section>
+    <section>
+      <p class="eyebrow">WHERE WE ARE</p><h2>已經能跑；正在補「中途出事怎麼辦」</h2>
+      <div class="now"><article><h3>現有可用的底座</h3><p><strong>llmkit</strong> 能對 OpenAI-compatible 模型發請求並描述工具；<strong>agentloop</strong> 能讓單一 bot 做「問模型 → 跑工具 → 再問」；<strong>Handle</strong> 是同一個 process 內直接 pause、resume、end 的簡單把手。</p></article><article class="focus"><h3>眼前的 Controller 切片</h3><p>把 bot、初始輸入、Handle 與 runner 樣板收成一個本地 object。它有 <code>advance()</code>、前景 <code>run()</code> 與背景 <code>start()</code> 的方便入口；不拔掉 Handle，也不假裝自己已是耐久化服務。</p></article></div>
+    </section>
+    <section>
+      <p class="eyebrow">MILESTONES</p><h2>路線不是八件同時開工的事</h2>
+      <div class="milestones">
+        <article><p class="tag">M0 · 先有可信帳本</p><h3>Agent Machine 純核心</h3><p>先用假時鐘與假模型結果，驗證事件重播、資源不超賣、排程公平。刻意不接真模型與 agentloop。</p></article>
+        <article class="current"><p class="tag">現在 · 本地控制收斂</p><h3>Round control 與 Controller</h3><p>完成 safe boundary 與逐步 <code>advance()</code>，再把常見的 Handle／runner 樣板包成 Controller；保持它只是較好用的本地抽象。</p></article>
+        <article><p class="tag">M2–M3 · 不會遺忘，也不輕信</p><h3>持久控制、目標與驗證</h3><p>資料可在重啟後留下；崩潰時知道哪件工具結果未知；模型說「完成了」仍必須有證據或驗證者判定。</p></article>
+        <article><p class="tag">M4–M5 · 能安全地跑，也記得住</p><h3>身份、runtime、記憶</h3><p>補身份與訊息，再做 Linux worker／sandbox；記憶要有來源、權限和 context 預算，不能把所有東西硬塞 prompt。</p></article>
+        <article><p class="tag">M6 · 多 agent 的資源關係</p><h3>team hierarchy</h3><p>先做成員、授權、分配與回報，最後才允許 spawn subordinate，避免一開始就得到無法控管的 agent 組織。</p></article>
+        <article><p class="tag">M7 · 讓狀態可被看見</p><h3>Plan 9 projection</h3><p>把已有的狀態投影成可讀的 namespace；寫入只能翻譯成既有操作，不能繞過規則直接改真實資料。</p></article>
+      </div>
+    </section>
+    <section>
+      <p class="eyebrow">MINIMUM VOCABULARY</p><h2>先只記這幾個詞就夠了</h2>
+      <div class="terms"><article><h3>Round</h3><p>一個 bot 為了完成一件事，從開始到停止的一整段工作。</p></article><article><h3>Step</h3><p>Round 裡的一次問模型與得到回覆；工具發生在兩個 Step 中間。</p></article><article><h3>Handle</h3><p>直接操作本地 Round 的把手；公開、可變、單純。</p></article><article><h3>Controller</h3><p>組合 Handle 的本地便利封裝，不是安全或耐久化控制平面。</p></article><article><h3>safe boundary</h3><p>剛好可以停下或交棒的位置；不會停在半套工具配對中間。</p></article><article><h3>durable</h3><p>不只放在記憶體：關掉程式、重啟後仍可知道做到哪裡。SQLite 是日後的候選資料庫。</p></article></div>
+    </section>
+    <section>
+      <p class="eyebrow">WHY THIS ORDER</p><h2>每一步都先排除一種昂貴的錯誤</h2>
+      <ol class="order"><li><strong>先做純核心：</strong>先證明資源與事件規則正確，避免錯誤被真模型的隨機性掩蓋。</li><li><strong>再做逐步 runner：</strong>先知道能在哪裡安全停下，才談得上排程、暫停或接手。</li><li><strong>再做持久化：</strong>先有正確的狀態轉換，資料庫才是在保存規則，而不是保存一團混亂。</li><li><strong>最後才擴大權限：</strong>多人、記憶、OS 工具都會放大失誤，所以要建立在前面可驗證的邊界上。</li></ol>
+      <p class="note">想看目前程式的實際契約，優先看 package README／docstring；想看未完成的細節，才看各 package 的 <code>PLAN.md</code>。本頁與 Roadmap 都是在說「先後順序」。</p>
+    </section>
+  </main>
+  <footer><span>導覽頁；正式依賴與 gate 仍以 Roadmap 為準。</span><a href="../../../freepy/ROADMAP.md">開啟 ROADMAP.md</a><a href="../../../freepy/agentloop/README.md">agentloop</a><a href="../../freepy/future/agent-machine/README.md">Agent Machine</a></footer>
+</body>
+</html>

@@ -121,7 +121,8 @@ PYTHONPATH=llmkit uv run python -m base_tools    # 26 關離線檢查，跑在�
 PYTHONPATH=llmkit uv run python -m base_tools deepseek-chat   # 多一關：真的讓模型用
 ```
 
-離線那部分不碰網路也不碰你的檔案，改完 code 先跑這個。
+離線那部分不碰網路也不碰你的檔案，改完 code 先跑這個。完整 26 關包含 POSIX shell，Windows
+原生會如設計拒絕那六關；請在 Linux／WSL 跑完整 suite。
 
 ## 檔案分工
 

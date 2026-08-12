@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="simple_tools 的跨 package 架構、研究與設計文件總入口。">
+<title>simple_tools 文件入口</title>
+<link rel="stylesheet" href="site.css">
+</head>
+<body>
+<a class="skip" href="#main">跳到主要內容</a>
+<header>
+  <div class="topbar">
+    <a class="brand" href="../README.md">simple_tools</a>
+    <nav class="topnav" aria-label="文件入口">
+      <a href="index.html" aria-current="page">總覽</a>
+      <a href="README.md">文字索引</a>
+      <a href="CONVENTIONS.md">文件規則</a>
+    </nav>
+  </div>
+  <p class="eyebrow">Architecture · Research · Decisions</p>
+  <h1>從系統全貌，找到正式規格</h1>
+  <p class="lead"><code>docs/</code> 收錄跨 package 的研究與架構導覽；實際 API、現況與局部契約仍以程式旁的 README、PLAN 和 docstring 為準。</p>
+</header>
+
+<main id="main">
+  <section aria-labelledby="core">
+    <h2 id="core">架構主線</h2>
+    <div class="grid">
+      <article class="card wide"><p class="kicker">START HERE</p><h3><a href="guides/roadmap/index.html">FreePy Roadmap 導讀</a></h3><p>先分清楚 agentloop、Handle、Controller、基礎函式庫與延後的 durable service。</p></article>
+      <article class="card wide"><p class="kicker">ARCHITECTURE</p><h3><a href="freepy/architecture.md">FreePy 分層</a></h3><p>目前正式的 core → Controller → interfaces/libraries → outer services 邊界。</p></article>
+      <article class="card wide"><p class="kicker">MACHINE</p><h3><a href="guides/agent-machine/index.html">Agent Machine</a></h3><p>延後外圍服務的白話導讀；候選規格與目前可用程式明確分開。</p></article>
+      <article class="card wide"><p class="kicker">WORLD</p><h3><a href="design/agent-world/index.html">Agent World</a></h3><p>Path、namespace、memory、Round／Step 與安全邊界的設計底圖；附視覺化閱讀導覽。</p></article>
+      <article class="card wide"><p class="kicker">SECURITY</p><h3><a href="research/sandboxing/index.html">Sandboxing</a></h3><p>從電機與系統程式觀點理解信任邊界、Linux 隔離機制，以及 <code>freepy</code> 的現況與落地順序。</p></article>
+      <article class="card wide"><p class="kicker">ECOSYSTEM</p><h3><a href="research/agent-frameworks/index.html">Agent framework 調查</a></h3><p>比較多套 framework 的控制迴圈、狀態、工具與持久化設計，擷取可採用的切片。</p></article>
+      <article class="card wide"><p class="kicker">EXPLORATION</p><h3><a href="explorations/live-agent-machine/index.html">Live Agent Machine</a></h3><p>持續求值、assurance network 與 image workbench 的發散研究，不代表近期實作。</p></article>
+    </div>
+  </section>
+
+  <section aria-labelledby="language">
+    <h2 id="language">跨語言固化評估</h2>
+    <p class="muted">這些是替代方案研究，不表示已決定整套重寫。</p>
+    <div class="grid">
+      <article class="card wide"><p class="kicker">NATIVE</p><h3><a href="research/languages/cpp/index.html">C／C++ 固化</a></h3><p>C++ 適合穩定語意核心與 native adapter；評估 ABI、所有權、錯誤模型、測試與遷移風險。</p></article>
+      <article class="card wide"><p class="kicker">LISP</p><h3><a href="research/languages/janet/index.html">Lisp／Janet 固化</a></h3><p>Janet 適合資料與 reduction 核心；OS／provider glue 留在 adapter，並保留可檢查與可恢復性。</p></article>
+    </div>
+  </section>
+
+  <section aria-labelledby="reading">
+    <h2 id="reading">不知道從哪裡開始？</h2>
+    <ol class="steps">
+      <li><strong>想理解系統世界觀：</strong>先讀 <a href="design/agent-world/index.html">Agent World</a>，再回到 Agent Machine 正式規格。</li>
+      <li><strong>想執行不可信工具：</strong>從 <a href="research/sandboxing/index.html">Sandboxing</a> 開始，先分清應用限制與 OS enforcement。</li>
+      <li><strong>想評估重寫：</strong>選 C++ 或 Janet 報告；先看目前邊界與 native evidence，再看 roadmap。</li>
+      <li><strong>遇到文件衝突：</strong>依 <a href="CONVENTIONS.md">文件整理規則</a> 查時間、現況聲明與程式行為。</li>
+    </ol>
+  </section>
+</main>
+
+<footer>另見 <a href="README.md">完整文字索引</a>與 <a href="archive/cpp-streaming-client-notes.md">歷史材料</a>。HTML 為離線導覽，不取代相鄰正式規格。</footer>
+</body>
+</html>

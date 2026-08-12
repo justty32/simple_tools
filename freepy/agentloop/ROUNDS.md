@@ -87,15 +87,17 @@ agentloop 控制迴圈裡。
 ## Round 狀態機
 
 ```text
-idle → running_step → running_tools → running_step → ...
-              ↘              ↘
-               waiting / paused
+idle → ready → running_step → ready → running_tools → ready → ...
+                       ↘                    ↘
+                        waiting / paused
 
-active / waiting / paused → completed | error
+ready / running / waiting / paused → completed | error
 ```
 
+`ready` 表示上一個 operation 已完整提交、下一個尚未開始；逐步 runner 會在這裡返回。
 `waiting` 表示模型沒有要求工具、但 Round 仍活著；`paused` 表示外部控制者主動暫停。
-兩者都保留可修改且可恢復的狀態。`completed` 才是正常且不可 resume 的完成狀態。
+三者都是安全邊界，保留可修改狀態；在 `ready` 呼叫 `pause()`／`end()` 會立即生效。
+`completed` 才是正常且不可 resume 的完成狀態。
 
 `error` 表示 endpoint、callback 或 runner operation 拋錯。自然完成和 callback 的
 `END` 進入 `completed`；`Handle.stop` 仍保留 `done`、`length`、`budget`、
@@ -150,56 +152,4 @@ Step 計數與 phase。原本的 `add_instruction()`、`add_images()`、`add_too
 如果工具已經執行，它的結果必須先登記回 bot history；否則下次開新 Round 時，
 系統可能以為工具還沒跑過，把副作用重做一次。這就是為什麼 pause 不是立刻切斷。
 
-## 多執行緒原則
-
-一個 Handle 同時只能有一個 runner thread；只有 runner 能執行 `ask()`、tools 與狀態
-轉移。callbacks 由 runner thread 依註冊順序同步呼叫，不另開 thread。任意數量的
-controller threads 可以透過 Handle 觀察、修改、pause 或 resume。
-
-agentloop 核心以單執行緒執行為主要設計目標：一條 runner thread 從頭到尾擁有同一個
-Round。核心不建立 thread；可選的 `agentloop.threading.start()` 只包裝一條背景 thread，
-不改變控制語意。要建立多少 threads，以及 parked thread 的資源成本，仍由使用者或
-上層 runtime 負責；agentloop 不提供 worker pool 或 scheduler。
-
-同步必須處理 pause/下一個 operation、waiting/resume、`auto_finish` 切換、callback
-清單修改、tool calls/results 修改及 runner ownership 等競態。等待使用
-`threading.Condition` 的 predicate loop；`resume()` 必須在同一把 lock 下改狀態並
-`notify_all()`，避免 lost wakeup。每次通知 callbacks 前先取得 callback 清單快照。
-
-callback 要能重入 Handle，因此 callback 在 `threading.RLock` 下執行。遵守
-`handle.edit()` 的 controller 會等當批 callbacks 全部完成；未使用 `edit()` 的 nested
-mutable state 修改，其一致性由外部控制者承擔。
-
-runner 生命週期採 **parked runner**：進入 `waiting` 或 `paused` 時，本次 `run()`
-不返回，原 runner 停在 Condition 裡；`resume()` 喚醒同一條 thread 繼續。只有 Round
-進入 `completed`／`error` 或 callback 回 `END` 時，`run()` 才返回。這讓 Handle 的
-ownership 保持簡單，也不需要跨多次 `run()` 交接；長期占用 thread 是呼叫者明知並
-自行承擔的成本。
-
-## operation 在中途被強行中止
-
-這種中止只結算當前 Step 或 tool call，不等於殺掉整個實例。
-
-### Step 中斷
-
-Step 的邊界就是 `ask() → message`，不需要 agentloop 猜 HTTP request 到了哪裡：
-
-- `Reply` 沒有留下任何 message：llms 回滾這次新增的 history，agentloop 不計 Step。
-- `Reply` 已留下完整或部分 message：保留 message，agentloop 計一個完成的 Step。
-- 部分 message 可以同時帶 `reply.err`；這時 Step 已完成，但 Round 仍以 error 結束。
-
-串流 `Reply` 已負責累積片段、提前 `close()` 與「完全落空就回滾」。agentloop 若把
-`stream=True` 設為 ask option，仍會同步收完整個 Reply 後才跨過 Step 邊界。
-
-### tool call 中斷
-
-當作這次工具執行失敗，產生一筆錯誤 tool result 並照常回填 history。
-若 Round 本身沒有被中止，模型下一個 Step 可以根據這筆錯誤改做法。工具在被中斷前
-已產生的外部副作用仍可能存在，錯誤結果不代表自動 rollback。
-
-工具必須支援取消，或在可終止的獨立 process 裡執行，才能真正實現中途中斷。
-
-## 整個實例被強制終止
-
-Ctrl-C、SIGTERM 或直接殺 process 屬於不可抗力。這種情況不做收尾保證：
-當時已經保存什麼就留下什麼，尚未保存的狀態可以遺失。
+Runner ownership、多執行緒與強制中止的契約另見 [RUNNER.md](RUNNER.md)。

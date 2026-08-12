@@ -84,7 +84,7 @@ from agentloop.threading import start
 runner = start(bot, dispatch, "先分析", handle=handle)
 h = runner.handle
 
-h.pause()                    # 只提出要求，立即返回
+h.pause()                    # running 時提出要求；ready 時立即 paused
 h.wait_until_paused()        # 等 runner 到達安全邊界
 
 with h.edit():               # 跨 thread 的複合修改保持原子性
@@ -110,7 +110,7 @@ h.end(reason="operator")       # 立即返回；不切斷已開始的 operation
 result = runner.join()         # 等安全邊界完成後返回
 ```
 
-若已在 `waiting`／`paused`，`end()` 會當場轉成 `completed` 並喚醒 parked
+若已在 `ready`／`waiting`／`paused`，`end()` 會當場轉成 `completed`，並在需要時喚醒 parked
 runner。若在 Step 中，它等 Step 和 `after_step` 完成後於 tools 前結束；若在
 tool batch 中，則先完成整批與 `after_tools`。
 

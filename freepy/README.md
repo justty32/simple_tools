@@ -1,49 +1,38 @@
-# freepy
+# FreePy
 
-FreePy 是一組由小到大疊起來的 agent 元件。已完成的核心能對 OpenAI-compatible endpoint
-發出模型請求、描述並執行工具，以及讓單一 bot 自主跑完一個 Round；多 agent、runtime、
-memory 與 agentfs 仍在規劃階段。
+FreePy 是一組由小到大疊起來的 agent 元件。這個目錄現在以「可執行程式」為主；跨 package
+架構、研究與尚未實作的規格都集中在 [`docs/freepy/`](../docs/freepy/README.md)。
 
 ## 目前可用
 
-| 層 | 入口 | 角色 |
-|---|---|---|
-| 模型與工具契約 | [`llmkit/`](llmkit/README.md) | `llms`、LiteLLM proxy、`tooljson` |
-| 模型 preset | [`llmkit/llms/presets.json`](llmkit/llms/presets.json) | id 對應 endpoint、model 與 parameters |
-| 基本工具 | [`base_tools/`](base_tools/README.md) | 讀、寫、編輯檔案與 POSIX shell |
-| 單 agent loop | [`agentloop/`](agentloop/README.md) | 阻塞 `run()`、limits 與可跨 thread 控制的 `Handle` |
-| 使用介面 | [`shells/`](shells/README.md) | REPL 與外部 coding-agent shell |
-| 原型 | [`prototypes/`](prototypes/README.md) | 尚未升格為穩定元件的可執行實驗 |
+| 元件 | 角色 |
+|---|---|
+| [`llmkit/`](llmkit/README.md) | `llms` endpoint client、LiteLLM proxy、`tooljson` 格式與 dispatch |
+| [`base_tools/`](base_tools/README.md) | 讀寫、編輯檔案與 POSIX shell 的基礎工具 |
+| [`agentloop/`](agentloop/README.md) | 單一 Round 的 `run()`、`advance()`、Handle、Limits 與 Controller |
+| [`shells/`](shells/README.md) | Python REPL 與 coding-agent 的薄 launcher |
 
-[`try.py`](try.py) 是串流、思考與工具呼叫的 worked example，不是穩定 API。
+`Handle` 是刻意直接、可變的本地把手；`Controller` 是組合 Handle 與 runner 樣板的方便
+wrapper，不是持久化 control plane。完整分層見
+[`docs/freepy/architecture.md`](../docs/freepy/architecture.md)。
 
-## 規劃中的架構
+## 其他程式區
 
-跨 package 的實作順序以 [`ROADMAP.md`](ROADMAP.md) 為準：
+| 目錄 | 性質 |
+|---|---|
+| [`adapters/`](adapters/README.md) | 跨 process／host 的 control adapters；目前有 Pi bridge |
+| [`examples/`](examples/README.md) | 可執行的使用範例，不是穩定 API |
+| [`prototypes/`](prototypes/README.md) | 尚未升格、可能被推翻的實驗 |
+| [`notes/`](notes/README.md) | 已落地決策、實測與想法收件匣 |
 
-```text
-agent_machine：event、resource、scheduler、goal 的 userspace domain kernel
-      ├─ agentloop / llmkit：Round runner 與 endpoint
-      ├─ agent_runtime：Linux worker 與 sandbox
-      ├─ memory_tools：context pager
-      ├─ team / communication：組織與 IPC
-      └─ introspection / agentfs：effective state projection
-```
+## 規劃與研究
 
-Agent Machine 的獨立規格在 [`agent_machine/`](agent_machine/README.md)；各元件細節在自己的
-`PLAN.md`。[`IDEAS.md`](IDEAS.md) 只收尚未分類的新想法，跨元件的完整設計底圖在
-[`../docs/agent-world/`](../docs/agent-world/README.md)。
-
-## 文件角色
-
-- [`NOTES.md`](NOTES.md)：已落地決策與實測原因；不是使用說明。
-- [`NOTES-llmkit.md`](NOTES-llmkit.md)：llmkit 定型前的已結案紀錄。
-- [`ENV.md`](ENV.md)：本機開發環境的特殊設定。
-- `PLAN.md`：尚未完成的規格；若與較新的定案文件衝突，以最後編輯者為準。
-- `README.md` 與程式 docstring：目前行為與使用契約。
-
-時間語彙以 [`agentloop/ROUNDS.md`](agentloop/ROUNDS.md) 為唯一來源：完整 `run()` 是 Round，
-每次 `ask() → message` 是 Step，工具在兩個 Step 之間執行。
+- [`ROADMAP.md`](ROADMAP.md)：目前實作順序；先本地 core／Controller／interfaces，再看是否需要
+  durable service。
+- [`docs/freepy/future/`](../docs/freepy/future/README.md)：Agent Machine、runtime、memory、team 等
+  延後規格。
+- [`docs/guides/roadmap/`](../docs/guides/roadmap/index.html)：白話 HTML 導讀。
+- [`docs/design/agent-world/`](../docs/design/agent-world/README.md)：跨元件設計底圖。
 
 ## 離線驗證
 
@@ -51,8 +40,12 @@ Agent Machine 的獨立規格在 [`agent_machine/`](agent_machine/README.md)；�
 cd freepy
 PYTHONPATH=llmkit uv run python -m base_tools
 PYTHONPATH=llmkit uv run python -m agentloop
-cd llmkit
-uv run python -m tooljson
+uv run python adapters/pi/check_pi_bridge.py
+cd llmkit && uv run python -m tooljson
 ```
 
-需要模型／proxy 的 smoke test 另見各 package README。
+這組命令以 Linux／WSL 為準：`base_tools.run_shell` 刻意只支援 POSIX，`tooljson` 的 exec
+fixtures 也是可執行的 POSIX scripts。Windows 原生可直接跑 agentloop 與 Pi bridge；前後兩項請進
+WSL，不能把 Win32 的預期拒絕誤判成搬家回歸。
+
+需要真模型或 proxy 的 smoke test 另見各 package README。

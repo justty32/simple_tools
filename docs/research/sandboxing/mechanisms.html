@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="從系統與電機觀點拆解 namespace、cgroup、Linux capability、Podman 網路與 secret broker。">
+<title>Sandbox 機制：每一層各管什麼</title>
+<link rel="stylesheet" href="site.css">
+</head>
+<body>
+<a class="skip" href="#main">跳到主要內容</a>
+<header>
+  <div class="topbar">
+    <a class="brand" href="../../index.html">simple_tools · docs</a>
+    <nav class="topnav" aria-label="Sandbox 文件">
+      <a href="index.html">觀念</a>
+      <a href="mechanisms.html" aria-current="page">機制</a>
+      <a href="freepy-boundary.html">落地</a>
+      <a href="01-asf-architecture.md">正式規格</a>
+    </nav>
+  </div>
+  <p class="eyebrow">Security boundary · 02</p>
+  <h1>每一層只解決自己的問題</h1>
+  <p class="lead">Container 不是單一保護罩，而是把多個 Linux 機制組起來：namespace 改變「看得見什麼」，cgroup 限制「能用多少」，capability 與 seccomp 縮小「能做哪些核心操作」，網路拓樸決定「封包能走去哪裡」。</p>
+</header>
+
+<main id="main">
+  <section aria-labelledby="layers">
+    <h2 id="layers">隔離不是一顆總開關</h2>
+    <div class="grid">
+      <article class="card"><p class="kicker">VISIBILITY</p><h3>Namespace／mount</h3><p>像替每台測試機接上不同配線盤。程式只能解析到被掛入的 filesystem、process 與 network view。</p></article>
+      <article class="card"><p class="kicker">QUANTITY</p><h3>cgroup v2</h3><p>像電源供應器的 current limit 與通道配額，控制 CPU、memory、PID 與部分 I/O；不管理路徑或 secret。</p></article>
+      <article class="card"><p class="kicker">PRIVILEGE</p><h3>Capability／no-new-privileges</h3><p>把傳統 root 權能拆細並禁止執行後提權。<code>--cap-drop=ALL</code> 是降低攻擊面，不是完整 sandbox。</p></article>
+      <article class="card"><p class="kicker">SYSCALL</p><h3>seccomp／Landlock</h3><p>前者過濾 system call，後者可限制 filesystem 存取。兩者是額外防線，不理解 agent 的語意權限。</p></article>
+      <article class="card"><p class="kicker">ROUTING</p><h3>Network topology</h3><p>真正的網路邊界來自沒有直接 route、只有獲准 gateway；不是相信程式會遵守 proxy 環境變數。</p></article>
+      <article class="card"><p class="kicker">CREDENTIAL</p><h3>Secret broker</h3><p>長效 key 留在可信任服務，agent 只拿短效 session token。這限制 credential 暴露，不會審查 prompt 內容。</p></article>
+    </div>
+  </section>
+
+  <section aria-labelledby="limits-table">
+    <h2 id="limits-table">三種資源機制不要混用</h2>
+    <div class="grid">
+      <article class="card wide"><h3><span class="term">rlimit</span> · 單一 process 的局部保護</h3><p>可限制 CPU 秒數、address space、open files、process 數。它不建立新的 filesystem 或 network view，而且若套在同 process Python tools，supervisor 也會一起受限。</p></article>
+      <article class="card wide"><h3><span class="term">cgroup</span> · 一群 process 的資源帳戶</h3><p>提供 CPU、RAM、PID 和 I/O 的分組 accounting/enforcement。它像電力配電盤，但不會阻止程式讀取某條路徑或連到某個 hostname。</p></article>
+      <article class="card wide"><h3><span class="term">container</span> · 多種 OS 邊界的組合</h3><p>Podman 組合 namespace、cgroup、mount、identity、capability 與 lifecycle。仍需正確 policy、無旁路拓樸和啟動驗證；「用了 container」本身不是安全證明。</p></article>
+      <article class="card wide"><h3><span class="term">application limit</span> · 語意與成本控制</h3><p><code>agentloop</code> 能計算 Step、tool call、token 與時間。它看得懂 agent protocol，卻不能取代 kernel 對 process 的存取控制。</p></article>
+    </div>
+  </section>
+
+  <section aria-labelledby="network">
+    <h2 id="network">三種網路模式</h2>
+    <div class="compare">
+      <div><p class="kicker">ISOLATED</p><h3>沒有直接外網</h3><p>Agent 只加入 internal network。它可能仍能連同網路上的 model broker，所以這不代表資料絕對不會離開環境。</p></div>
+      <div><p class="kicker">PROXY</p><h3>唯一出口是 allowlist proxy</h3><p>Agent 沒有 default route；雙網卡 proxy 才能出網，並按 hostname／port 拒絕其他目的地。一般 HTTP workload 優先用這個模式。</p></div>
+      <div><p class="kicker">ROUTED</p><h3>精確允許非 HTTP 流量</h3><p>以 static route 與 nftables 限定 CIDR、protocol、port，適合 TCP／UDP／ICMP 等需求，但複雜度與攻擊面較高。</p></div>
+      <div><p class="kicker">NONE</p><h3>完全不建立網路需求</h3><p>最小版本直接使用 <code>--network=none</code>。若工作不需 LLM 或下載，這是最容易驗證的預設。</p></div>
+    </div>
+    <div class="callout danger"><strong>Allowlist 只限制目的地，不限制送出的內容。</strong> 允許 GitHub，就可能向 GitHub 外傳資料；共用 CDN、DNS 與可信 broker 也都是剩餘風險。</div>
+  </section>
+
+  <section aria-labelledby="asf">
+    <h2 id="asf">ASF 最值得借用的不是某個 flag</h2>
+    <p>ASF 的核心價值是完整 lifecycle：CLI 先把 manifest 編譯成不可變 session plan，建立 rootless Podman 資源，再用 throwaway container 做正向與反向探針。任一安全 deny check 失敗便 <span class="term">fail closed</span>，不啟動 workload。</p>
+    <ol class="steps">
+      <li><strong>Filesystem：</strong>只 bind-mount 宣告的 repository，逐一標示 <code>ro</code>/<code>rw</code>；其他持久狀態使用 named volume。</li>
+      <li><strong>Process：</strong>container 內非 root、drop capabilities、no-new-privileges，不掛 Podman socket。</li>
+      <li><strong>Network：</strong>從 container 內驗證無 default route、無直接 DNS、private address 與禁止 port 不可達。</li>
+      <li><strong>Secret：</strong>長效 provider key 只進 broker，agent 取得 session token；provider domain 從一般 proxy allowlist 移除。</li>
+      <li><strong>Evidence：</strong>保存 runtime plan、verification report、exit reason 與 cleanup report。</li>
+    </ol>
+  </section>
+
+  <section aria-labelledby="terms">
+    <h2 id="terms">工程師容易誤解的詞</h2>
+    <div class="grid">
+      <article class="card"><h3><span class="term">rootless</span></h3><p>Podman daemon/container 不以宿主 root 執行，降低事故影響；不代表 container 內的程式天然無害。</p></article>
+      <article class="card"><h3><span class="term">bind mount</span></h3><p>把宿主的既有路徑映射進 container。<code>rw</code> 仍會改到宿主原檔，必須精確縮小來源路徑。</p></article>
+      <article class="card"><h3><span class="term">tmpfs</span></h3><p>記憶體中的暫存 filesystem；適合 <code>/tmp</code>、<code>/run</code>，結束即消失，但仍需大小與 mount option 限制。</p></article>
+      <article class="card"><h3><span class="term">fail closed</span></h3><p>無法證明限制生效時拒絕啟動。不是把「proxy 壞了」與「deny policy 失效」都悄悄視為可繼續。</p></article>
+      <article class="card"><h3><span class="term">defense in depth</span></h3><p>多層限制讓單一失誤不直接變成全面失守；它不是「執行任意惡意程式都絕對安全」的保證。</p></article>
+      <article class="card"><h3><span class="term">effective policy</span></h3><p>OS 實際執行的狀態，不是 manifest 原本想表達的 declared policy；啟動探針量的是前者。</p></article>
+    </div>
+  </section>
+
+  <a class="next" href="freepy-boundary.html"><span>下一頁 03 →</span><br><strong>目前 freepy 哪些限制有效，以及該如何落地</strong></a>
+</main>
+
+<footer>細節與來源見 <a href="01-asf-architecture.md">ASF 架構拆解</a>；本頁不取代正式文件。</footer>
+</body>
+</html>
