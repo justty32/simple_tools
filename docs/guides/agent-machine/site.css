@@ -106,20 +106,6 @@ h3 { margin-top: 1.6rem; font-size: 1.2rem; }
 .hero-card { padding: 1.5rem; border-top: .35rem solid var(--accent); }
 .hero-card h2 { margin-top: 0; font-size: 1.25rem; }
 
-.button-row { display: flex; flex-wrap: wrap; gap: .7rem; margin-top: 1.4rem; }
-.button {
-  display: inline-block;
-  padding: .65rem 1rem;
-  color: white;
-  background: var(--brand);
-  border: 2px solid var(--brand);
-  border-radius: .55rem;
-  font-weight: 700;
-  text-decoration: none;
-}
-.button.secondary { color: var(--brand); background: transparent; }
-.button:hover { color: white; background: var(--accent); border-color: var(--accent); }
-
 .route, .cards, .two-col, .three-col { display: grid; gap: 1rem; }
 .route { grid-template-columns: repeat(3, minmax(0, 1fr)); counter-reset: route; }
 .route .card { position: relative; padding: 1.35rem; counter-increment: route; }
@@ -141,6 +127,7 @@ h3 { margin-top: 1.6rem; font-size: 1.2rem; }
 .card { padding: 1.25rem; }
 .card > :first-child { margin-top: 0; }
 .card > :last-child { margin-bottom: 0; }
+
 
 .signal-chain {
   display: flex;
@@ -187,12 +174,6 @@ pre {
   line-height: 1.55;
 }
 pre code { padding: 0; color: inherit; background: transparent; }
-
-.timeline { margin: 1.5rem 0; padding: 0; list-style: none; }
-.timeline li { position: relative; margin-left: .65rem; padding: 0 0 1.6rem 2rem; border-left: 3px solid #a8bdd0; }
-.timeline li::before { content: ""; position: absolute; left: -.55rem; top: .25rem; width: .8rem; height: .8rem; background: var(--brand); border: 3px solid var(--paper); border-radius: 50%; }
-.timeline li:last-child { border-left-color: transparent; }
-.timeline strong { display: block; }
 
 .term-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
 .term { padding: 1.15rem; box-shadow: none; }

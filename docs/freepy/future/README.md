@@ -1,10 +1,10 @@
 # FreePy 未來規格
 
-本目錄全部是尚未完成或刻意延後的規格，不是可 import package，也不代表近期一定實作。
+本目錄保存尚未完成、刻意延後或已被 active plan 接手的研究規格，不是可 import package。
 
 | 主題 | 入口 |
 |---|---|
-| durable domain kernel | [Agent Machine](agent-machine/README.md) |
+| Agent Machine 原始研究模型 | [舊規格](agent-machine/README.md)；[active plan](../agent-machine/README.md) |
 | 大量 dormant bots | [control plane](control-plane/README.md) |
 | OS worker / sandbox | [agent runtime](agent-runtime/PLAN.md) |
 | namespace projection | [agentfs](agentfs/PLAN.md) |
@@ -14,5 +14,5 @@
 | LLM-assisted tool description | [exec tools](exec-tools/PLAN.md) |
 | effective-state view | [introspection tools](introspection-tools/PLAN.md) |
 
-實作順序仍以 [`freepy/ROADMAP.md`](../../../freepy/ROADMAP.md) 為準。目前 durable data boundary
-暫緩；這些文件用來保存問題與候選方案，不可覆蓋 package README 所描述的現況。
+實作順序仍以 [`freepy/ROADMAP.md`](../../../freepy/ROADMAP.md) 為準。Agent Machine 已於
+2026-08-13 升格為 active plan；其餘頁面繼續保存問題與候選方案，不可覆蓋現況 API。

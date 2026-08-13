@@ -29,10 +29,11 @@ wrapper，不是持久化 control plane。完整分層見
 
 ## 規劃與研究
 
-- [`ROADMAP.md`](ROADMAP.md)：目前實作順序；先本地 core／Controller／interfaces，再看是否需要
-  durable service。
-- [`docs/freepy/future/`](../docs/freepy/future/README.md)：Agent Machine、runtime、memory、team 等
-  延後規格。
+- [`ROADMAP.md`](ROADMAP.md)：目前實作順序；本地 core 已達基線，主線開始做 Agent Machine Python
+  參考實作。
+- [`docs/freepy/agent-machine/`](../docs/freepy/agent-machine/README.md)：VFS/Git 起步，最後固化為
+  C++23 + Janet 的 active implementation plan。
+- [`docs/freepy/future/`](../docs/freepy/future/README.md)：runtime、memory、team 等延後規格與舊研究底稿。
 - [`docs/guides/roadmap/`](../docs/guides/roadmap/index.html)：白話 HTML 導讀。
 - [`docs/design/agent-world/`](../docs/design/agent-world/README.md)：跨元件設計底圖。
 

@@ -5,7 +5,7 @@
 | 區域 | 內容 | 入口 |
 |---|---|---|
 | `guides/` | 白話、可視化導讀；不是規格 | [Roadmap](guides/roadmap/index.html)、[Agent Machine](guides/agent-machine/index.html) |
-| `freepy/` | FreePy 跨 package 架構、adapters、future specs | [FreePy 文件地圖](freepy/README.md) |
+| `freepy/` | FreePy 架構、active plan、adapters、future specs | [FreePy 文件地圖](freepy/README.md)、[Agent Machine 實作規劃](freepy/agent-machine/README.md) |
 | `design/` | 已形成系統模型的跨領域設計 | [Agent World](design/agent-world/README.md) |
 | `explorations/` | 尚在發散、用來產生問題的想法 | [Live Agent Machine](explorations/live-agent-machine/README.md) |
 | `research/` | 外部系統、語言與安全研究 | [Agent frameworks](research/agent-frameworks/README.md)、[Sandboxing](research/sandboxing/README.md) |

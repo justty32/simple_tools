@@ -1,0 +1,64 @@
+.button-row { display: flex; flex-wrap: wrap; gap: .7rem; margin-top: 1.4rem; }
+.button { display: inline-block; padding: .65rem 1rem; color: white; background: var(--brand); border: 2px solid var(--brand); border-radius: .55rem; font-weight: 700; text-decoration: none; }
+.button.secondary { color: var(--brand); background: transparent; }
+.button:hover { color: white; background: var(--accent); border-color: var(--accent); }
+.timeline { margin: 1.5rem 0; padding: 0; list-style: none; }
+.timeline li { position: relative; margin-left: .65rem; padding: 0 0 1.6rem 2rem; border-left: 3px solid #a8bdd0; }
+.timeline li::before { content: ""; position: absolute; left: -.55rem; top: .25rem; width: .8rem; height: .8rem; background: var(--brand); border: 3px solid var(--paper); border-radius: 50%; }
+.timeline li:last-child { border-left-color: transparent; }
+.timeline strong { display: block; }
+.status-band {
+  margin: 0 0 2rem;
+  padding: .85rem 1rem;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: .6rem 1.2rem;
+  color: #fff;
+  background: var(--brand);
+  border-radius: .7rem;
+}
+.status-band strong { color: #fff1cf; }
+.badge {
+  display: inline-block;
+  padding: .12rem .5rem;
+  color: var(--good);
+  background: var(--good-soft);
+  border: 1px solid #a8d8c3;
+  border-radius: 999px;
+  font-size: .82rem;
+  font-weight: 750;
+}
+.phase-grid { display: grid; gap: 1rem; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.phase {
+  position: relative;
+  padding: 1.2rem;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-top: .35rem solid #98afc2;
+  border-radius: .75rem;
+}
+.phase.now { border-top-color: var(--accent); }
+.phase.later { border-top-color: var(--good); }
+.phase h3 { margin: .35rem 0; }
+.phase p { color: var(--muted); }
+.phase .num { color: var(--accent); font: 800 .9rem ui-monospace, monospace; }
+.decision {
+  display: grid;
+  grid-template-columns: minmax(8rem, .7fr) minmax(0, 2fr);
+  gap: 1rem;
+  margin: .7rem 0;
+  padding: 1rem;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: .65rem;
+}
+.decision strong { color: var(--brand); }
+.decision p { margin: 0; }
+.checklist { padding-left: 0; list-style: none; }
+.checklist li { position: relative; padding: .45rem 0 .45rem 2rem; border-bottom: 1px solid var(--line); }
+.checklist li::before { content: "✓"; position: absolute; left: .35rem; color: var(--good); font-weight: 900; }
+@media (max-width: 760px) {
+  .phase-grid { grid-template-columns: 1fr; }
+  .decision { grid-template-columns: 1fr; gap: .2rem; }
+}

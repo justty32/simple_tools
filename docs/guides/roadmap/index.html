@@ -1,4 +1,4 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="zh-Hant">
 <head>
   <meta charset="utf-8">
@@ -19,18 +19,18 @@
   <main id="main">
     <section>
       <p class="eyebrow">THE MAP</p><h2>核心不是取代一切，而是把各層接好</h2>
-      <div class="map"><article class="node"><h3>Agent Machine</h3><p>未來的協調核心：記錄發生過什麼、算資源、排下一件工作、判斷結果能不能採信。它只定規則與資料，不自己變成模型供應商、沙箱或記憶體資料庫。</p></article><div class="arrow" aria-hidden="true">→</div><article class="node"><h3>各專職元件</h3><p>實際跑模型、呼叫工具、留記憶、啟 worker、送訊息的地方。核心透過明確接口叫它們做事。</p></article><div class="branches"><div><strong>agentloop</strong>單一 bot 的 Round runner</div><div><strong>llmkit</strong>模型 endpoint 與工具格式</div><div><strong>runtime</strong>OS worker／隔離</div><div><strong>memory</strong>context 與資料來源</div><div><strong>team / comm</strong>組織、授權與訊息</div></div></div>
+      <div class="map"><article class="node"><h3>Agent Machine</h3><p>現在開始的協調核心：先統一檔案狀態與提交，再逐步加入 executor、排程與資源。它只定規則與資料，不自己變成模型供應商或沙箱。</p></article><div class="arrow" aria-hidden="true">→</div><article class="node"><h3>各專職元件</h3><p>實際跑模型、呼叫工具、留記憶、啟 worker、送訊息的地方。核心透過明確接口叫它們做事。</p></article><div class="branches"><div><strong>agentloop</strong>單一 bot 的 Round runner</div><div><strong>llmkit</strong>模型 endpoint 與工具格式</div><div><strong>runtime</strong>OS worker／隔離</div><div><strong>memory</strong>context 與資料來源</div><div><strong>team / comm</strong>組織、授權與訊息</div></div></div>
       <p class="note">所以「Agent Machine」不是一隻比較聰明的 agent；它比較像交通規則加帳本。真正做事的 agentloop、模型與工具仍各守自己的工作。</p>
     </section>
     <section>
-      <p class="eyebrow">WHERE WE ARE</p><h2>已經能跑；正在補「中途出事怎麼辦」</h2>
-      <div class="now"><article><h3>現有可用的底座</h3><p><strong>llmkit</strong> 能對 OpenAI-compatible 模型發請求並描述工具；<strong>agentloop</strong> 能讓單一 bot 做「問模型 → 跑工具 → 再問」；<strong>Handle</strong> 是同一個 process 內直接 pause、resume、end 的簡單把手。</p></article><article class="focus"><h3>眼前的 Controller 切片</h3><p>把 bot、初始輸入、Handle 與 runner 樣板收成一個本地 object。它有 <code>advance()</code>、前景 <code>run()</code> 與背景 <code>start()</code> 的方便入口；不拔掉 Handle，也不假裝自己已是耐久化服務。</p></article></div>
+      <p class="eyebrow">WHERE WE ARE</p><h2>本地 loop 已能跑；現在建立可恢復的檔案狀態</h2>
+      <div class="now"><article><h3>現有可用的底座</h3><p><strong>llmkit</strong> 能對 OpenAI-compatible 模型發請求並描述工具；<strong>agentloop</strong> 能讓單一 bot 做「問模型 → 跑工具 → 再問」；<strong>Handle</strong> 是同 process 的直接把手。</p></article><article class="focus"><h3>眼前的 Python 切片</h3><p>先做 path、stable node id、immutable snapshot 與 root generation；下一個 PR 才做 durable journal/HEAD recovery，再加入 derived Git checkpoint。</p></article></div>
     </section>
     <section>
       <p class="eyebrow">MILESTONES</p><h2>路線不是八件同時開工的事</h2>
       <div class="milestones">
-        <article><p class="tag">M0 · 先有可信帳本</p><h3>Agent Machine 純核心</h3><p>先用假時鐘與假模型結果，驗證事件重播、資源不超賣、排程公平。刻意不接真模型與 agentloop。</p></article>
-        <article class="current"><p class="tag">現在 · 本地控制收斂</p><h3>Round control 與 Controller</h3><p>完成 safe boundary 與逐步 <code>advance()</code>，再把常見的 Handle／runner 樣板包成 Controller；保持它只是較好用的本地抽象。</p></article>
+        <article class="current"><p class="tag">現在 · PR 1–3</p><h3>VFS contract、recovery、Git checkpoint</h3><p>先以 deterministic operations 驗 path／generation，再做 crash recovery；刻意不接真模型、scheduler、FUSE 或 Janet。</p></article>
+        <article><p class="tag">底座已完成</p><h3>Round control 與 Controller</h3><p>safe boundary、逐步 <code>advance()</code> 與直接 Bot API 已可用；保持它只是本地抽象。</p></article>
         <article><p class="tag">M2–M3 · 不會遺忘，也不輕信</p><h3>持久控制、目標與驗證</h3><p>資料可在重啟後留下；崩潰時知道哪件工具結果未知；模型說「完成了」仍必須有證據或驗證者判定。</p></article>
         <article><p class="tag">M4–M5 · 能安全地跑，也記得住</p><h3>身份、runtime、記憶</h3><p>補身份與訊息，再做 Linux worker／sandbox；記憶要有來源、權限和 context 預算，不能把所有東西硬塞 prompt。</p></article>
         <article><p class="tag">M6 · 多 agent 的資源關係</p><h3>team hierarchy</h3><p>先做成員、授權、分配與回報，最後才允許 spawn subordinate，避免一開始就得到無法控管的 agent 組織。</p></article>
@@ -47,6 +47,6 @@
       <p class="note">想看目前程式的實際契約，優先看 package README／docstring；想看未完成的細節，才看各 package 的 <code>PLAN.md</code>。本頁與 Roadmap 都是在說「先後順序」。</p>
     </section>
   </main>
-  <footer><span>導覽頁；正式依賴與 gate 仍以 Roadmap 為準。</span><a href="../../../freepy/ROADMAP.md">開啟 ROADMAP.md</a><a href="../../../freepy/agentloop/README.md">agentloop</a><a href="../../freepy/future/agent-machine/README.md">Agent Machine</a></footer>
+  <footer><span>導覽頁；正式依賴與 gate 仍以 active plan 為準。</span><a href="../../freepy/agent-machine/README.md">Agent Machine plan</a><a href="../../../freepy/ROADMAP.md">ROADMAP</a><a href="../../../freepy/agentloop/README.md">agentloop</a></footer>
 </body>
 </html>

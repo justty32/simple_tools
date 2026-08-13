@@ -1,8 +1,9 @@
 # Agent Machine
 
-**狀態：延後規格，不是目前 package。** 曾建立一份不完整 M0 骨架，現停放在
+**狀態：研究底稿，實作順序已由
+[`../../agent-machine/`](../../agent-machine/README.md) 接手。** 曾建立一份不完整 M0 骨架，現停放在
 [`freepy/prototypes/agent_machine_m0/`](../../../../freepy/prototypes/agent_machine_m0/README.md)；資料
-邊界尚未定案。這層設想把既有 `agentloop`、runtime、team、memory
+邊界的歷史方案保留於此。這層設想把既有 `agentloop`、runtime、team、memory
 與 agentfs 組成一台 domain-specific machine：Linux 管實體資源，Agent Machine 管 endpoint、
 token、context、goal 與 tool effect。
 

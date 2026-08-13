@@ -17,7 +17,7 @@ durable services                        persistence、scheduler、Candidate、Go
 runtime enforcement                     permission、sandbox、resource isolation
 ```
 
-前兩層是現在；後兩層要由實際需求推動。`Controller` 不等於 durable control plane，
+前兩層已達可用基線；2026-08-13 起開始實作外層 Agent Machine，但仍維持分層。`Controller` 不等於 durable control plane，
 `agentloop.advance()` 也不產生 durable commands：它只在 owner runner thread 執行一個 Step 或一整批
 tools，抵達下一個 safe boundary 後返回。
 
@@ -34,7 +34,21 @@ tools，抵達下一個 safe boundary 後返回。
 - Pi bridge：Pi extension 經 JSONL 控制獨立 Python agentloop；launcher 在 factory 明確設定時
   自動載入 extension，不借 Pi endpoint，也不接管 Pi loop。
 
-## 現在：讓本地層真的好用
+## 現在主線：Agent Machine Python 參考實作
+
+完整施工圖在 [`docs/freepy/agent-machine/`](../docs/freepy/agent-machine/README.md)。第一個里程碑拆成：
+PR 1 做 `name/.name`、stable node id、immutable snapshot/root generation；PR 2 做
+staging/journal/HEAD recovery；PR 3 加 derived Git checkpoint。之後才接 deterministic VFS executor，
+不在這三個 PR 加真模型、scheduler、FUSE 或 Janet。
+
+Python 版本要成為日後 C++23／Janet 的 contract oracle，因此每一層都先產生 versioned JSON vectors、
+crash traces 與明確 gate。接 LLM/tool 時透過 adapter 使用既有 `llmkit`／`agentloop`，不持久化活的
+Handle、callback、thread 或 callable。
+
+Gate：在每個交易寫點模擬 crash 後，恢復結果只能是完整 G 或 G+1；duplicate operation 不重做，
+stale generation 不覆蓋，`bot-a/.bot-a` 配對在 rename/move/delete 後保持一致。
+
+## 維護線：讓本地層繼續好用
 
 ### 1. 以使用回饋演進 Controller
 
@@ -80,17 +94,9 @@ protocol adapters，不擁有 agentloop 真實狀態。只有共同操作成熟�
 
 Gate：protocol 錯誤、timeout、child cleanup、allowlisted edit 與 host lifecycle 有離線證據。
 
-## 延後：durable application／Agent Machine
-
-只有出現跨重啟、多 process、大量 dormant bot、可靠排程或可驗證完成的實際需求後，才定義
-可序列化 command/event、transaction store、worker lease、Candidate、Goal/evidence/verifier。
-不能保存活的 Handle、callback 或 Python callable；外圍 service 應透過 adapter 使用本地 runtime。
-
-相關想法保存在 [`docs/freepy/future/`](../docs/freepy/future/README.md)。早期 M0 Python 骨架已停放在
-[`prototypes/agent_machine_m0/`](prototypes/agent_machine_m0/README.md)，不代表正式 package 或下一步。
-
-## 同樣延後：runtime、memory、team、projection
+## 之後：runtime、memory、team、projection
 
 permission 與 sandbox 是獨立的 runtime 邊界；endpoint／token／context 要有資源管理；memory 要有
 來源、ACL 與 context budget；team 要有 identity、grant 與資源守恆；agentfs 只能投影既有真源。
-這些依賴 durable 邊界的部分先保留規格，不與 Controller 同時開工。
+先由 Agent Machine 的 VFS/transaction/executor/scheduler 切片確立邊界，再逐一接入；不在第一個
+Python PR 同時開工。
