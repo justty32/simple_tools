@@ -1,4 +1,4 @@
-"""Load a small JSON preset into an Engine.
+"""Load a small JSON preset into an LLM.
 
 The JSON object maps an id to exactly the connection data llms needs:
 endpoint, model, parameters, and an optional description. It deliberately does
@@ -8,7 +8,7 @@ not describe model weights, capabilities, sources, aliases, or modes.
 import json
 from pathlib import Path
 
-from .engine import Engine
+from .engine import LLM
 from .params import Params
 
 
@@ -47,7 +47,7 @@ def _read_presets(path):
 
 
 def load_preset(preset_id, path=PRESETS):
-    """Return an Engine configured by one preset id."""
+    """Return an LLM configured by one preset id."""
     presets = _read_presets(path)
     try:
         preset = presets[preset_id]
@@ -61,7 +61,7 @@ def load_preset(preset_id, path=PRESETS):
         for name in Params.__dataclass_fields__
         if name != "extra" and name in parameters
     }
-    return Engine(
+    return LLM(
         model=preset["model"],
         url=preset["endpoint"],
         params=Params(**native, extra=parameters),

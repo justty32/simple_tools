@@ -27,7 +27,7 @@ PYTHONPATH=freepy python -m shells repl
 launcher 優先使用 `freepy/.venv` 的 Python，找不到才使用目前的 Python。成功後會看到：
 
 ```text
-已就緒: LLM, Engine, Params, Controller, Handle, Assistant, assistant, toolbox, session; ...
+已就緒: LLM, Bot, Params, load_preset, Controller, Handle, Engine, Assistant, assistant, toolbox, session; ...
 工具 workspace: C:\code\mine\simple_tools
 ```
 
@@ -66,9 +66,9 @@ endpoint 不是常駐依賴。公司與家中的範例只是已知設定；每�
 LiteLLM proxy，所以要先啟動 proxy 與模型服務：
 
 ```python
->>> setup = assistant(
-...     "lm-gemma-4-12b",
-...     base_tools.tools(),
+>>> bot = Bot(
+...     load_preset("lm-gemma-4-12b"),
+...     tools=base_tools.tools(),
 ...     system="先查證再回答；需要修改前先說明。",
 ... )
 ```
@@ -81,16 +81,16 @@ LiteLLM proxy，所以要先啟動 proxy 與模型服務：
 LAN 位址存在：
 
 ```python
->>> engine = Engine(
+>>> llm = LLM(
 ...     model="qwen2.5:14b-instruct-q4_K_M",
 ...     url="http://192.168.1.146:11434/v1",
 ...     key="ollama",
 ...     timeout=120,
 ...     params=Params(temperature=0, max_tokens=4096),
 ... )
->>> setup = assistant(
-...     engine,
-...     base_tools.tools(),
+>>> bot = Bot(
+...     llm,
+...     tools=base_tools.tools(),
 ...     system="先查證再回答；需要修改前先說明。",
 ... )
 ```
@@ -98,47 +98,38 @@ LAN 位址存在：
 模型名稱必須和當下 `GET http://192.168.1.146:11434/api/tags` 的結果一致。若改走本機 proxy，
 則改用它提供的 preset id；不要把 Ollama 原生名稱與 proxy alias 混用。
 
-## `Assistant` 與工具配對
+## `Bot` 與工具配對
 
-`assistant()` 回傳 `Assistant(bot, dispatch)`，把送給模型的 tool schemas 和真正執行 effect 的
-Python callables 配在一起：
+`Bot` 建構時會把送給模型的 tool schemas 和真正執行 effect 的 Python callables 配在一起：
 
 ```python
->>> setup = assistant("lm-gemma-4-12b", base_tools.tools())
->>> bot, dispatch = setup                 # 仍可像 tuple 一樣解包
->>> setup.bot is bot
-True
+>>> bot = Bot(load_preset("lm-gemma-4-12b"), tools=base_tools.tools())
+>>> sorted(bot.dispatch)
+['edit_file', 'read_file', 'run_shell', 'write_file']
 ```
 
-第一個參數可以是 preset id、自己建立的 `Engine`，或 `None`。後續每個 tool source 可以是
-單一 callable，或 `base_tools.tools()`、`exec_tools.tools(...)`、`tooljson.tools(...)` 這類
-`(schemas, dispatch)` bundle。需要先合併時使用 `toolbox()`：
+`tools=` 可以是單一 callable、callable 集合，或 `base_tools.tools()`、
+`exec_tools.tools(...)`、`tooljson.tools(...)` 這類 `(schemas, dispatch)` bundle；多組來源可放在
+list：
 
 ```python
->>> schemas, dispatch = toolbox(one_callable, base_tools.tools())
+>>> bot = Bot(LLM(), tools=[one_callable, base_tools.tools()])
 ```
 
 重複工具名稱以及 schema／dispatch 名稱不一致會立即報錯，避免同名 effect 被靜默取代。
-helper 不會自行掃描工具、選擇 workspace 或提供 permission policy。
+Bot 不會自行掃描工具、選擇 workspace 或提供 permission policy。舊的 `assistant()` 與
+`toolbox()` 暫時保留，供既有程式遷移。
 
 ## 啟動互動 Round
 
-最短寫法是從配好的 `Assistant` 直接開 session：
+從配好的 Bot 直接啟動 Round：
 
 ```python
->>> c = setup.session("先讀 README，說明這個專案目前能做什麼")
+>>> c = bot.start("先讀 README，說明這個專案目前能做什麼")
 >>> h = c.handle
 ```
 
-等價的完整寫法是：
-
-```python
->>> bot, dispatch = setup
->>> c = session(bot, dispatch, "先讀 README，說明這個專案目前能做什麼")
->>> h = c.handle
-```
-
-`session()` 建立一條背景 runner thread，新的 Handle 預設 `auto_finish=False`。模型自然回答完且
+`start()` 建立一條背景 runner thread，新的 Handle 預設 `auto_finish=False`。模型自然回答完且
 不再要求工具時會停在 `waiting`，讓你檢查並追加輸入，而不是直接結束 Round。
 
 ## 等待與查看狀態
@@ -264,7 +255,7 @@ Handle 刻意暴露資料。跨 thread 一次修改多個欄位或 nested collec
 ...
 >>> h = Handle(auto_finish=False)
 >>> h.after_tools.append(inspect_results)
->>> c = setup.session("檢查專案", handle=h)
+>>> c = bot.start("檢查專案", handle=h)
 ```
 
 callbacks 在 runner thread 持有 Handle 的 `RLock` 同步執行；不要在 callback 裡啟動另一條需要
@@ -272,15 +263,15 @@ callbacks 在 runner thread 持有 Handle 的 `RLock` 同步執行；不要在 c
 
 ## 一段可直接照做的完整流程
 
-以下只假定 `lm-gemma-4-12b` 的本機 proxy 此刻在線；在公司可把 `setup` 換成前面的 Ollama
-`Engine` 寫法。先從不給工具的唯讀對話開始，確認連線後再加 tools：
+以下只假定 `lm-gemma-4-12b` 的本機 proxy 此刻在線；在公司可把 `llm` 換成前面的 Ollama
+`LLM` 寫法。先從不給工具的唯讀對話開始，確認連線後再加 tools：
 
 ```python
->>> setup = assistant(
-...     "lm-gemma-4-12b",
+>>> bot = Bot(
+...     load_preset("lm-gemma-4-12b"),
 ...     system="回答精簡；不知道就明說。",
 ... )
->>> c = setup.session("只回答 REPL_CONNECT_OK")
+>>> c = bot.start("只回答 REPL_CONNECT_OK")
 >>> if not c.wait(timeout=120):
 ...     c.end(reason="operator-timeout")
 ...     raise TimeoutError("模型在 120 秒內沒有抵達可操作狀態")
@@ -308,12 +299,12 @@ callbacks 在 runner thread 持有 Handle 的 `RLock` 同步執行；不要在 c
 
 ```python
 >>> base_tools.set_root(".")
->>> setup = assistant(
-...     "lm-gemma-4-12b",
-...     base_tools.tools(),
+>>> bot = Bot(
+...     load_preset("lm-gemma-4-12b"),
+...     tools=base_tools.tools(),
 ...     system="先讀取查證；未經要求不要修改檔案。",
 ... )
->>> c = setup.session("讀 README，只列出三個已存在的事實")
+>>> c = bot.start("讀 README，只列出三個已存在的事實")
 >>> c.wait(timeout=180)
 True
 >>> print(c.handle.message)
@@ -324,8 +315,8 @@ True
 'completed'
 ```
 
-一個 Handle 只能執行一個 Round，也只能有一條 runner。要開下一個 Round 就建立新的 session；
-若沿用同一個 `setup.bot`，它的 history 會延續，所以也不要同時用同一個 bot 跑兩個 session。
+一個 Handle 只能執行一個 Round，也只能有一條 runner。同一個 mutable Bot 不能同時啟動兩個
+Round；前一輪結束後再次 `bot.start(...)`，新的 Handle 會搭配同一份延續的 history。
 
 ## 錯誤排查
 
@@ -366,17 +357,18 @@ proxy 的 model list，確認模型名稱仍存在。提高 timeout 只能處理
 
 ### `Controller.send() requires a waiting or paused Round`
 
-先 `c.wait()`，再檢查 state。Round 若已 `completed`／`error` 就不能重開，請建立新 session；
+先 `c.wait()`，再檢查 state。Round 若已 `completed`／`error` 就不能重開；請用 `bot.start()`
+建立下一個 Round。
 若仍是 `running_step`／`running_tools`，等到 parked boundary 後再送。
 
 ### `join()` 一直等或拋 `TimeoutError`
 
-互動 session 預設停在 `waiting`。要繼續用 `send()`，要自然完成就用
+互動 Round 預設停在 `waiting`。要繼續用 `send()`，要自然完成就用
 `send(..., finish=True)`，不要了就 `end()`，之後才 `join()`。
 
 ### 模型沒有呼叫工具
 
-先確認 `setup.bot.tools` 不是空的、工具已明確傳給 `assistant()`，以及所選模型／endpoint 支援
+先確認 `bot.tools` 不是空的、工具已明確傳給 `Bot()`，以及所選模型／endpoint 支援
 tool calling。模型能力未知時 FreePy 會放行，但這不保證後端真的做得好；小模型不呼叫工具也
 可能只是模型品質問題。從一個簡單、可驗證的唯讀工具任務開始。
 

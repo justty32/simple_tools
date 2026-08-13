@@ -3,12 +3,11 @@
 配 llms 用，一行就接起來：
 
     import base_tools
-    from llms import LLM
+    from llms import Bot, LLM
 
     base_tools.set_root("/tmp/workspace")     # 模型只能在這底下動手腳
-    schemas, dispatch = base_tools.tools()    # schema + name -> function 對照表
-
-    bot = LLM(tools=schemas)
+    bot = Bot(LLM(), tools=base_tools.tools())
+    dispatch = bot.dispatch
     reply = bot.ask("看一下這個資料夾裡有什麼")
     while reply.calls:                        # 模型要叫工具就照做，然後把結果送回去
         results = {c["id"]: dispatch[c["name"]](**c["args"]) for c in reply.calls}
@@ -40,7 +39,7 @@ ALL = (read_file, write_file, edit_file, run_shell)
 
 
 def tools():
-    """回傳 (schemas, dispatch)，schemas 直接給 llms 的 LLM(tools=...)。需要有 llms 這個 package。"""
+    """回傳 (schemas, dispatch)，可直接給 llms 的 Bot(tools=...)。"""
     from llms import to_tools
     return to_tools(*ALL)
 

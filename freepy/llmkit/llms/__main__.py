@@ -11,8 +11,8 @@
 import sys
 import typing
 
-from .client import LLM
-from .engine import Engine
+from .client import Bot
+from .engine import LLM
 from .func_schema import to_tools
 
 URL = "http://localhost:4000"
@@ -29,7 +29,7 @@ def get_weather(city: str, unit: typing.Literal["celsius", "fahrenheit"] = "cels
 
 
 def bot_with(model, **kw):
-    return LLM(engine=Engine(url=URL, model=model), **kw)
+    return Bot(LLM(url=URL, model=model), **kw)
 
 
 def demo_memory(model):
@@ -60,7 +60,7 @@ def demo_tools(model):
     print("\n== 工具 ==")
     schemas, dispatch = to_tools(get_weather)
     bot = bot_with(model, tools=schemas)
-    if bot.engine.supports("tools") is False:
+    if bot.llm.supports("tools") is False:
         print("這個模型宣告不支援 tool calling，跳過")
         return
     reply = bot.ask("台北天氣如何？")
@@ -74,7 +74,7 @@ def demo_tools(model):
 def demo_meta(model):
     print("\n== 後設 ==")
     bot = bot_with(model)
-    print("能力:", bot.engine.caps)
+    print("能力:", bot.llm.caps)
     reply = bot.ask("從 1 數到 50。")
     print("finish_reason:", reply.finish_reason, "usage:", reply.usage)
     stream = bot.ask("再數一次。", stream=True)

@@ -5,16 +5,14 @@
 
 ```python
 import base_tools
-from llms import Engine, LLM
+from llms import Bot, LLM
 
 base_tools.set_root("/tmp/workspace")     # 模型只能在這底下動手腳
-schemas, dispatch = base_tools.tools()
-
-bot = LLM(Engine(model="deepseek-chat"), tools=schemas,
+bot = Bot(LLM(model="deepseek-chat"), tools=base_tools.tools(),
           system="你是一個會用工具處理檔案的助手。")
 reply = bot.ask("把 a/b.txt 裡的 two 改成 TWO")
 while reply.calls:                         # 模型要叫工具就照做，結果送回去直到文字答案
-    results = {c["id"]: dispatch[c["name"]](**c["args"]) for c in reply.calls}
+    results = {c["id"]: bot.dispatch[c["name"]](**c["args"]) for c in reply.calls}
     reply = bot.ask(tool_results=results)
 if not reply:
     raise reply.err

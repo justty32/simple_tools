@@ -20,7 +20,7 @@ runner、alias、mode、table 與專用 research workflow 全部退出 runtime�
 
 現在唯一資料是 [`llmkit/llms/presets.json`](../llmkit/llms/presets.json)：以 id 為 key，
 每筆只含 `endpoint`、`model`、`parameters` 和可省略的 `description`。`llms.load_preset(id)`
-直接建立 `Engine`。能力仍由 proxy／`Engine.caps` 處理，不在 preset 維護第二份。
+直接建立 `LLM`。能力仍由 proxy／`LLM.caps` 處理，不在 preset 維護第二份。
 
 2026-08-09 的 modelcards 設計與實打結果移到 [`NOTES-modelcards.md`](archive/modelcards.md)，
 只作被本決定取代的歷史背景，不描述目前介面。

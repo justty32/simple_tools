@@ -9,7 +9,7 @@
     }
 
 前半是原封不動的 OpenAI tool，`spec.schema` 就是把 `_extra` 剝掉 —— **送進
-`LLM(tools=...)` 之前一定要剝**，多一個未知的鍵，OpenAI / LiteLLM / LM Studio
+`Bot(tools=...)` 之前一定要剝**，多一個未知的鍵，OpenAI / LiteLLM / LM Studio
 三邊各有各的嫌法，不值得賭。
 
 `_extra` 裡只有 `_version` 和 `_type` 兩個保留鍵，**這個檔只讀這兩個**，其餘一律
@@ -111,7 +111,7 @@ class Spec:
 
     @property
     def schema(self) -> dict:
-        """剝掉 `_extra` 的乾淨 OpenAI tool，可以直接進 `LLM(tools=...)`。"""
+        """剝掉 `_extra` 的乾淨 OpenAI tool，可以進 `Bot(tools=...)` bundle。"""
         return {"type": "function", "function": self.function}
 
     def run(self, arguments) -> str:

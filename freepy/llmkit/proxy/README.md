@@ -5,7 +5,7 @@ LM Studio 收成**同一個 OpenAI 相容端點**（預設 `localhost:4000`）�
 所以換模型就只是換一個字串，程式碼不用動。
 
 `llms` 預設就是打這裡。但它不是必需品 —— 有現成的 OpenAI 相容端點就直接
-`Engine(url=..., key=...)` 指過去。
+`LLM(url=..., key=...)` 指過去。
 
 | 檔案 | 是什麼 |
 |---|---|
@@ -132,7 +132,7 @@ qwen2.5 的 tool calling **有能力但不穩**：英文「use the available too
 ## 改完設定要做兩件事
 
 1. **重啟 proxy** —— 設定不會熱載入。
-2. 程式端 `Engine.clear_caps_cache()` —— 能力表是照 proxy 根位址快取的，
+2. 程式端 `LLM.clear_caps_cache()` —— 能力表是照 proxy 根位址快取的，
    **查不到的空表也算查過**，不會自動重試。
 
 ## 踩過的

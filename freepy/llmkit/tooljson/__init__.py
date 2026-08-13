@@ -4,10 +4,9 @@
 模型吐回來的那包參數變成一次實際的執行。這個 package 就是它的標準庫，只做兩件事：
 
     import tooljson
-    from llms import LLM
+    from llms import Bot, LLM
 
-    schemas, dispatch = tooljson.tools("mytools.json")   # 1. 取出定義
-    bot = LLM(tools=schemas)
+    bot = Bot(LLM(), tools=tooljson.tools("mytools.json"))  # 1. 取出定義
 
     reply = bot.ask("把 a.png 縮到 800")
     results = {c["id"]: dispatch[c["name"]](**c["args"]) for c in reply.calls}  # 2. 執行
@@ -78,7 +77,7 @@ __all__ = [
 
 
 def tools(*sources):
-    """回 (schemas, dispatch)，跟 `llms.to_tools()` 同介面，直接給 `LLM(tools=...)`。
+    """回 (schemas, dispatch)，跟 `llms.to_tools()` 同介面，可給 `Bot(tools=...)`。
 
     sources 是 .json 的路徑或已經讀好的 Spec，混著給也可以。撞名的以先給的為準
     （比照 PATH），因為參數的順序是呼叫端明確寫下的優先序。

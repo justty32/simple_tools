@@ -98,7 +98,7 @@ def policies():
     check("白名單在執行前移除 call", str(h.calls), "0")
     check("白名單仍回 result 給模型", str(h.bot.asked[1][1]), "not available")
     bot = FakeBot(response("不該准用"))
-    bot.engine.model = "lm-qwen3.5-9b"
+    bot.llm.model = "lm-qwen3.5-9b"
     h = limited(bot, Limits(engines=["deepseek-chat"]))
     check("引擎 policy 由 callback 結束", f"{h.stop} {h.err}",
           "engine 引擎 lm-qwen3.5-9b 不在")

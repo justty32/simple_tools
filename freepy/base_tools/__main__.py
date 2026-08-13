@@ -89,12 +89,12 @@ def demo_tooljson():
 def demo_agent(model):
     """真的接上模型：叫它用工具做一件小事，看它會不會用。"""
     print(f"\n== 交給 {model} 用 ==")
-    from llms import LLM, Engine
+    from llms import Bot, LLM
 
     schemas, dispatch = base_tools.tools()
-    bot = LLM(engine=Engine(url=URL, model=model), tools=schemas,
+    bot = Bot(LLM(url=URL, model=model), tools=(schemas, dispatch),
               system="你是一個會用工具處理檔案的助手，動手做，不要只回答。")
-    if bot.engine.supports("tools") is False:
+    if bot.llm.supports("tools") is False:
         print("這個模型宣告不支援 tool calling，跳過")
         return
 

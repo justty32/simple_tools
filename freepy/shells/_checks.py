@@ -15,6 +15,7 @@ from llms import Engine, to_tools
 from . import Assistant, assistant, toolbox
 from . import __main__ as launcher
 from . import common
+from ._checks_api import direct_api
 
 
 def read_file(path: str) -> str:
@@ -36,7 +37,7 @@ def check(condition, label):
 def rejects(call, text):
     try:
         call()
-    except (TypeError, ValueError) as exc:
+    except (TypeError, ValueError, RuntimeError) as exc:
         return text in str(exc)
     return False
 
@@ -96,6 +97,8 @@ def main():
           "documented preset and base-tools setup stays offline")
     check(rejects(lambda: assistant(object()), "Engine"),
           "assistant rejects ambiguous engine values")
+
+    direct_api(check, rejects, read_file, bundle, schemas)
 
     chdirs = []
     executions = []

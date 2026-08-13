@@ -4,7 +4,7 @@ import time
 from types import SimpleNamespace
 
 import agentloop
-from llms import LLM, Reply
+from llms import Bot, Reply
 
 FAILED = []
 
@@ -41,8 +41,8 @@ def loop(name="ok", n=20):
     return [wants((f"c{i}", name, "{}")) for i in range(n)]
 
 
-class FakeBot(LLM):
-    """真的 LLM，只是 ask() 不出門，照劇本吐真的 Reply。"""
+class FakeBot(Bot):
+    """真的 Bot，只是 ask() 不出門，照劇本吐真的 Reply。"""
 
     def __init__(self, *script):
         super().__init__()

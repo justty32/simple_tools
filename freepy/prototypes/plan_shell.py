@@ -37,7 +37,7 @@ FREEPY = Path(__file__).resolve().parent.parent
 sys.path[:0] = [str(FREEPY), str(FREEPY / "llmkit")]
 
 import base_tools                                        # noqa: E402
-from llms import LLM, Engine, to_schemas                 # noqa: E402
+from llms import Bot, LLM                               # noqa: E402
 
 MODEL = "ollama-qwen3-32b"
 STEPS = 6                      # 探查幾步還交不出計劃就放棄，免得模型原地打轉
@@ -162,8 +162,8 @@ def main():
     base_tools.set_root(args.root)
     note(f"[model] {args.model}  [root] {base_tools.get_root()}")
 
-    bot = LLM(engine=Engine(model=args.model, timeout=300),
-              system=SYSTEM, tools=to_schemas(*TOOLS))
+    bot = Bot(LLM(model=args.model, timeout=300),
+              system=SYSTEM, tools=TOOLS)
     code, out = translate(bot, prompt)
     print(out)
     return code

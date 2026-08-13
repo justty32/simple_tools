@@ -97,7 +97,8 @@ class Limits:
     def _engine_error(self, bot):
         if self.engines is None:
             return None
-        model = getattr(getattr(bot, "engine", None), "model", None)
+        llm = getattr(bot, "llm", None) or getattr(bot, "engine", None)
+        model = getattr(llm, "model", None)
         if not model:
             return "問不出這個 bot 在用哪顆引擎，engines 這條限制沒辦法成立"
         if model not in self.engines:

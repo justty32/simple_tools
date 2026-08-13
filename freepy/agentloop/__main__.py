@@ -20,14 +20,14 @@ from ._testing import FAILED, check, go
 
 def real(model):
     import base_tools
-    from llms import Engine, LLM
+    from llms import Bot, LLM
 
     print(f"\n== 交給 {model} 真的跑一次 ==")
     with tempfile.TemporaryDirectory() as tmp:
         base_tools.set_root(tmp)
         base_tools.write_file("notes.txt", "蘋果 3\n香蕉 5\n橘子 2\n")
         schemas, dispatch = base_tools.tools()
-        bot = LLM(engine=Engine(model=model), tools=schemas,
+        bot = Bot(LLM(model=model), tools=(schemas, dispatch),
                   system="用繁體中文回答。要看檔案或改檔案就用工具，不要用猜的。")
         handle = Handle()
         Limits(steps=8, per_tool={"run_shell": 3}).attach(handle)

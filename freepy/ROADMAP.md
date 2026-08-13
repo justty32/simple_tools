@@ -55,12 +55,12 @@ GUI、vim、Pi extension 都是互動 shell；若取 Unix 薄殼原義，Python 
 `repl` 會保留操作者的 cwd 並顯示工具 workspace，`assistant(...).session(...)` 可直接啟動
 配對好的 bot/dispatch；工具來源、workspace 與 effect policy 仍由呼叫者明確決定。
 
-2026-08-12 的真實 REPL 操作進一步確定下一版介面應直接表達
+2026-08-12 的真實 REPL 操作進一步確定介面應直接表達
 `Bot(LLM(...), system=..., tools=...).start(instruction)`：`Bot` 建構時就持有完整工具定義與
 dispatch，不再引入 `Assistant`／`equip` 中間概念，`start()` 啟動一個背景 Round。完整命名、
 tools 契約與目前 API 對照見
-[`docs/freepy/interfaces/python-api-next.md`](../docs/freepy/interfaces/python-api-next.md)；目前程式尚未
-遷移，操作方式仍以現行 REPL 文件為準。
+[`docs/freepy/interfaces/python-api-next.md`](../docs/freepy/interfaces/python-api-next.md)。第一版已於
+2026-08-13 實作；`Engine`、`Assistant`、`assistant()` 與 `session()` 暫留為遷移相容層。
 
 Gate：使用者在 REPL 只需少量語句就能啟動與控制 Round；底層 Handle 仍可直接取得。
 

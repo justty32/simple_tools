@@ -69,12 +69,12 @@ API 使用 `reasoning`。`Reply` 會把兩種都收進同一個 `.reasoning`，
 **一律換模型名字**，兩家都一樣。模型是引擎的欄位，直接改：
 
 ```python
-bot.engine.model = "deepseek-reasoner"       # 這之後都會想
-bot.engine.model = "lm-gemma-4-e4b-nothink"  # 這之後都不想
+bot.llm.model = "deepseek-reasoner"       # 這之後都會想
+bot.llm.model = "lm-gemma-4-e4b-nothink"  # 這之後都不想
 ```
 
 改引擎不動人格也不動記憶，同一段對話會用新模型接著講。整顆換掉用
-`bot.set_engine(Engine(model=..., timeout=300))`。
+`bot.set_llm(LLM(model=..., timeout=300))`。
 
 底層其實是兩回事，只是被 [`../proxy/`](../proxy/README.md) 的設定包成同一種用法：DeepSeek 的 chat / reasoner
 是同一顆 v4-flash 的兩個模式，本來就只能靠名字切；LM Studio 那邊三顆各有一個
@@ -83,7 +83,7 @@ bot.engine.model = "lm-gemma-4-e4b-nothink"  # 這之後都不想
 要臨時調思考的多寡（而不是全關），LM Studio 的可以直接送參數：
 
 ```python
-bot.engine.params = Params(extra={"reasoning_effort": "high"})
+bot.llm.params = Params(extra={"reasoning_effort": "high"})
 ```
 
 DeepSeek 不吃 `reasoning_effort`，給了也沒用，只能換名字。
@@ -128,5 +128,4 @@ reply.usage           # {"prompt", "completion", "total", "cached", "reasoning"}
 reply = bot.ask("翻譯這句", remember=False)
 ```
 
-要連 instance 都用完即丟就自己建一個，`LLM()` 很便宜（引擎也是，只是會多開一個
-HTTP client）。
+要連 Bot 都用完即丟就自己建一個；每顆 `LLM` 會建立自己的 HTTP client。

@@ -192,6 +192,9 @@ class Handle:
             if tools is None:
                 tools = getattr(bot, "tools", None)
             tool_calls = list(getattr(bot, "pending_calls", None) or [])
+            claim_round = getattr(bot, "_claim_round", None)
+            if claim_round is not None:
+                claim_round(self)
 
             self._runner = threading.get_ident()
             self._started = time.monotonic()

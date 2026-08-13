@@ -27,28 +27,9 @@ def toolbox(*sources):
     Sources are never discovered implicitly. Duplicate tool names are rejected
     instead of silently changing which effect a model call will execute.
     """
-    from llms import to_tools
+    from llms import normalize_tools
 
-    schemas = []
-    dispatch = {}
-    for source in sources:
-        group_schemas, group_dispatch = (
-            to_tools(source) if callable(source) else source
-        )
-        names = [schema["function"]["name"] for schema in group_schemas]
-        if len(names) != len(set(names)):
-            raise ValueError(f"duplicate tool names in one source: {names}")
-        if set(names) != set(group_dispatch):
-            raise ValueError(
-                "tool schemas and dispatch must contain the same names: "
-                f"schemas={names}, dispatch={list(group_dispatch)}"
-            )
-        duplicates = set(dispatch) & set(group_dispatch)
-        if duplicates:
-            raise ValueError(f"duplicate tool names: {sorted(duplicates)}")
-        schemas.extend(group_schemas)
-        dispatch.update(group_dispatch)
-    return schemas, dispatch
+    return normalize_tools(sources)
 
 
 def assistant(engine=None, *tool_sources, system=None):
@@ -57,15 +38,14 @@ def assistant(engine=None, *tool_sources, system=None):
     ``engine`` may be an Engine, a preset id, or ``None`` for llms defaults.
     Tool sources use :func:`toolbox` and therefore remain explicit.
     """
-    from llms import Engine, LLM, load_preset
+    from llms import Bot, LLM, load_preset
 
     if isinstance(engine, str):
         engine = load_preset(engine)
-    elif engine is not None and not isinstance(engine, Engine):
-        raise TypeError("engine must be an Engine, preset id, or None")
-    schemas, dispatch = toolbox(*tool_sources)
-    return Assistant(
-        LLM(engine=engine, system=system, tools=schemas or None), dispatch)
+    elif engine is not None and not isinstance(engine, LLM):
+        raise TypeError("engine must be an LLM/Engine, preset id, or None")
+    bot = Bot(engine, system=system, tools=tool_sources)
+    return Assistant(bot, bot.dispatch)
 
 
 def session(bot, dispatch=None, prompt=None, *, handle=None, images=None,

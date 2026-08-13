@@ -70,13 +70,12 @@ body 只要兩樣東西：`run(args) -> str` 和 `target`（本地檔案路徑�
 
 ```python
 import tooljson
-from llms import LLM
+from llms import Bot, LLM
 
-schemas, dispatch = tooljson.tools("mytools.json")     # 1. 取出給模型的定義
-bot = LLM(tools=schemas)
+bot = Bot(LLM(), tools=tooljson.tools("mytools.json"))  # 1. 取出定義與執行端
 
 reply = bot.ask("把 a.png 縮到 800")
-results = {c["id"]: dispatch[c["name"]](**c["args"]) for c in reply.calls}   # 2. 執行
+results = {c["id"]: bot.dispatch[c["name"]](**c["args"]) for c in reply.calls}  # 2. 執行
 print(bot.ask(tool_results=results).text)
 ```
 
@@ -95,7 +94,7 @@ print(bot.ask(tool_results=results).text)
 `Spec` 身上有 `.name`、`.schema`（剝掉 `_extra` 的乾淨 tool）、`.body`（`_type` 那邊
 解析出來的東西）、`.stale`（來源檔變了沒，不知道就是 `None`）、`.run(args)`。
 
-**送進 `LLM(tools=...)` 之前一定要剝掉 `_extra`** —— 多一個未知的鍵，
+**送進 `Bot(tools=...)` 的 bundle 前一定要剝掉 `_extra`** —— 多一個未知的鍵，
 OpenAI / LiteLLM / LM Studio 三邊各有各的嫌法。`schemas` 已經是剝好的。
 
 ## 兩個回傳的規矩

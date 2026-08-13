@@ -1,9 +1,9 @@
-"""client.py — LLM class：一個 bot。
+"""client.py — Bot class：人格、記憶、能力，以及一顆 LLM。
 
     人格    system，排在每次送出的最前面，不佔歷史
     記憶    history，對話記錄（含 assistant 的 tool_calls 和工具結果）
     能力    tools，它能開口要求哪些工具 —— 但執行不歸它管
-    引擎    engine，拿什麼在想，以及那個端點做得到什麼（見 engine.py）
+    引擎    llm，拿什麼在想，以及那個端點做得到什麼（見 engine.py）
 
 ask() 永遠回傳一個 Reply，絕不丟例外；錯誤在 reply.err 裡，bool(reply) 會是 False。
 bot 只會說話和開口要工具，工具**是誰去跑的、跑出什麼**，由呼叫端決定後餵回來。
@@ -11,28 +11,43 @@ bot 只會說話和開口要工具，工具**是誰去跑的、跑出什麼**，
 
 from . import toolcalls
 from .content import build_content
-from .engine import Engine
+from .engine import LLM
+from .interactive import RoundStarter
 from .reply import Reply
+from .toolset import normalize_tools
 
 
-class LLM:
+class Bot(RoundStarter):
     """一個 bot：人格 + 記憶 + 能力 + 思考引擎。"""
 
-    def __init__(self, engine=None, system=None, tools=None):
-        self._engine = engine or Engine()
+    def __init__(self, llm=None, system=None, tools=None):
+        if llm is None:
+            llm = LLM()
+        if not isinstance(llm, LLM):
+            raise TypeError("llm must be an LLM")
+        schemas, dispatch = normalize_tools(tools)
+        self.llm = llm
         self.system = system
-        self.tools = tools  # tool schema list，見 func_schema.to_schemas
+        self.tools = schemas or None
+        self.dispatch = dispatch
         self.history = []  # 不含 system message，送出時才在最前面補上
+        self._init_rounds()
 
     @property
     def engine(self):
-        """目前這顆思考引擎。改 model / params 直接動它的欄位就好。"""
-        return self._engine
+        """Compatibility spelling for :attr:`llm`."""
+        return self.llm
 
     def set_engine(self, engine):
-        """換一顆思考引擎。人格、記憶、能力都不受影響，同一段對話接著講。"""
-        self._engine = engine
+        """Compatibility helper; prefer assigning :attr:`llm`."""
+        if not isinstance(engine, LLM):
+            raise TypeError("engine must be an LLM")
+        self.llm = engine
         return self
+
+    def set_llm(self, llm):
+        """Swap the thinking engine without changing identity or history."""
+        return self.set_engine(llm)
 
     def reset(self):
         """清空對話記憶。人格、能力、引擎都不動。"""
@@ -82,7 +97,7 @@ class LLM:
         """
         checkpoint = len(self.history)  # 失敗時要把這一輪寫進記憶的東西收回來
         try:
-            err = self._engine.check(images, self.tools, tool_choice)
+            err = self.llm.check(images, self.tools, tool_choice)
             if err is not None:
                 return Reply(None, err=err)
 
@@ -93,7 +108,7 @@ class LLM:
                 content = build_content(prompt, images)
                 self._extend(messages, [{"role": "user", "content": content}], remember)
 
-            response = self._engine.think(
+            response = self.llm.think(
                 messages, tools=self.tools, tool_choice=tool_choice, stream=stream
             )
             return Reply(response, self, remember, stream, checkpoint=checkpoint)

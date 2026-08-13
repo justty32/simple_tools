@@ -4,11 +4,11 @@ import agentloop
 import base_tools
 import llms
 from agentloop import Controller, Handle
-from llms import Engine, LLM, Params
+from llms import Bot, Engine, LLM, Params, load_preset
 from shells import Assistant, assistant, session, toolbox
 
 print(
-    "已就緒: LLM, Engine, Params, Controller, Handle, Assistant, "
+    "已就緒: LLM, Bot, Params, load_preset, Controller, Handle, Engine, Assistant, "
     "assistant, toolbox, session; "
     "以及 llms, base_tools, agentloop"
 )

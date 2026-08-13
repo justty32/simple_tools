@@ -14,7 +14,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent / "llmkit"))
 
 import base_tools                          # noqa: E402
-from llms import LLM, Engine               # noqa: E402
+from llms import Bot, LLM                  # noqa: E402
 
 MODEL = sys.argv[1] if len(sys.argv) > 1 else "deepseek-reasoner"
 TASK = "notes.txt 裡每樣水果各幾個？把總數寫進 total.txt，然後告訴我加起來是多少。"
@@ -52,7 +52,7 @@ with tempfile.TemporaryDirectory() as tmp:
     base_tools.write_file("notes.txt", "蘋果 3\n香蕉 5\n橘子 2\n")
 
     schemas, dispatch = base_tools.tools()     # schema + name -> function 對照表
-    bot = LLM(engine=Engine(model=MODEL), tools=schemas,
+    bot = Bot(LLM(model=MODEL), tools=(schemas, dispatch),
               system="用繁體中文回答。要看檔案或改檔案就用工具，不要用猜的。")
 
     print(f"model: {MODEL}  工作目錄: {base_tools.get_root()}\n")

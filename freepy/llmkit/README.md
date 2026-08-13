@@ -4,7 +4,7 @@
 
 | | 是什麼 | |
 |---|---|---|
-| **[`llms/`](llms/README.md)** | 把 OpenAI 相容的 API 包成一個 **bot 模型** | 一個 lib |
+| **[`llms/`](llms/README.md)** | OpenAI 相容的 `LLM` 引擎與有狀態的 `Bot` | 一個 lib |
 | **[`proxy/`](proxy/README.md)** | LiteLLM proxy 的設定檔和啟動腳本 | 一份設定 |
 | **[`tooljson/`](tooljson/README.md)** | tool JSON 的**格式規範**，和它的標準庫 | 一份契約＋一個實作 |
 
@@ -18,20 +18,26 @@
 
 ```python
 import tooljson
-from llms import LLM
+from llms import Bot, LLM
 
-schemas, dispatch = tooljson.tools("mytools.json")
-bot = LLM(system="你是個惜字如金的助手", tools=schemas)
+bot = Bot(
+    LLM(model="deepseek-chat"),
+    system="你是個惜字如金的助手",
+    tools=tooljson.tools("mytools.json"),
+)
 
 reply = bot.ask("把 a.png 縮到 800")
 while reply.calls:
-    results = {c["id"]: dispatch[c["name"]](**c["args"]) for c in reply.calls}
+    results = {
+        c["id"]: bot.dispatch[c["name"]](**c["args"])
+        for c in reply.calls
+    }
     reply = bot.ask(tool_results=results)
 print(reply.text)
 ```
 
-**bot 只會說話和開口要工具，執行不歸它管。** 工具誰去跑、跑出什麼，
-由呼叫端決定後餵回來 —— 這條界線是刻意的，`llms` 裡沒有任何一行會去執行東西。
+低階 `bot.ask()` 只說話和要求工具；呼叫者仍可自行 dispatch。互動入口
+`bot.start()` 則把同一組已驗證的 schema／dispatch 交給 `agentloop` 執行。
 
 ## 起來
 

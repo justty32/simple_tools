@@ -9,7 +9,7 @@ schema 從函式本體生出來，靠 type hints 和 docstring。**工具是 bot
 bot 上，不是每次呼叫的參數** —— 順便讓工具定義穩定待在前綴裡，快取才命中得了。
 
 ```python
-from llms import LLM, to_tools
+from llms import Bot, LLM
 
 def get_weather(city: str, unit: typing.Literal["celsius", "fahrenheit"] = "celsius"):
     """查詢指定城市的天氣。
@@ -20,14 +20,13 @@ def get_weather(city: str, unit: typing.Literal["celsius", "fahrenheit"] = "cels
     """
     ...
 
-schemas, dispatch = to_tools(get_weather)
-bot = LLM(tools=schemas)
+bot = Bot(LLM(), tools=get_weather)
 
 reply = bot.ask("台北天氣？")
 print(reply.text)      # 它常常會一邊說「好，我查一下」一邊叫工具
 print(reply.calls)     # [{"id": ..., "name": "get_weather", "args": {...}}]
 
-results = {c["id"]: dispatch[c["name"]](**c["args"]) for c in reply.calls}
+results = {c["id"]: bot.dispatch[c["name"]](**c["args"]) for c in reply.calls}
 print(bot.ask(tool_results=results).text)
 ```
 
@@ -93,10 +92,7 @@ name → function 對照表。Google style 的 `Args:`、Sphinx 的 `:param x:`�
 HTTP API 而不是 python 函式），兩邊混著給也可以：
 
 ```python
-a, da = to_tools(get_weather)
-b, db = tooljson.tools("mytools.json")
-bot = LLM(tools=a + b)
-dispatch = {**da, **db}
+bot = Bot(LLM(), tools=[get_weather, tooljson.tools("mytools.json")])
 ```
 
 ## 引擎的能力
@@ -104,8 +100,8 @@ dispatch = {**da, **db}
 能力掛在引擎上，因為「能不能看圖」是端點加模型的性質，跟這個 bot 是誰無關：
 
 ```python
-bot.engine.caps                    # 完整一張表
-bot.engine.supports("vision")      # True / False / None（proxy 沒說）
+bot.llm.caps                    # 完整一張表
+bot.llm.supports("vision")      # True / False / None（proxy 沒說）
 ```
 
 現在查得到這幾項：
@@ -131,7 +127,7 @@ bot.engine.supports("vision")      # True / False / None（proxy 沒說）
 `ollama-*` 那批**沒驗**（那台機器連不到），所以 yaml 裡沒宣告，一律是 `None` 放行。
 
 能力名稱打錯不會安靜地變成「不知道」：`supports("visoin")` 是 `KeyError`，
-`Engine(caps={"tool": True})` 建構時就 `ValueError`。這是刻意的 —— 安靜吃掉打錯的
+`LLM(caps={"tool": True})` 建構時就 `ValueError`。這是刻意的 —— 安靜吃掉打錯的
 設定，就是 litellm `drop_params` 那個坑的翻版（見
 [`../proxy/README.md`](../proxy/README.md)）。
 
@@ -139,9 +135,9 @@ bot.engine.supports("vision")      # True / False / None（proxy 沒說）
 內建的資料庫），**兩個都不完全可靠，宣告前先實測** —— 理由見
 [`../proxy/README.md`](../proxy/README.md)。
 
-查到的結果會快取，改完設定重啟 proxy 後要呼叫 `Engine.clear_caps_cache()`。
+查到的結果會快取，改完設定重啟 proxy 後要呼叫 `LLM.clear_caps_cache()`。
 臨時要蓋掉某個判斷，建引擎時給 `caps`：
 
 ```python
-bot = LLM(engine=Engine(model="lm-qwen3.5-9b", caps={"tools": True, "vision": False}))
+bot = Bot(LLM(model="lm-qwen3.5-9b", caps={"tools": True, "vision": False}))
 ```

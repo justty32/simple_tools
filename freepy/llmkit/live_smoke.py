@@ -2,7 +2,7 @@
 
 import typing
 
-from llms import Engine, LLM, Params, to_tools
+from llms import Bot, LLM, Params, to_tools
 
 
 URL = "http://127.0.0.1:4000"
@@ -35,7 +35,7 @@ def get_weather(
 def bot(model, *, tools=None):
     # Thinking models can consume part of this allowance before emitting text.
     params = Params(temperature=0, max_tokens=256)
-    return LLM(Engine(url=URL, model=model, params=params, timeout=180), tools=tools)
+    return Bot(LLM(url=URL, model=model, params=params, timeout=180), tools=tools)
 
 
 def require(reply, label):
@@ -78,7 +78,7 @@ def tool_roundtrip(model):
 
 
 def main():
-    Engine.clear_caps_cache()
+    LLM.clear_caps_cache()
     for model in MODELS:
         basic(model)
     for model in ("deepseek-chat", "lm-gemma-4-e4b"):

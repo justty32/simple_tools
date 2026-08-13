@@ -1,7 +1,7 @@
 # 下一版 Python 互動 API
 
-> **狀態：已決定，尚未實作。** 這份記錄 2026-08-12 實際操作 Python REPL 後確定的
-> 介面方向；目前可執行的 API 仍以 [`python-repl.md`](python-repl.md) 為準。
+> **狀態：2026-08-13 已實作。** 這份記錄 2026-08-12 實際操作 Python REPL 後確定並落地的
+> 介面；操作方式見 [`python-repl.md`](python-repl.md)。
 
 ## 操作者的概念模型
 
@@ -88,15 +88,15 @@ message history 的 role 名稱仍遵循模型 API：`user`、`assistant`、`too
 
 ## 與目前 API 的概念對照
 
-這不是承諾機械式 rename；實作前仍要盤點 history ownership 與相容策略。目標概念大致是：
+實作後的概念對照如下：
 
 | 目前介面 | 下一版概念 |
 |---|---|
-| `Engine(...)` | `LLM(...)` |
+| `Engine(...)` | `LLM(...)`；`Engine` 暫留為 alias |
 | `LLM(engine, system=...)` | `Bot(llm, system=..., tools=...)` 的一部分 |
-| `assistant(model, tools, system=...)` | `Bot(LLM(...), system=..., tools=...)` |
-| `setup.session(prompt)` | `bot.start(instruction)` |
+| `assistant(model, tools, system=...)` | `Bot(LLM(...), system=..., tools=...)`；舊 helper 暫留 |
+| `setup.session(prompt)` | `bot.start(instruction)`；舊 helper 暫留 |
 | `c.wait()` | 保留 |
 
-實作時要保證：同一個 Bot 的 history 可跨先後 Round 延續，但同一個 mutable Bot 不可同時啟動
-兩個 Round；工具 schema 與 dispatch 在 `start()` 前已驗證完整。
+目前已保證：同一個 Bot 的 history 可跨先後 Round 延續，但同一個 mutable Bot 不可同時啟動
+兩個 Round；工具 schema 與 dispatch 在建構 Bot 時已驗證完整。

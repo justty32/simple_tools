@@ -5,31 +5,30 @@
 不想每次手寫 endpoint、model 和 parameters，可以直接按 id 載入：
 
 ```python
-from llms import LLM, load_preset
+from llms import Bot, load_preset
 
-bot = LLM(load_preset("lm-qwen3.5-9b"))
+bot = Bot(load_preset("lm-qwen3.5-9b"))
 ```
 
 資料只有一份 [`presets.json`](presets.json)：最外層是一個以 id 為 key 的 object，每筆
 只含 `endpoint`、`model`、`parameters`，以及可省略的 `description`。能力仍由
-`Engine` 向 proxy 查詢，不在 preset 重複維護。
+`LLM` 向 proxy 查詢，不在 preset 重複維護。
 
 包一層薄薄的殼在 openai SDK 外面，對著本機的 LiteLLM proxy 講話。
 
-一個 `LLM` instance 就是一個 **bot**：
+`LLM` 與 `Bot` 分工如下：
 
 | | 是什麼 |
 |---|---|
-| **人格** | `system`，排在每次送出的最前面，不佔歷史 |
-| **記憶** | `history`，對話記錄（含 assistant 的 tool_calls 和工具結果） |
-| **能力** | `tools`，它能開口要求哪些工具 —— 但**執行不歸它管** |
-| **引擎** | `engine`，拿什麼在想，以及那個端點做得到什麼 |
+| `LLM` | endpoint、model、生成參數與模型能力 |
+| `Bot` | system prompt、history、完整 tools schema／dispatch，以及一顆 `LLM` |
 
-bot 只會說話和開口要工具。工具誰去跑、跑出什麼，由你決定後餵回來。
+低階 `bot.ask()` 只說話和開口要工具；工具誰去跑、跑出什麼，由你決定後餵回來。
+互動用的 `bot.start()` 則把 Bot 已驗證的 dispatch 交給 agentloop。
 proxy 把 DeepSeek 雲端、遠端 Ollama、本機 LM Studio 都收成同一個 OpenAI 相容端點，
 換模型就是換一個字串。
 
-只做這件事：不做重試、不做 logging、不做 CLI。preset 只是可選的 Engine 輸入，
+只做這件事：不做重試、不做 logging、不做 CLI。preset 只是可選的 LLM 輸入，
 不承載模型知識庫或自動更新機制。
 
 串流、思考、圖片、後設這些用法在 [USAGE.md](USAGE.md)，工具和能力在 [TOOLS.md](TOOLS.md)。
@@ -43,7 +42,7 @@ proxy 把 DeepSeek 雲端、遠端 Ollama、本機 LM Studio 都收成同一個 
 ```
 
 這個 package 預設打 `http://localhost:4000`，也就是那個 proxy。要直接打別的
-OpenAI 相容端點也行，`Engine(url=..., key=...)` 換掉就是，proxy 不是必需品。
+OpenAI 相容端點也行，`LLM(url=..., key=...)` 換掉就是，proxy 不是必需品。
 
 **2. 這個 package 本身**只依賴 `openai`：
 
@@ -57,16 +56,18 @@ uv run python -m llms lm-gemma-4-e4b
 `python -m llms` 會依序試對話記憶、串流、思考、工具、後設，五關都印出來。
 第一個參數是一般模型，第二個是思考模型（預設 `deepseek-chat` / `deepseek-reasoner`）。
 
-改完 proxy 的設定要重啟它，程式這邊則呼叫 `Engine.clear_caps_cache()` 清掉能力快取
+改完 proxy 的設定要重啟它，程式這邊則呼叫 `LLM.clear_caps_cache()` 清掉能力快取
 —— 能力表是照 proxy 根位址快取的，查不到的空表也算查過，不會自動重試。
 
 ## 最小用法
 
 ```python
-from llms import LLM, Engine, Params
+from llms import Bot, LLM, Params
 
-bot = LLM(engine=Engine(model="deepseek-chat", params=Params(temperature=0.2)),
-          system="你是個惜字如金的助手")
+bot = Bot(
+    LLM(model="deepseek-chat", params=Params(temperature=0.2)),
+    system="你是個惜字如金的助手",
+)
 
 reply = bot.ask("你好")
 print(reply.text)
@@ -91,18 +92,19 @@ if not reply:
 
 `.text` 和 `.calls` 可以同時有東西 —— 模型常常一邊說「好，我查一下」一邊叫工具。
 
-### LLM / Engine
+### Bot / LLM
 
 ```python
-LLM(engine=None, system=None, tools=None)
-Engine(model="deepseek-chat", url="http://localhost:4000",
-       key=None, params=None, timeout=60, caps=None)
+Bot(llm=None, system=None, tools=None)
+LLM(model="deepseek-chat", url="http://localhost:4000",
+    key=None, params=None, timeout=60, caps=None)
 ```
 
 - `system` 不佔歷史，每次送出時才補在最前面；`reset()` 清記憶不動它
 - `bot.pending_calls` 是它要了、你還沒餵結果回去的工具呼叫（見 [TOOLS.md](TOOLS.md)）
-- `tools` 是 tool schema list（`to_schemas()` 生的），**bot 的能力，不是每次呼叫的參數**
-- 換引擎用 `bot.set_engine(Engine(...))`；只換模型直接 `bot.engine.model = "..."`
+- `tools` 接 callable、callable 集合或 `(schemas, dispatch)` bundle；名稱與執行端必須完整配對
+- 換引擎用 `bot.set_llm(LLM(...))`；只換模型直接 `bot.llm.model = "..."`
+- `bot.start(instruction)` 啟動背景 Round；同一個 mutable Bot 不允許並行 Round
 - `url` 給 base url 或整條 `/chat/completions` 都行，會自己正規化
 - `key` 沒給就吃 `OPENAI_API_KEY`，再沒有就用 `"hello"` 頂著（本機 proxy 不檢查）
 - `caps={"tools": True, "vision": False}` 可以蓋掉 proxy 回報的能力
@@ -123,8 +125,10 @@ Params(extra={"extra_body": {"chat_template_kwargs": {...}}})  # 非標準的要
 
 | 檔案 | 負責 |
 |---|---|
-| `client.py` | `LLM`：人格、記憶、能力、`ask()` |
-| `engine.py` | `Engine`：端點、模型、旋鈕、這端點做得到什麼 |
+| `client.py` | `Bot`：人格、記憶、能力、`ask()`／`start()` |
+| `engine.py` | `LLM`：端點、模型、旋鈕、這端點做得到什麼 |
+| `interactive.py` | 背景 Round 啟動與單一 active Round ownership |
+| `toolset.py` | tools schema／dispatch 的組裝與驗證 |
 | `reply.py` | `Reply`：一步的結果，串流與否都是它 |
 | `usage.py` | usage 物件 → 純 dict |
 | `toolcalls.py` | tool_calls 在 raw / history / entries 之間搬，含串流碎片的 `Accumulator` |
