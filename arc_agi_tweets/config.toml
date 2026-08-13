@@ -1,0 +1,33 @@
+[collector]
+# X API 每個 request 至少 10 筆、近期搜尋最多 100 筆。
+page_size = 25
+max_pages = 1
+min_score = 7.0
+max_curated = 100
+request_timeout_seconds = 30
+
+# 可信作者會有加權，但不會繞過內容品質門檻。
+# wolfrein 是依照原始需求保留的拼法；若實際 handle 不同，改這裡及下方 query 即可。
+trusted_authors = [
+  "fchollet",
+  "RichardSSutton",
+  "wolfrein",
+  "arcprize",
+  "GregKamradt",
+  "mikeknoop",
+]
+
+[[sources]]
+name = "arc_agi_topic"
+description = "全站 ARC-AGI 關鍵字（排除純轉推）"
+query = '("ARC-AGI" OR "ARC AGI" OR "ARC-AGI-2" OR "ARC-AGI-3" OR #ARCAGI OR "Abstraction and Reasoning Corpus") -is:retweet'
+
+[[sources]]
+name = "requested_people"
+description = "François Chollet、Richard Sutton 與需求中提供的 wolfrein"
+query = '(from:fchollet OR from:RichardSSutton OR from:wolfrein) (ARC OR AGI OR intelligence OR reasoning OR abstraction OR generalization OR learning OR benchmark) -is:retweet'
+
+[[sources]]
+name = "arc_prize_team"
+description = "ARC Prize 官方與核心團隊"
+query = '(from:arcprize OR from:GregKamradt OR from:mikeknoop) -is:retweet'

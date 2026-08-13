@@ -1,0 +1,9 @@
+[project]
+name = "arc-agi-tweets"
+version = "0.1.0"
+description = "Collect and rank high-signal ARC-AGI posts from X."
+requires-python = ">=3.11"
+dependencies = []
+
+[tool.uv]
+package = false
