@@ -61,6 +61,40 @@ bot-a/
 
 在上述問題釐清前，保留目前普通 JSON 檔案與 CLI 實作，不開始 FUSE prototype。
 
+## 檔案系統是記憶體，Step 是 CPU 指令
+
+AOS（舊筆記稱 Agent OS／AgentOS）可以沿用 Lisp machine 的直覺，把檔案系統視為可直接觀察、組合與修改的記憶體，
+把一次 Linux 行程呼叫視為 CPU 指令。endpoint 則是其中一種 executor：
+
+```text
+filesystem        記憶體；保存程式、資料與執行結果
+Task              一項工作；由一連串 Steps 組成，具有自己的 priority
+Step              一次 argv／stdin Linux 行程呼叫，具有 target queue 與 priority
+AOS manager       混合考量 Task、Step 與 executor，把 Step 派到可執行它的 queue
+Controller        被動控制面；觀察狀態並提出 pause、resume、append、stop 等要求
+```
+
+檔案空間應保持可塑性。人或 agent 可以直接編輯其中的 Function、prompt、tool spec、policy 與資料；
+修改完成後再執行，就像 Linux 中啟動程式會把一個 task 掛到 OS，由 scheduler 決定何時取得 CPU。
+這也接近 Lisp 系統能在運作中修改程式，再求值新定義的使用方式。
+
+低階介面仍可允許呼叫者繞過 AOS，直接呼叫 Function／endpoint。這對 REPL、除錯或 bootstrap 很有用，
+但不應成為一般 Task 的預設執行模式。正常路徑應更被動：Task 描述「要做什麼」，Controller
+只提交控制要求，真正的 Step 執行權集中在 AOS manager。如此可由同一處處理：
+
+- 不同 Task／Step 對 endpoint、Linux runner 與其他 executors 的競爭與公平性；
+- model、token、context、timeout 與其他資源預算；
+- pause、stop、priority、retry 與安全邊界；
+- task 的 durable 狀態、結果提交與 crash recovery；
+- 日後由 Python worker 遷移到中央 C++／Janet runtime，而不改變檔案介面。
+
+這裡的「中央」表示排程決策有單一權威，不等於所有工作都要由一條常駐 thread 執行，也不要求第一版
+立刻完成全域 scheduler。第一版仍可用按需啟動的 process 實作 manager；重要的是所有正常執行都經過同一個
+提交與排程接縫，而不是讓每個 Bot 各自直接呼叫 Function、各自形成不可協調的 loop。
+
+Bot 目錄的早期構想見 [`PROCESS-NOTES.md`](PROCESS-NOTES.md)；現行 Task／Step 模型與 Linux 邊界見
+[`AOS-ARCHITECTURE.md`](AOS-ARCHITECTURE.md)。
+
 ## Bot 目錄是一個物件
 
 預期安裝與使用方式：

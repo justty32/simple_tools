@@ -1,11 +1,18 @@
-# Agent Machine
+# AOS（原 Agent Machine）
 
-Agent Machine 的獨立、Linux-only 實作。Python 先固定行為，之後再以 C++／Janet 實作同一份契約。
+這個目錄保存 AOS 的設計與舊 Agent Machine prototype。
 
-> **目前程式只是第一個離線 prototype。** 它仍使用 `show`、`resume` 與 Run path，不是最新操作介面。
-> 先看給使用者把關的 [`DESIGN.md`](DESIGN.md)；完整方向見 [`INTERFACE.md`](INTERFACE.md)，精確指令行為見 [`COMMANDS.md`](COMMANDS.md)，
-> 使用情境見 [`SCENARIOS.md`](SCENARIOS.md)，exec tool 格式見 [`EXEC.md`](EXEC.md)。在下一輪實作前，
-> 不把下方舊命令當成正式契約。
+> **目前主線仍是提案，尚未實作。** 先看 [`AOS-ARCHITECTURE.md`](AOS-ARCHITECTURE.md) 的 Task／Step
+> 模型與 Linux 邊界、[`AOS-SCHEDULING.md`](AOS-SCHEDULING.md) 的 queue／executor 排程，再看
+> [`AOS-V0.md`](AOS-V0.md) 的第一版功能。AOS 完成後，agent loop 如何建立在其上
+> 見 [`AGENTLOOP-ON-AOS.md`](AGENTLOOP-ON-AOS.md)；工作目錄與狀態目錄的放法見
+> [`AOS-INTEGRATION.md`](AOS-INTEGRATION.md)。
+>
+> 現有 Python 程式仍是第一個離線 prototype，使用 `agent-machine`、Run path、`show` 與 `resume`。
+> `DESIGN.md`、`INTERFACE.md`、`COMMANDS.md` 等文件描述更早的 AgentOS 介面，只保留作為研究材料，
+> 不再決定下一輪實作。
+
+## 舊 prototype
 
 檔案、目錄與 path 直接使用 Linux filesystem，不另外實作記憶體 VFS 或 host filesystem wrapper。
 Python 使用 `os`；C++ 使用 `<filesystem>` 與 `<fstream>`。
