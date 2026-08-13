@@ -13,6 +13,8 @@
 - [`NOTES-llmkit.md`](llmkit.md)：llmkit 定型前的 Reply、stream、caps 與 endpoint 經驗。
 - [`Python 互動 API`](python-interaction-api.md)：Bot／LLM 分工、Round ownership、換模型慣例與
   公司 Ollama live 驗收。
+- [`Agent Machine`](agent-machine.md)：以現代計算機、Plan 9 與 Lisp machine 為靈感的
+  agent runtime／OS 抽象構想。
 
 ## 2026-08-10 modelcards 退場：preset 只保留執行所需資料
 
