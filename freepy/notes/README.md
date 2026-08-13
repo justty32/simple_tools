@@ -11,6 +11,8 @@
 - [`NOTES-tooling.md`](tooling.md)：base_tools／tooljson 的邊界、四層路線與 llmkit 成形。
 - [`NOTES-modelcards.md`](archive/modelcards.md)：已退場 modelcards 的設計背景與實測反證。
 - [`NOTES-llmkit.md`](llmkit.md)：llmkit 定型前的 Reply、stream、caps 與 endpoint 經驗。
+- [`Python 互動 API`](python-interaction-api.md)：Bot／LLM 分工、Round ownership、換模型慣例與
+  公司 Ollama live 驗收。
 
 ## 2026-08-10 modelcards 退場：preset 只保留執行所需資料
 
