@@ -1,0 +1,26 @@
+{
+  "admit": {
+    "type": "admission",
+    "decision": "accept",
+    "executable": "C:/Program Files/tool.exe",
+    "argv": ["", "has spaces", "$(still-data)", "semi;colon"],
+    "cwd": "C:/work",
+    "stdin_size": 0,
+    "limits": {"wall_ms": 1000, "stdout_max": 1024, "stderr_max": 1024},
+    "memory_mode": "checked"
+  },
+  "audit_receipt": {
+    "type": "receipt-audit",
+    "decision": "accept",
+    "classification": "complete-receipt",
+    "termination": {"kind": "exited", "exit_status": 0},
+    "stdout": {"size": 0, "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"},
+    "stderr": {"size": 12, "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"}
+  },
+  "outcome_unknown": {
+    "type": "receipt-audit",
+    "decision": "accept",
+    "classification": "outcome-unknown",
+    "reason": "agent stopped before observation"
+  }
+}
