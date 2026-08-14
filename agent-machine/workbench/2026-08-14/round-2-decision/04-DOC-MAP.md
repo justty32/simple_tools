@@ -68,13 +68,13 @@ options/
 
 ## 現行文件的處理清單
 
-- [`AOS-ARCHITECTURE.md`](../../../AOS-ARCHITECTURE.md)：移除`Function = process call`等舊等式；先保留使用者核心，再把Call identity／Receipt／registry標成P1候選。
-- [`AOS-SCHEDULING.md`](../../../AOS-SCHEDULING.md)：比較accepted/eligible與agent serialization方案；不得把capacity 1寫成使用者已定。
-- [`AOS-V0.md`](../../../AOS-V0.md)：採 P0、P1a、P1b、P1c、P2 milestones；P1 prototype 不取消 central Runtime 終點。
-- [`AOS-INTEGRATION.md`](../../../AOS-INTEGRATION.md)：寫 agent root 的 stateful Definition/path identity/capacity；portable truth 等 P1c。
-- [`AGENTLOOP-ON-AOS.md`](../../../AGENTLOOP-ON-AOS.md)：Step/Tool/Round 是 Agent roles；一次 prompt 可直接是 Round Task，不強加 Agent Task 外殼。
-- [`TOOL_SPEC.md`](../../../TOOL_SPEC.md)：保留 no-shell、strict mapping、call/result pairing；對齊 [`05-TOOL-BRIDGE.md`](05-TOOL-BRIDGE.md) 的 Return/Receipt terminology。
-- [`RUNTIME.md`](../../../RUNTIME.md)／[`RECOVERY.md`](../../../RECOVERY.md)：抽 durability 經驗；P0 unknown artifact 不提升為 Receipt，process kill 不提升為 power-loss guarantee。
+- [`AOS-ARCHITECTURE.md`](../../../archived/2026-08-13-snapshot/AOS-ARCHITECTURE.md)：移除`Function = process call`等舊等式；先保留使用者核心，再把Call identity／Receipt／registry標成P1候選。
+- [`AOS-SCHEDULING.md`](../../../archived/2026-08-13-snapshot/AOS-SCHEDULING.md)：比較accepted/eligible與agent serialization方案；不得把capacity 1寫成使用者已定。
+- [`AOS-V0.md`](../../../archived/2026-08-13-snapshot/AOS-V0.md)：採 P0、P1a、P1b、P1c、P2 milestones；P1 prototype 不取消 central Runtime 終點。
+- [`AOS-INTEGRATION.md`](../../../archived/2026-08-13-snapshot/AOS-INTEGRATION.md)：寫 agent root 的 stateful Definition/path identity/capacity；portable truth 等 P1c。
+- [`AGENTLOOP-ON-AOS.md`](../../../archived/2026-08-13-snapshot/AGENTLOOP-ON-AOS.md)：Step/Tool/Round 是 Agent roles；一次 prompt 可直接是 Round Task，不強加 Agent Task 外殼。
+- [`TOOL_SPEC.md`](../../../archived/2026-08-13-snapshot/TOOL_SPEC.md)：保留 no-shell、strict mapping、call/result pairing；對齊 [`05-TOOL-BRIDGE.md`](05-TOOL-BRIDGE.md) 的 Return/Receipt terminology。
+- [`RUNTIME.md`](../../../archived/2026-08-13-snapshot/RUNTIME.md)／[`RECOVERY.md`](../../../archived/2026-08-13-snapshot/RECOVERY.md)：抽 durability 經驗；P0 unknown artifact 不提升為 Receipt，process kill 不提升為 power-loss guarantee。
 - [`README.md`](../../../README.md)：最後更新導航，避免讀者進入半套主線。
 
 ## 提升門檻

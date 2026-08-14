@@ -1,7 +1,0 @@
-{
-  "case": "unknown",
-  "parent_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-  "plan": ["first", "second"],
-  "unknown_slot": "first",
-  "version": 1
-}

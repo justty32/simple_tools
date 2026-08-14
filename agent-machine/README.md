@@ -1,18 +1,33 @@
 # AOS（原 Agent Machine）
 
-這個目錄保存 AOS 的設計與舊 Agent Machine prototype。
+這個目錄保存 AOS 的設計、實驗與舊 Agent Machine prototype。
 
-> **目前主線仍是提案，尚未實作。** 先看 [`AOS-ARCHITECTURE.md`](AOS-ARCHITECTURE.md) 的 Task／Step
-> 模型與 Linux 邊界、[`AOS-SCHEDULING.md`](AOS-SCHEDULING.md) 的 queue／executor 排程，再看
-> [`AOS-V0.md`](AOS-V0.md) 的第一版功能。AOS 完成後，agent loop 如何建立在其上
-> 見 [`AGENTLOOP-ON-AOS.md`](AGENTLOOP-ON-AOS.md)；工作目錄與狀態目錄的放法見
-> [`AOS-INTEGRATION.md`](AOS-INTEGRATION.md)。
->
-> 現有 Python 程式仍是第一個離線 prototype，使用 `agent-machine`、Run path、`show` 與 `resume`。
-> `DESIGN.md`、`INTERFACE.md`、`COMMANDS.md` 等文件描述更早的 AgentOS 介面，只保留作為研究材料，
-> 不再決定下一輪實作。
+> **主線仍是設計提案，尚未實作。** 現行完整設計在 [`full/`](full/README.md)；根層不再放設計文件。
+> 2026-08-13 那一代的 23 份根層 Markdown 已整批封存於
+> [`archived/2026-08-13-snapshot/`](archived/2026-08-13-snapshot/README.md)，逐 byte 保存，不再是主線。
+
+## 目錄地圖
+
+| 目錄 | 內容 | 地位 |
+|---|---|---|
+| [`full/`](full/README.md) | AOS 完整設計 `00`–`13` 與 [`options/`](full/options/README.md) 待選方案 | 現行主線設計 |
+| [`workbench/`](workbench/README.md) | 每日實驗工作區；[2026-08-14 回合](workbench/2026-08-14/README.md)有 P0／P1 原型與證據 | 暫存，非正式規格 |
+| [`wait_user/`](wait_user/README.md) | 給使用者有空再看的想法小卡 | 徵詢中，不阻塞 |
+| [`archived/`](archived/README.md) | 被取代但仍有追溯價值的舊文件 | 只供追溯，沒有權威 |
+| `agent_machine/` | 舊離線 prototype 的 Python 程式 | 已實作，範圍很窄 |
+
+## 權威順序
+
+1. **產品方向與用詞**：使用者較新的明確決定最高；[`full/00-STATUS-AND-SOURCES.md`](full/00-STATUS-AND-SOURCES.md) 收斂共同邊界。
+2. **目前已實作行為**：實際程式與 `python3 -m agent_machine._checks` 為準。
+3. **完整設計內部**：`full/` 各主題頁依 00 的狀態標記解讀。
+4. **尚未裁決的選擇**：以 [`full/options/README.md`](full/options/README.md) 為準；它們不是承諾。
+5. **研究與過程**：`workbench/` 提供實驗證據與決策脈絡，但不是正式 ABI（跨語言固定介面）。
+6. **歷史**：`archived/` 只供追溯，不得用來覆蓋現行設計、程式或測試。
 
 ## 舊 prototype
+
+以下描述的是既有 Python 程式，不是 `full/` 的設計目標；兩者的 Function、Step 詞義並不相同。
 
 檔案、目錄與 path 直接使用 Linux filesystem，不另外實作記憶體 VFS 或 host filesystem wrapper。
 Python 使用 `os`；C++ 使用 `<filesystem>` 與 `<fstream>`。
