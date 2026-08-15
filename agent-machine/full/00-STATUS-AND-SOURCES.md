@@ -37,6 +37,7 @@
 - P1 原型在接受時配置固定 Task ID，讓同一 ID 暫時貫穿 queued／running／paused／completed 記錄；每次 process 啟動只是 Task 內的一次 attempt。這是保存模型，不是使用者對 Task 的完整定義。
 - P1 暫用 immutable Call、Task-local Call、parent events、Receipt 與 single writer；其 `<store>`、JSON、hash、ID 與容量都不是產品 schema。
 - process 原型用 absolute executable path 加 SHA-256 表示 leaf generation；不可外推到其他 Function。
+- P1a-2 已有一個真 process 接入 Receipt／composite tree 的窄切片，驗到完整 raw 重開補提交、after-spawn 不重跑與矛盾時停止。完整 Phase 2 的中斷、已知失敗與 golden 證據仍未齊；精確界線見[證據頁](../wait_user/2026-08-14-deep-dive-04-evidence.md)。
 
 ### 尚未決定
 

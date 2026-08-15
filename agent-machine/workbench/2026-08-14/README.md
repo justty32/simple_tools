@@ -1,92 +1,76 @@
-# 2026-08-14 收尾導覽
+# 2026-08-14 工作台收尾
 
-這是明天接手用的工作台交接，不是正式規格。今天重點是留下實測證據，並分開「已決定」與「暫時採用」。
+本目錄保存這一回合的設計決定、可執行原型與故障證據，不是正式 AOS ABI。後續由使用者親手開始 C++ 實作；開工入口見 [`../../START-HERE.md`](../../START-HERE.md)。
 
-## 3 分鐘摘要
+## 收尾結論
 
-- AOS 的方向是：Function 像 CPU 指令、檔案系統像記憶體。Linux process 是最底層的一種 Function，不是唯一形式。
-- 使用者稱正在執行的 Function 實例為 Task。本輪原型為了保存，暫用固定 ID 貫穿排隊、執行與完成；這只是暫選，Task 不是 PID。
-- agent 的絕對資料夾是它的 ID 與地盤。同一地盤預設不要同時有兩份可寫工作。
-- agent 忙碌時，普通新呼叫直接拒絕且不建立 Task；追加內容與建立排隊工作是使用者明確選擇的另外兩條路。
-- P0 已驗單一 Linux process 邊界；P1 已驗部分 Task 保存與重啟讀回。兩者都不是完整 AOS，也未證明斷電、多台機器或多人同寫。
+- AOS 的核心比喻是「Function 像 CPU 指令，filesystem 像記憶體」。Linux process 是 leaf Function 的通用形式，不是所有 Function 的定義。
+- 使用者稱正在執行的 Function 實例為 Task；Task 不是 PID。工作台暫用固定 Task ID 貫穿保存紀錄，每次 process 啟動只是其中一次 attempt（嘗試）。
+- 沒有可信完整結果時必須停在 unknown／repair，不可因重開而自動再送可能已有副作用的工作。
+- parent／child relation、Task events 與 Task Receipt 由 Runtime authority 寫入；process adapter 只產生原始執行證據。
+- Agent root 的實際絕對 path 是它的 ID 與地盤；普通忙碌呼叫拒絕且不建 Task，追加與排隊必須明確選擇。
 
-明天的總入口是[下一輪決策包](round-2-decision/README.md)。
+產品方向與原型暫選的完整分界見[決定表](round-2-decision/01-DECISIONS.md)與 [`full/00`](../../full/00-STATUS-AND-SOURCES.md)。
 
-## 用 C++ 工程師熟悉的類比理解 AOS
+## 原型證據
 
-把 AOS 想成 Linux 與上層工作之間的小型 job runtime：不只啟動程式，也保存「準備做什麼、是否已開始、結果是否可信」。
+| 切片 | 已證明的窄範圍 | 不可外推 |
+|---|---|---|
+| [P0 Python](p0-function-python/README.md) | no-shell argv、raw streams、termination、部分 unknown 不重跑 | Task Receipt、scheduler、正式 ABI |
+| [P0 C++23](p0-function-cpp/README.md) | `fork/execve`、nonblocking pipes、`poll`、exit／signal／launch error | durable writer、timeout、正式 schema |
+| [P0 Janet](p0-function-janet/README.md) | 純資料 policy 與建議 | Linux process、正式提交權 |
+| [P1a-1 v2](p1a-task-tree-python-v2/README.md) | Task-local Call、parent relation、fake child recovery | root acceptance、真 process |
+| P1a-2 Phase 1 | root registry、accept／recover 與重開穩定性 | child relation、真 process |
+| P1a-2A | root → first → second 的兩個 fake child、保存順序與中斷恢復 | process attempt、Agent、scheduler |
+| [P1a-2 Phase 2](p1a2-process-python/README.md) | 第一個 child 真正啟動一次 process、唯讀 binder、Receipt commit、完整證據補提交、不完整證據不重跑、主要矛盾停止 | 完整 crash matrix、正式 C++ Runtime |
 
-- **AOS Machine**：管理程式與其所在機器；重開時先看留下的記錄。
-- **Function**：可重複呼叫的工作定義，像函式或 build target；可從執行檔長成資料夾模組、Step 或 Round。
-- **Task**：使用者稱「正在執行的實例」為 Task。本輪為保存而暫用固定 ID 貫穿排隊、執行與完成；某次 process 啟動只是內部一次嘗試，這不是正式定義。
-- **Agent root**：agent 自己的 repo 根目錄；同時寫會有覆蓋與 Git 互踩風險。
+## Phase 2 停止位置
 
-這不是既定 C++ API 或命令列。使用者偏好 shell 內操作，但最後介面仍待比較。
+P1a-2 Phase 2 的**本輪窄切片已結束**。目前工作台全套是 **74/74 tests**，其中 16 項直接涵蓋 process 路徑；精確命令、測試名稱與結果以 [P1a-2 工作台 README](p1a2-process-python/README.md)為準。
 
-## 今天真正已定 vs 原型暫選
+目前流程是：
 
-### 使用者已定
+```text
+root Task
+  first -> process leaf -> attempt-1 -> 一個 P0 invocation
+  second -> deterministic fake leaf
+```
 
-- AOS 的名稱與核心比喻；AOS 要處理自己的保存與重開。
-- 資料夾可承載 Function；Function 可呼叫 Function；Step、Round 都是 Function。
-- 使用者稱正在執行的 Function 實例為 Task；未指定它是否涵蓋排隊或完成後紀錄。
-- agent root 絕對路徑是 ID 與地盤；預設避免同 root 多個可寫實例。
-- 偏好 `.aos`，agent root 應能進 Git；保存位置與內容仍未定。
+已驗到 `dispatch_intent` 先於 process effect；完整 raw evidence 可在不增加 P0 UUID 與副作用次數的前提下補出相同 Receipt；after-spawn 中斷留下不完整證據時停在 repair；request／stream／UUID／目錄形狀矛盾則視為 corruption，不能用 repair 洗掉。非法的 `accepted → dispatch_intent → repair_required(generation)` 歷史也會被拒絕，因為 generation repair 必須發生在 dispatch intent 之前。
 
-來源見[使用者方向](idea-ledger/USER-DECISIONS.md)。
+仍未完整驗證：
 
-### 為實驗暫選
+- P0 三個 hook 的完整 failpoint 矩陣。
+- 十段 root failpoint 的 Phase 2 串接。
+- 已知的 nonzero、signal 與 spawn error 經 leaf Receipt 到 parent observation 的完整案例。
+- process golden bytes 與完整跨實作差分。
+- producer-side bounded allocation；現有 Python P0 `communicate()` 仍可能先配置超過 binder 上限的資料。
+- live process 重接、舊 worker fencing、斷電、多 writer、NFS、TOCTOU、正式 scheduler、Agent 與 common Return ABI。
 
-本輪為保存而暫用「接受時配置固定 Task ID；每次 process 執行只是內部嘗試」。沒有可信完整結果就標成結果不明，不偷偷重跑。這不是正式承諾；保存期限與結果形式仍待選，見[本輪決定表](round-2-decision/01-DECISIONS.md)與[未決問題](round-2-decision/02-OPEN-OPTIONS.md)。
+所以「本輪 Phase 2 結束」只表示這個窄切片已到停止線，不表示 [`07-P1A2-PROCESS-SEAM.md`](round-2-decision/07-P1A2-PROCESS-SEAM.md) 的所有候選測試或完整 AOS 已完成。
 
-## agent 忙碌的三條路與同 root 風險
+## 重跑方式
 
-1. **普通新呼叫**：root 忙就拒絕；零 Task、零工作目錄、零偷偷排隊。
-2. **明確追加**：不建第二個 Task，而是交給目前工作在下一個合適邊界取用；邊界細節還需原型。
-3. **明確建立排隊 Task**：建立固定 ID，並寫明目前工作到什麼狀況後才能開始。
+從 repository root 執行：
 
-排隊工作不能只看前一個 Task；還要確認 root 是否可安全寫入，兩項都成立後才可啟動。父工作叫同 root 子工作時，子工作不能重新等待 root，否則會自己卡死；目前候選是同一棵呼叫樹共用可寫資格。
+```sh
+cd agent-machine/workbench/2026-08-14/p1a2-process-python
+PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -v
+```
 
-並行有三案：**完全序列化**（第一版基準，一棵可寫工作樹獨佔 root）、**受限並行**（可同時計算，但一次只發布一個）、**私有工作區**（各改副本再依序發布，外部影響無法倒回）。後兩案不急著實作。[取捨紀錄](idea-ledger/OPUS-03-TRIAGE.md)
+測試 helper 會在 Linux `/tmp` 建立 store。Windows 上應從 WSL 執行；source 可位於 `/mnt/c`，但 store 與 filesystem crash tests 不可放在 `/mnt/c`。
 
-## P0、P1 證了什麼，沒證什麼
+## 交給 C++ 的邊界
 
-**P0** 聚焦單一 Linux process。Python 與 C++ 都驗到：不經 shell 拼字串時，參數、輸入、兩條輸出與結束原因可分開取得；兩條輸出管須同時處理。Python 另驗到：已記下要執行卻沒有可信結果時，重開不自動再跑。[Python](p0-function-python/README.md)／[C++](p0-function-cpp/README.md)
+Python 在這裡是**可執行參考模型**，不是 C++ ABI 或架構。第一個 C++ 落點是 process evidence producer：管理 argv、raw streams、fd、signal、process lifecycle、硬上限與原始證據；先保留 Python Runtime／binder 作 oracle，使用同一批 fixtures 做差分。
 
-P0 不證明斷電後資料完整、資源限制、環境可重現、跨檔案系統，或 Task/Agent 的完整行為。
+C++ 第一片不要同時取得 Task relation、events 或 Receipt 的寫入權，也不要順便加入 Agent、Git、Janet、跨機或完整 scheduler。等 process evidence 在 success、known failure、unknown 與 corruption 上都能穩定對齊，再決定下一個 durable seam。
 
-**P1a-1 v2** 用假的 leaf 執行器驗到：Task 自存自己的 Call；父子關係可另外保存；已知結果重開後只補齊紀錄，結果不明不重做。[說明](p1a-task-tree-python-v2/README.md)
+## 文件地圖
 
-**P1a-2 第一階段**獨立重跑 47 項測試各 4 次，共 188 次。它只驗最上層工作被接受並保存後，重開入口讀回的結果相同；尚未執行 child 或真 process。[三分鐘示範](p1a2-phase1-demo/README.md)
-
-**P1a-2A 的兩個假 child 串接已通過最終 gate**：WSL 全套 58/58 綠。它驗到 `sequence_two_fake` 的內容與引用逐 byte 一致、root → first → second 的 13 份關鍵記錄、23 個組合式中斷點加 10 個 root 中斷點後可穩定重開；也驗了容量、同名暫存碰撞、來源封閉與竄改反例。這只支持 single writer 的假 child 保存順序；仍無真 process、Agent 或 scheduler。[原型路線](round-2-decision/03-PROTOTYPES.md)
-
-Janet 小實驗支持它做無副作用的資料檢查與建議；啟動 process、重新檢查資料、寫下會影響正式狀態的內容仍留給 C++／Runtime。它尚未在 Linux 跑過。[說明](p0-function-janet/README.md)
-
-## Opus：採用與駁回
-
-Opus 認可固定 Task ID、結果不明不自動重做、C++ 守住會改正式狀態的邊界，以及父子工作共用可寫資格以避免自我卡死。它原本建議普通呼叫預設排隊，但使用者後來明確覆蓋：今天採普通呼叫拒絕、明確追加、明確排隊三條路；Opus 的補充也接受此修正。
-
-它建議暫不投入雙 ID 比較、四種 C++/Janet 接法等量實驗、SQLite、跨機器與路徑搬移，先驗最小保存與並行反例。[原始審查](opus-monitor/OPUS-REVIEW-03.md)／[補充](opus-monitor/OPUS-ADDENDUM-03.md)
-
-## 為何今天不急寫正式規格
-
-Task 保存、Step 邊界、資料夾 Function 入口、`.aos` 可攜內容與跨機接手都還會改變設計。今天先以 Python 找反例、C++ 固化 Linux process 邊界、Janet 只做純資料建議；有證據且不違反使用者方向的部分才進正式文件。
-
-## 明天可執行的順序
-
-1. 凍結 P1a-2A 的 58/58 證據邊界；只寫它實際驗過的假 child 保存順序。
-2. 依[原型路線](round-2-decision/03-PROTOTYPES.md)只做下一小片：把一個假的 child 換成 P0 真 process 證據；不要同時加 Agent、Git、跨機或完整排程。
-3. 做忙碌的四步小原型：分開拒絕與排隊、驗父子不自我卡死、驗 root 內可見狀態安全更新、驗兩次檢查與重開。
-4. 每片完成後更新「已定／暫選／待選」的證據邊界；不把程式暫定名稱直接搬進正式規格。
-5. 使用者有空才看[待回覆小卡](../../wait_user/README.md)；不回覆不阻塞工作。
-
-## 約 30 分鐘閱讀路線
-
-**5 分鐘**：讀本頁摘要與「今天真正已定」，先分清產品方向和原型選擇。
-
-**10 分鐘**：讀[決策包](round-2-decision/README.md)、[決定表](round-2-decision/01-DECISIONS.md)與[未決問題](round-2-decision/02-OPEN-OPTIONS.md)，理解下一輪只驗哪些窄問題。
-
-**10 分鐘**：讀[P0 Python](p0-function-python/README.md)、[P0 C++](p0-function-cpp/README.md)、[P1a-1 v2](p1a-task-tree-python-v2/README.md)；先看各自的證據邊界，不必逐行看程式。
-
-**5 分鐘**：讀[Opus 取捨](idea-ledger/OPUS-03-TRIAGE.md)與[忙碌補充](opus-monitor/OPUS-ADDENDUM-03.md)。讀完應能回答：AOS 解什麼問題、哪些結論有測試、哪些仍是候選、明天為何先做小原型。
+- [下一輪決策包](round-2-decision/README.md)：使用者方向、暫選與詳細工作契約。
+- [Function／Task authority](round-2-decision/06-FUNCTION-TASK-MODEL.md)：relation、accept、recover 與 single-writer 規則。
+- [Process seam](round-2-decision/07-P1A2-PROCESS-SEAM.md)：attempt、P0 evidence、binder 與 Receipt 邊界。
+- [Exact formats](round-2-decision/08-P1A2-FORMATS.md)：只供工作台互通，不是產品 schema。
+- [完整設計](../../full/README.md)：Function 到 Agent 的長期主線。
+- [繁中濃縮包](../../wait_user/README.md)：核心模型、恢復、排程與 options 的短讀版。

@@ -1,8 +1,12 @@
 # AOS 完整設計導覽
 
+第一次接手請先看 [`START-HERE.md`](../START-HERE.md)。本目錄保留各主題的完整設計與狀態邊界。
+
 `full/` 是 AOS 的完整設計稿：它描述系統由 Function 到 Agent 的整體目標、邊界與安全規則。**完整設計不等於全部已實作**；目前只有少數 process 與保存切片有原型證據。每個結論都要保留狀態，不得把推薦、原型格式或待選方案寫成既成事實。
 
 想先知道「現在真的跑得動什麼」，仍要看程式、測試與相鄰 README；本套回答的是「AOS 要成為什麼，以及各部分如何接起來」。
+
+目前已驗到第一個真 Linux process 接入 Task Receipt 與 composite tree 的窄路徑，但這不是完整 P1a-2 Phase 2。精確證據與剩餘缺口集中在 [`wait_user` 證據頁](../wait_user/2026-08-14-deep-dive-04-evidence.md)。
 
 ## 權威順序
 

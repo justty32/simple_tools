@@ -52,7 +52,7 @@ Call
   -> Tool Result
 ```
 
-P0 名為 receipt 的檔案仍只是 process evidence。P1a-2 strict reader比對 request executable/argv/stdin/cwd、raw streams與 termination；P0未保存 actual env，只能驗 Call policy是 inherit。Task Receipt以 content-addressed payload＋`receipt_committed` event綁 Task/Call/attempt/P0 invocation/evidence。詳見 [`07`](07-P1A2-PROCESS-SEAM.md)。
+P0 名為 receipt 的檔案仍只是 process evidence。P1a-2 strict reader比對 request executable/argv/stdin/cwd、raw streams與 termination；P0未保存 actual env，只能驗 Call policy是 inherit。Task Receipt以 content-addressed payload＋`receipt_committed` event綁 Task/Call/attempt/P0 invocation/evidence。詳見 [`07`](07-P1A2-PROCESS-SEAM.md)。目前只有 `sequence_two` first process／second fake 的 Python 窄切片證據；完整 process failpoint matrix、Agent Tool binding與 common ABI 都還未驗。精確界線見 [`Phase 2 證據帳`](../p1a2-process-python/PHASE2-EVIDENCE.md)。
 
 ## 三種 leaf adapter
 
@@ -81,7 +81,7 @@ Task Receipt 記錄「哪個 Task 基於哪些 evidence/children 得到哪個 Re
 
 - Agent Tool catalog 保存模型可見 schema/binding generation並指向 callable Definition path；不是 Machine central registry。
 - 每次模型請求前凍結 visible generation，回來的 Tool Call 按該版驗證。
-- **P1a-2 待驗：**只為first process leaf，在child plan前解析absolute executable並以content SHA-256作generation。
+- **P1a-2 已驗窄切片：**first process leaf 會在 child plan 前解析 absolute executable，並以 content SHA-256 作 generation；完整矩陣仍見[證據帳](../p1a2-process-python/PHASE2-EVIDENCE.md)。
 - dispatch 前 generation mismatch 即 `repair_required`、dispatch count `0`、無 intent；不重新 resolve。這不 snapshot dependency/tree，也不承諾 TOCTOU。
 
 ## Human 與 machine surface

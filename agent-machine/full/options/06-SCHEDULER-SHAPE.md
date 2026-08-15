@@ -1,6 +1,6 @@
 # Scheduler 的形狀選項
 
-狀態：**尚未決定**。主線已要求中央 AOS 對 active set、root 寫入資格與 claim 負責，但沒有決定它是一個常駐 daemon、按需 process，或如何拆 executor。現有 P1 只有 fake child 的 single-writer 保存順序，沒有真 scheduler 證據。
+狀態：**尚未決定**。主線已要求中央 AOS 對 active set、root 寫入資格與 claim 負責，但沒有決定它是一個常駐 daemon、按需 process，或如何拆 executor。P1 已有第一個真 process 接入 Receipt／composite tree 的窄切片，仍沒有 queue、claim 競爭、跨 root 容量或真 scheduler 證據；詳見[證據頁](../../wait_user/2026-08-14-deep-dive-04-evidence.md)。
 
 不論採哪案，都要保留[排程主線](../08-SCHEDULING-AND-EXECUTION.md)的兩道關卡：開始條件成立，只表示 Task 可以競爭；中央原子取得 root／資源資格後，才可持久寫入 dispatch intent 並造成外部作用。
 

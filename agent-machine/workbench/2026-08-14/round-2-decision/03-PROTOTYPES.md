@@ -9,8 +9,8 @@
 | P0 process adapter | 已有 Python/C++ staging evidence | Task Receipt、composite、Agent |
 | P1a-1 v2 | 已驗 Task-local Call與 child relation/replay | root registry、B1 re-stage、真 process |
 | P1a-2 Phase 1（root accept/recover） | 已通過獨立 audit；僅驗 root registry／accept／recover（47 tests × 4 runs = 188 executions） | child relation、process、C++、CAS |
-| P1a-2A（composite fake） | 待驗候選：從已接受 root Call 長出兩個 fake child，再驗 recovery | process、dispatch、attempt、P0、effect、Agent |
-| P1a-2 Phase 2（process seam） | 待驗候選：只換 `first` 為 P0 process | 多process、common ABI、Agent |
+| P1a-2A（composite fake） | 已通過最終驗收：WSL `/tmp` 全套 58/58；兩個不啟動程式的假 child 保存／恢復 | process、dispatch、attempt、P0、effect、Agent、scheduler |
+| P1a-2 Phase 2（process seam） | 已驗窄切片：`first` 為一個 P0 process、`second` 為 fake；全工作台 74/74，其中 process tests 16 | 完整 crash matrix、common ABI、Agent |
 | P1b | mock Agent Round 的 Step/Tool/pause | Git、PATH、真 LLM |
 | P1c | agent root UX／portability | 中央公平排程、跨機 |
 | P2 | central Runtime 具體形狀 | network service／sync |
@@ -46,15 +46,19 @@ sequence-two root Task
 
 現有 v2 **沒有** durable root registry；root由固定 ID的 `initialize()`建立。它也未驗 pre-planned definition改變：既有不同 staged bytes會 corruption。故 B1/B2是 Opus准入條件，須在接 process前完成；B4只有 orphan不 dispatch獲得證據，GC規則仍是文件契約。另有 full replay成本與 `lstat`非 TOCTOU限制。
 
-證據：[`v2 README`](../p1a-task-tree-python-v2/README.md)、[`NOTES`](../p1a-task-tree-python-v2/NOTES.md)、[`Opus review`](../opus-p1a-review/OPUS-REVIEW.md)。前兩份是 review前記錄，仍寫「等待 Opus」。
+證據：[`v2 README`](../p1a-task-tree-python-v2/README.md)、[`NOTES`](../p1a-task-tree-python-v2/NOTES.md)、[`Opus review`](../opus-p1a-review/OPUS-REVIEW.md)。README 已改成歷史前置證據；NOTES 保留當時研究語境。
 
 ## P1a-2A：先補 composite fake
 
-在接 P0 前，先以新的 `sequence_two_fake` 驗「root registry → two fake children → root Receipt」的持久順序。它不改既有 `sequence_two`，也不替 first 假造 process 成功；規格／格式分見 [`09`](09-P1A2-COMPOSITE-FAKE.md)／[`10`](10-P1A2-COMPOSITE-FAKE-FORMATS.md)。
+新的 `sequence_two_fake` 已通過最終驗收：在 WSL Ubuntu、Linux `/tmp` 工作目錄執行全套 **58/58**。它的兩個假 child 都只回傳固定資料、不啟動程式。測試確認「root registry → two fake children → root Receipt」的持久順序、10 個 root 與 23 個 composite 中斷切點後的穩定恢復；也確認恢復只讀已凍結的 root Call，以及容量邊界、暫存碰撞、孤兒不可自行進入 Task tree、已提交資料遭竄改時停止。收尾摘要見[當日工作台入口](../README.md)。
 
-## P1a-2 Phase 2：候選的單一 P0 case
+這項證據只適用於同一 Linux 檔案系統、單一寫入者，以及以終止行程／故障切點模擬中斷的工作台。它不改既有 `sequence_two`，不把假的 first 當成 process 成功，也沒有驗真 process、P0 執行嘗試與證據、Agent 或正式排程器；格式仍是工作台格式，不能提升為正式 ABI。規格／格式分見 [`09`](09-P1A2-COMPOSITE-FAKE.md)／[`10`](10-P1A2-COMPOSITE-FAKE-FORMATS.md)。
 
-Phase 1 已通過獨立 audit，但只驗 root registry／accept／recover；未進入 child relation 或 process execution。以下是 Phase 2 的待驗候選規格，見 [`07-P1A2-PROCESS-SEAM.md`](07-P1A2-PROCESS-SEAM.md)，再只接 process：
+## P1a-2 Phase 2：單一 P0 case 的窄證據
+
+現有 Python 工作台已有一條受控路徑：frozen root recipe → first 的一個 P0 invocation → strict binder → Receipt → second fake → composite Receipt；也驗 after-spawn side effect、不完整 repair、frozen recipe 與若干 fail-closed 反例。精確測試數、已驗邊界與未驗矩陣只有 [`Phase 2 證據帳`](../p1a2-process-python/PHASE2-EVIDENCE.md) 為準。
+
+下列仍是目標工作契約，**不是宣稱已完整驗收的矩陣**：
 
 1. Frozen root Call保存first/second recipes與oracle；root registry、same-ID re-stage先通過。
 2. `first` child plan前才解析absolute executable並計算generation；pre-plan可re-stage，planned後freeze。
@@ -67,6 +71,7 @@ Phase 1 已通過獨立 audit，但只驗 root registry／accept／recover；未
 ### P1a-2 停止線
 
 - B1/B2先有新 failpoint tests；再驗 generation/env、Task intent與 UUID grammar、P0三個現有 hooks、artifact injection、真 after-spawn fixture、Receipt commit/tamper與 known-never-respawn。
+- 目前只覆蓋代表性 root-planned handoff 與 after-spawn；10 個 root cuts、三個 P0 hooks、process golden vectors與所有 raw/torn 反例仍未串成完整 Phase 2 matrix。
 - normal case 仍只有 root、first、second；unknown case仍是 first block second。
 - 不同時設計 common ABI、Definition directory tree identity、dependency snapshot、GC、public accept idempotency 或 C++ writer。
 

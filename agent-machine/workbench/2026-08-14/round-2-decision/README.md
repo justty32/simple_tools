@@ -38,10 +38,10 @@
 | P1a-1 v1 | 已被取代 | 不再作提升依據 |
 | P1a-1 v2 | 已驗 baseline | Task-local Call、parent relation/replay、unlinked 不 dispatch |
 | P1a-2 Phase 1 | 已通過獨立 audit | 僅 root registry／accept／recover；47 tests × 4 runs = 188 executions |
-| P1a-2 Phase 2 | 待驗候選 | `first` process leaf、strict binder、Receipt commit、crash matrix |
-| P1a-2A composite fake | 待驗候選 | 從 root registry 長出兩個 fake child；不改 `sequence_two` |
+| P1a-2 Phase 2 | 已驗窄切片 | first process leaf、strict binder、Receipt commit；完整 crash matrix 仍未驗 |
+| P1a-2A composite fake | 已通過最終驗收 | WSL `/tmp` 全套 58/58；只驗兩個不啟動程式的假 child 與單一寫入者保存／恢復，不改 `sequence_two` |
 
-既有v2有18個test methods／23個列舉failpoints。P1a-2 Phase 1 已通過獨立 audit：47 tests各跑4次，共188 executions，窄幅證明root registry／accept／recover工作台；它尚未進入 child relation 或 process execution。這不是正式AOS已實作。Fault model仍只是同一Linux filesystem的process kill/replay，不是power loss。
+既有v2有18個test methods／23個列舉failpoints。P1a-2 Phase 1 已通過獨立 audit：47 tests各跑4次，共188 executions，窄幅證明root registry／accept／recover工作台。P1a-2A 也已在 WSL 的 Linux `/tmp` 通過全套 58/58，窄幅證明 `sequence_two_fake` 的 root → first → second 保存順序、組合式中斷恢復、來源封閉、容量與竄改反例；它的兩個假 child 都不啟動程式。這不是正式AOS已實作。故障模型仍只是同一 Linux 檔案系統上的行程終止／重播，不是斷電。
 
 ## P1 工作模型
 
@@ -58,6 +58,8 @@ P1 暫用 `call_ref{sha256,size}`、Task-local `call.json`、ordered relation ev
 ## 證據與限制
 
 - P1a-1 v2：[`README`](../p1a-task-tree-python-v2/README.md)、[`NOTES`](../p1a-task-tree-python-v2/NOTES.md)。
+- P1a-2A composite fake：[`工作台 README`](../p1a2-process-python/README.md)；WSL `/tmp` 全套 58/58。
+- P1a-2 Phase 2 process：[`Phase 2 證據帳`](../p1a2-process-python/PHASE2-EVIDENCE.md)；全工作台 74/74，其中 process tests 16；不是完整 Phase 2 完成。
 - Opus 審查：[`OPUS-REVIEW.md`](../opus-p1a-review/OPUS-REVIEW.md)。
 - P0 process staging：[`README`](../p0-function-python/README.md)、[`NOTES`](../p0-function-python/NOTES.md)。
 

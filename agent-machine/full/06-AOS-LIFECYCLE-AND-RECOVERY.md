@@ -45,6 +45,6 @@ drain 只表示 AOS 不再擴大工作集合。某個 Task 可能已完成、停
 
 ## 已驗與未驗
 
-**原型暫選：**P1a-2 工作台的 `recover_store()` 採 single writer、明確 relation authority、一次補一個缺口及每步重驗。fake 串接工作台已在 WSL `/tmp` 通過完整 suite，涵蓋 process-kill failpoint、torn tail、竄改與穩定重開；精確數量與重跑方式留在[當日工作台](../workbench/2026-08-14/README.md)。
+**原型暫選：**P1a-2 工作台的 `recover_store()` 採 single writer、明確 relation authority、一次補一個缺口及每步重驗。除了 fake 串接，第一個真 process 窄切片也已驗到：完整 raw 只補提交、after-spawn 缺完整結果時不重跑，以及已凍結 recipe／外部作用屏障／矛盾資料的保守停止。精確範圍見[證據頁](../wait_user/2026-08-14-deep-dive-04-evidence.md)。
 
-這只是一條 store recovery 入口，不是完整的 start／ready／drain／stop Runtime；也沒有驗真 process 接回、舊 worker fencing、掉電、多 writer、NFS 或跨機。正式 store 型態、鎖法、啟動代號格式與 Runtime process 拆分仍未決定。
+這仍只是一條 store recovery 入口與受控 process seam，不是完整 Phase 2，也不是完整的 start／ready／drain／stop Runtime。完整 process hooks／root 中斷矩陣、舊 worker fencing、掉電、多 writer、NFS 與跨機仍未驗；正式 store 型態、鎖法、啟動代號格式及 Runtime process 拆分也未決定。

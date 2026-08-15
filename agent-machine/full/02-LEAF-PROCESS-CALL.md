@@ -64,7 +64,7 @@ argv + stdin -> stdout + stderr + termination
 - [Python P0](../workbench/2026-08-14/p0-function-python/README.md) 以 `shell=False` 實跑 process，驗到 argv、binary stdin、兩條輸出與 termination 可分開保存；有 intent 而缺完整結果時，recovery 不重跑。
 - [C++ P0](../workbench/2026-08-14/p0-function-cpp/README.md) 以 `fork/execve`、nonblocking pipes 與 `poll` 對照 Python，驗到 stdin 與兩條輸出必須同時推進，也分開正常 exit、signal、`chdir`／`exec` 失敗。
 - 兩個原型對 launch failure 的 JSON 名稱都不同，正好說明測通 process 邊界不等於格式已固定；它們的 CLI、目錄、ID、marker 與 receipt 檔名均非 ABI。
-- P1a-2 的 process seam 目前是待驗工作契約；已通過的 58 項 P1a-2A 使用 fake children，沒有執行真 process，不能拿來補強 P0 以外的聲稱。
+- P1a-2 已通過第一個真 process 窄切片：`first` 真正啟動一次 process，完整 raw 可在重開後只補相同 Receipt，after-spawn 結果不完整時不重跑；已凍結 recipe、外部作用屏障與矛盾資料也會在提交前擋下。這不是完整 Phase 2；完整 P0 hooks／root 中斷矩陣、已知 nonzero／signal／`spawn_error` 與 checked-in golden bytes 尚未驗齊。精確範圍見[證據頁](../wait_user/2026-08-14-deep-dive-04-evidence.md)。
 - 現有證據只涵蓋所列 Linux／WSL process-kill 測試；`write`、`fsync`、rename 或測試綠燈都不能自動外推到斷電與其他檔案系統。
 
 ### 明確延後

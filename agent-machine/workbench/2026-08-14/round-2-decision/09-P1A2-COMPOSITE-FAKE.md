@@ -6,7 +6,7 @@
 
 Phase 1 已驗 root 的接受與恢復；既有 `sequence_two` 則固定為「first process、second fake」。兩者中間仍少一塊：從一個剛被安全接受的 root，能不能靠已保存的 root Call，持久地長出一棵有兩個子 Task 的樹並在中斷後接回來？
 
-新 fixture 叫 `sequence_two_fake`。它的 first、second 都是已凍結的 fake recipe，不啟動程式。這是**補一項新證據**，不是重做 v2，也不是把 process 偽裝成 fake 成功。既有 `sequence_two` 仍保留 first 的 process Receipt 必須綁 attempt/P0 evidence 的規則。
+新 fixture 叫 `sequence_two_fake`。它的 first、second 都是已凍結的 fake recipe，不啟動程式。這是**補一項新證據**，不是重做 v2，也不是把 process 偽裝成 fake 成功。既有 `sequence_two` 仍保留 first 的 process Receipt 必須綁 attempt/P0 evidence 的規則。後續 first process／second fake 的窄實作沒有改變本頁 fake fixture 的證據範圍；精確已驗與未驗見 [`Phase 2 證據帳`](../p1a2-process-python/PHASE2-EVIDENCE.md)，不能把本頁 58/58 fake matrix 改寫為完整 Phase 2 驗收。
 
 ## 本片故意不決定的事
 

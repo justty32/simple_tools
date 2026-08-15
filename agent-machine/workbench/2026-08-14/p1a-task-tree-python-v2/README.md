@@ -1,8 +1,8 @@
-# P1a-1 v2：Task tree 的可驗證假執行器
+# P1a-1 v2：Phase 2 的 Task tree 前置證據
 
-> 工作台實驗，等待 Opus 裁決；不是正式 AOS 規格或 durability 承諾。
+> 歷史工作台實驗，後續 Phase 2 的前置證據；不是正式 AOS 規格或 durability 承諾。
 
-本目錄重寫 P1a-1 的資料模型與 replay，而不是在舊事件種類上打補丁。它驗證固定 composite Function `first -> second` 如何把不可變 Call、Task、parent/child 關係與 Receipt 分開保存。fake leaf 不啟動 subprocess。
+本目錄重寫 P1a-1 的資料模型與 replay，而不是在舊事件種類上打補丁。它驗證固定 composite Function `first -> second` 如何把不可變 Call、Task、parent/child 關係與 Receipt 分開保存。fake leaf 不啟動 subprocess；後續將第一個 leaf 換成真 Linux process 的實驗見 [P1a-2 Phase 2](../p1a2-process-python/README.md)。
 
 程式分成三層：`p1a_store.py` 放 strict JSON、hash/canonical bytes 與基礎 filesystem primitive；`p1a_model.py` 放 fixture schema、validated Projection、replay/progress；`aos_p1a_v2.py` 只保留公開 CLI/report 入口。沒有第二份狀態真源。
 
@@ -11,8 +11,8 @@
 請用 WSL 的 Linux filesystem（`/tmp`），不要把 `/mnt/c` 當 durability 證據：
 
 ```bash
-cd /mnt/c/code/mine/simple_tools/agent-machine/workbench/2026-08-14/p1a-task-tree-python-v2
-python3 -m unittest -v
+cd agent-machine/workbench/2026-08-14/p1a-task-tree-python-v2
+PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -v
 python3 aos_p1a_v2.py --root /tmp/aos-p1a-v2-demo --case success
 cat /tmp/aos-p1a-v2-demo/report.json
 ```
@@ -44,14 +44,16 @@ Call 的 child 發布次序是：child own `call.json` 原子發布（暫時 orp
 
 ## Validator 與報告
 
-唯一 read 入口是 `validate_store()`，產生 validated Projection。每次 `progress_once()` 只做一個合法的持久 transition，隨即再驗；report 也只讀 Projection。它嚴格拒絕 duplicate JSON key、NaN、未知/缺失欄位、事件逆序/重複/terminal 後追加。沒有 newline 的最後一段只在**recovery/progress** 被當作未提交 torn tail 截掉並 fsync；純 validation/report 絕不改 events，換行結尾的壞 JSON 永遠 corruption。這在 P1a 可行，是因為 dispatch 只在完整 event line fsync 後發生；P1a-2 仍要以真 staging evidence 重驗此假設。
+唯一 read 入口是 `validate_store()`，產生 validated Projection。每次 `progress_once()` 只做一個合法的持久 transition，隨即再驗；report 也只讀 Projection。它嚴格拒絕 duplicate JSON key、NaN、未知/缺失欄位、事件逆序/重複/terminal 後追加。沒有 newline 的最後一段只在**recovery/progress** 被當作未提交 torn tail 截掉並 fsync；純 validation/report 絕不改 events，換行結尾的壞 JSON 永遠 corruption。這在 P1a 可行，是因為 dispatch 只在完整 event line fsync 後發生；後續 Phase 2 另以真 P0 raw evidence 驗證 process seam，不借用 fake executor 的結論。
 
 更精確地說，validator 先只讀每份 log 的 committed prefix，將固定 log path 與 prefix length 放進成功的 Projection；只有所有 parent/child relation、schema 和 Receipt 都通過後，recovery 才依此清單 truncate+fsync，並重新驗證。因而壞 parent 不得提前修改 child 的 torn tail。所有要讀的 Call、Task、event、Receipt、fixture/report authority file 都會先以 `lstat` 確認是 regular file 且不是 symlink；FIFO/socket/device/directory 直接回報 corruption，不會拿去 `read_bytes()`。
 
 `report.json` 是真正 nested tree，先顯示 definition path、argv 摘要、slot、state、Return status，再帶 dispatch_count、receipt、reason 與 blocked_on；phase 區分 `run`、`recovery`、`corrupt`。report 不綠即表示 validator 已拒絕 store。若 lexical root 本身是 symlink，程式不會寫穿它，而在同層產生 `<root>.corrupt-report.json`；下次正常 report 會安全移除此 stale sidecar。
 
-## 範圍與下一步
+## 範圍與後續位置
 
-P1a-1 v2 只用單一 fake executor。intent 後沒有完整可信 Receipt 時 child 與 parent 會 repair_required、絕不重送；有完整 staged Receipt 則只補 semantic commit。P1a-2 是否值得做，取決於 Opus 是否接受這個切分；若接受，下一片只替換一個 leaf 為 P0 staging evidence，不同時接 Definition resolver、Agent、Git/CAS、中央 Runtime 或多 writer。
+P1a-1 v2 只用單一 fake executor。intent 後沒有完整可信 Receipt 時 child 與 parent 會 repair_required、絕不重送；有完整 staged Receipt 則只補 semantic commit。它後來成為 [P1a-2 Phase 2](../p1a2-process-python/README.md) 的 Task tree、Receipt 與恢復語意前置；Phase 2 只替換第一個 leaf，並沒有回頭擴大本實驗對 Definition resolver、Agent、Git/CAS、中央 Runtime 或多 writer 的證據邊界。
+
+要開始手寫正式實作，請從 [AOS 實作接手入口](../../../START-HERE.md) 開始；本目錄只留作可重跑的歷史證據。
 
 `fixture-*.json` 與 `schema-example.json` 是供閱讀的 illustrative fixture/example；目前的 oracle 直接驗真正 store 的 bytes、hash 與事件序，不能把它們誤當 golden store。

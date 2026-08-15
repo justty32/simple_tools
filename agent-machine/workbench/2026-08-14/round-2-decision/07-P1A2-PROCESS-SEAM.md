@@ -1,6 +1,6 @@
 # P1a-2 process leaf 工作規格
 
-> **待驗目標、非正式 ABI。** Authority與accept/recovery見 [`06`](06-FUNCTION-TASK-MODEL.md)；exact prototype格式見 [`08`](08-P1A2-FORMATS.md)。
+> **工作契約、非正式 ABI。** 現有僅一條 Python 窄切片；精確已驗／未驗 matrix 見 [`Phase 2 證據帳`](../p1a2-process-python/PHASE2-EVIDENCE.md)。Authority與accept/recovery見 [`06`](06-FUNCTION-TASK-MODEL.md)，exact prototype格式見 [`08`](08-P1A2-FORMATS.md)；本頁「必測」仍是目標，不能讀成完整 Phase 2 已完成。
 
 ## 0. 範圍
 

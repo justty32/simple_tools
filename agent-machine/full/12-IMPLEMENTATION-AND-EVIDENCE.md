@@ -25,7 +25,7 @@ Python 適合快速改狀態機、插入中斷點、製造損壞資料，以及�
 - 結果已知、結果不明與資料矛盾是否被錯誤合併。
 - 恢復是否會偷偷重跑可能已有副作用的工作。
 
-原型應一次只換一個抽象。例如先驗一個 leaf process，再驗兩個假 child 的保存順序；不要同時加入 Agent、Git、網路與完整 scheduler，否則失敗時無法知道是哪一層錯。
+原型應一次只換一個抽象。例如先驗一個 leaf process，再驗兩個假 child 的保存順序，接著只把第一個 child 換成真 process；不要同時加入 Agent、Git、網路與完整 scheduler，否則失敗時無法知道是哪一層錯。
 
 ## 用 C++ 固化 Linux 硬邊界
 
@@ -68,10 +68,10 @@ C++ 版必須重跑相同測試資料，而不是另寫一套較容易通過的�
 **原型暫選**：2026-08-14 工作台留下三類證據。
 
 - P0 驗了 leaf process 的 argv、raw stdin／stdout／stderr、exit／signal／啟動錯誤，以及某些結果不明情況不自動重跑。
-- P1 驗了 Task-local Call、parent／child 關係與部分 crash-safe 發布；兩個假 child 的切片通過固定中斷點，但沒有真 scheduler 或 Agent。
+- P1 驗了 Task-local Call、parent／child 關係與部分 crash-safe 發布；在兩個假 child 之後，又有一個真 process 接入 Receipt／composite tree 的窄切片。它驗到完整 raw 重開補提交、after-spawn 不重跑、已凍結 recipe／外部作用屏障與矛盾防護線，但完整 Phase 2 矩陣尚未完成，也沒有真 scheduler 或 Agent。
 - Janet 驗了純資料規則；它尚未在 Linux 取得正式寫入責任。
 
-精確測試數量、命令與限制留在 [當日工作台](../workbench/2026-08-14/README.md)，避免正式設計隨測試增加而反覆改寫。
+精確測試數量與本輪缺口集中在 [`wait_user` 證據頁](../wait_user/2026-08-14-deep-dive-04-evidence.md)；重跑命令與工作台限制見 [P1a-2 README](../workbench/2026-08-14/p1a2-process-python/README.md)。
 
 ## 提升為正式行為前的門檻
 

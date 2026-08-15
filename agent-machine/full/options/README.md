@@ -28,6 +28,11 @@
 | [02 Task 生命週期](02-TASK-LIFECYCLE.md) | Task 從何時有身分、如何跨重開？ | 比較固定 Task 身分與 attempt。 |
 | [03 filesystem memory](03-FILESYSTEM-MEMORY-MODES.md) | 哪些資料 live、固定、暫存或不可攜？ | 依資料類型採混合模式。 |
 | [04 Return、unknown、repair](04-RETURN-UNKNOWN-AND-REPAIR.md) | 沒有完整結果時怎麼不亂猜？ | 已知結果才 Return，否則停在 unknown。 |
+| [05 `.aos` 與中央 store](05-DOT-AOS-AND-STORE.md) | 可攜 checkpoint 與本機執行權威怎麼分工？ | 中央 store 管 live authority，`.aos` 只存可驗 checkpoint。 |
+| [06 Scheduler 形狀](06-SCHEDULER-SHAPE.md) | 中央排程應按需啟動、常駐，或拆出 executor？ | 先用單一按需 process 驗證中央 Runtime 語意。 |
+| [07 Agent busy 與 Step 邊界](07-AGENT-BUSY-AND-STEP-BOUNDARY.md) | 追加內容何時生效，paused 是否交出 root？ | 先在當前 Step 完整提交後恰好消費一次。 |
+| [08 CLI 表面](08-CLI-SURFACE.md) | 怎麼兼顧明確 Call 邊界與日常 shell 操作？ | 先固定完全明示的測試語意，再試 root context 短入口。 |
+| [09 C++／Janet bridge](09-CPP-JANET-BRIDGE.md) | Janet policy 如何參與決策卻不取得 store authority？ | 先驗 Linux toolchain，再用雙 process 的有界 proposal 介面。 |
 
 每頁至少列出兩個可操作方案、優缺點、目前推薦和推翻條件。它們與[工作稿](../../workbench/2026-08-14/idea-ledger/README.md)相互參照，但工作稿只保留過程與候選，不能取代主線。
 

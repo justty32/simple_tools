@@ -120,4 +120,4 @@ Recovery不接受新root、不讀CLI參數、不用ambient設定重建recipe、�
 
 ## 8. 證據界線
 
-P1a-1 v2只驗Task-local Call與child relation/replay，沒有root registry、recipes或以上accept/recovery grammar。P1a-2只聲稱同一Linux filesystem上的process-kill/failpoint結果；不聲稱power-loss、NFS、TOCTOU、multiwriter、GC、portable checkpoint、Agent語意或完整Runtime。
+P1a-1 v2只驗Task-local Call與child relation/replay，沒有root registry、recipes或以上accept/recovery grammar。P1a-2 Phase 2 現有一條 Python 窄切片，精確證據與未驗矩陣見 [`Phase 2 證據帳`](../p1a2-process-python/PHASE2-EVIDENCE.md)；它不代表本頁全部 recovery grammar 都已驗收。只聲稱同一 Linux filesystem、single writer、受控 process-kill／測試注入；不聲稱 power-loss、NFS、TOCTOU、多 writer、GC、portable checkpoint、Agent 語意或完整 Runtime。
