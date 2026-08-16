@@ -6,7 +6,6 @@
   // 所以兩邊各選一次就沒事了，下面的 venvPath 會讓它出現在清單裡。
   "python.defaultInterpreterPath": "${workspaceFolder}/freepy/.venv/bin/python",
   "python.venvPath": "${workspaceFolder}/freepy",
-
   // llms / tooljson 是 freepy/llmkit/ 底下的 package，base_tools 是 freepy/ 底下的，
   // 兩層都要加進搜尋路徑，Pylance 才認得 `from llms import LLM`
   "python.analysis.extraPaths": [
@@ -14,13 +13,12 @@
     "${workspaceFolder}/freepy"
   ],
   "python.analysis.typeCheckingMode": "basic",
-
   "python.terminal.activateEnvironment": true,
-
   "files.exclude": {
     "**/__pycache__": true
   },
   "files.watcherExclude": {
     "**/.venv/**": true
-  }
+  },
+  "cmake.sourceDirectory": "/home/lorkhan/repo/simple_tools/aos"
 }

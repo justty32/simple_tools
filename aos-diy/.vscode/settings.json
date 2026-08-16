@@ -1,0 +1,11 @@
+{
+    "C_Cpp.default.configurationProvider": "",
+    "C_Cpp.default.compilerPath": "/usr/bin/g++",
+    "C_Cpp.default.cppStandard": "c++23",
+    "C_Cpp.default.compilerArgs": [
+        "-std=c++26"
+    ],
+    "files.associations": {
+        "*.hpp": "cpp"
+    }
+}
