@@ -3,28 +3,39 @@
 ## Layers
 
 ```text
-┌─ main ──────────────────────────────────────────────────────┐
-│  open a stream  ->  read records  ->  execute them          │
-├─ execution ─────────────────────────────────────────────────┤
-│  Instruction  ->  a spawned process        aos/exec.hpp     │
-├─ core ──────────────────────────────────────────────────────┤
-│  Instruction                               aos/inst.hpp     │
-│  read:   std::istream  ->  Instruction   (one per call)     │
-│  write:  Instruction   ->  std::ostream                     │
-└─────────────────────────────────────────────────────────────┘
+┌─ main ──────────────┐  ┌─ C shim ─────────────────────────┐
+│  open a stream      │  │  opaque handle, plain enums,     │
+│  -> read records    │  │  FILE *, no exceptions escape    │
+│  -> execute them    │  │                     aos/aos.h    │
+├─ execution ─────────┴──┴──────────────────────────────────┤
+│  Instruction  ->  a spawned process           aos/exec.hpp │
+├────────────────────────────────────────────────────────────┤
+│  Instruction                                  aos/inst.hpp │
+│  read:   std::istream  ->  Instruction   (one per call)    │
+│  write:  Instruction   ->  std::ostream                    │
+└────────────────────────────────────────────────────────────┘
 ```
+
+The C shim in `capi.cpp` sits beside `main` rather than under it: it is a
+second way in, not a layer the rest of the code goes through. Nothing below
+it knows it exists.
 
 `aos/inst.hpp` is the only parser in the project. It moves one record
 between a stream and an `Instruction`, in both directions, and knows nothing
 about processes. `aos/exec.hpp` takes an `Instruction` and knows nothing
 about streams. Looping over many records belongs to the caller, which is all
-`aos::run` in `aos.cpp` does.
+`aos::run` in `run.cpp` does.
 
 There is no file layer. A caller that wants every record in a file opens the
 file and calls `read_instruction` until it returns `InstState::Eof`.
 
 The project is C++11. Nothing below the execution layer uses anything newer,
 and nothing below it is platform-specific.
+
+This document is about *why* the code is shaped the way it is. The format
+itself and the runtime behaviour of each field are specified separately, in
+Chinese, for people who want to use the tool rather than change it:
+[format.md](format.md) and [exec.md](exec.md).
 
 ## Why the core is shaped this way
 
@@ -200,36 +211,74 @@ user's privileges. That is the intended purpose, not a flaw, but it means
 write access to an instruction file is equivalent to code execution. Worth
 stating plainly in the user-facing documentation.
 
-## Eventual goal: a shared library
+## The two public boundaries
 
-The intended end state is a `.so` / `.dll` that other programs link against.
-Some constraints are already satisfied:
+The project ships two interfaces on purpose, and the difference between them
+is not what they can do -- it is what they promise.
 
-- **Namespacing.** Everything is in `namespace aos`, so nothing collides.
-- **No internal symbols to leak.** Every helper in `inst.cpp` and `exec.cpp`
-  is in an anonymous namespace.
-- **The two limits.** The record budget is a runtime argument, and
-  `inst_argv_max()` reports the value the library was built with.
+| | `aos/aos.h` (C) | `aos/inst.hpp`, `aos/exec.hpp` (C++) |
+| --- | --- | --- |
+| consumer needs | a C compiler and a linker | the *same* compiler, standard library and ABI setting as the library |
+| across versions | enum values and signatures are append-only | no promise |
+| out of memory | `AOS_INST_ALLOC_FAILED` | `std::bad_alloc` |
+| ownership | explicit `aos_instruction_free` | destructors |
 
-What is still outstanding, and the C++ rewrite made one of these harder:
+The C++ interface cannot make the first promise. Putting `std::string` and
+`std::vector` in a signature means a consumer built with a different
+standard library, or a different `_GLIBCXX_USE_CXX11_ABI`, gets undefined
+behaviour rather than a link error. That is not a flaw in the code; it is
+what that kind of interface is. Shipping the C header alongside it is the
+answer, and keeping both is cheaper than picking one, because the shim is
+small and mechanical.
 
-- **The C++ ABI is a much bigger commitment than the C one was.** Exporting
-  `std::string` and `std::vector` across a library boundary ties consumers
-  to the same compiler, standard library, and `_GLIBCXX_USE_CXX11_ABI`
-  setting. A C++ shared library with this interface is really "a library for
-  programs built exactly like this one". A genuinely stable boundary would
-  need an `extern "C"` shim — which is roughly the C API this code replaced.
-  Worth deciding before anyone links against it.
-- **`Instruction`'s layout is ABI.** It is public and used by value, so
-  adding a field after release requires a soname bump.
-- **Error enums are append-only.** Consumers compile against numeric values,
-  so new states may only be appended.
-- **Visibility.** Building a shared object still wants
-  `-fvisibility=hidden` plus an export macro, or a version script.
+### What the shim actually has to do
+
+Three things, all of them in `capi.cpp` and nowhere else.
+
+**No exception may escape.** Unwinding past an `extern "C"` frame into a C
+caller is undefined behaviour, so every entry point that can allocate is
+wrapped and translates a throw into `AOS_INST_ALLOC_FAILED`. This is why the
+C enum has one value the C++ enum does not: allocation failure has to become
+a state when it can no longer be an exception.
+
+**The two enums must not drift.** Every C value is checked against its C++
+counterpart with `static_assert`, so adding a state to one and forgetting
+the other is a compile error rather than a state that silently changes
+meaning as it crosses.
+
+**`FILE *` has to reach a `std::istream`.** A small `std::streambuf` bridges
+them. It deliberately does no buffering of its own -- `FILE` already
+buffers, and a second layer would leave the two disagreeing about the file
+position. One consequence: a `streambuf` cannot turn a `FILE` error flag
+into `badbit`, so the reader only sees the bytes stop. The shim checks
+`ferror` afterwards and upgrades the result to `AOS_INST_READ_ERROR`, which
+would otherwise be misreported as a clean end of input.
+
+### Visibility
+
+Everything is built with `-fvisibility=hidden`, so a symbol reaches the
+library's surface only by carrying `AOS_API` from `aos/export.h`. Helpers
+live in anonymous namespaces on top of that. The result is 16 C entry points
+and 8 C++ ones, and nothing else -- `read_line`, `split_argv`, `FileBuf` and
+`run_child` are all invisible from outside.
+
+`make shared` builds `libaos.so.0.1.0` with a soname of `libaos.so.0`. The
+soname only moves when the C ABI breaks; the C++ interface, having made no
+promise, does not constrain it.
+
+### Still outstanding
+
+- **`Instruction`'s layout is ABI for the C++ interface.** The C one is
+  immune -- `aos_instruction` is opaque, so fields can be added without
+  touching a compiled consumer. That asymmetry is the clearest illustration
+  of what the C boundary buys.
+- **Error enums are append-only** on the C side. New states go at the end.
+- **Windows.** `execute` returns `PlatformUnsupported` there, and the
+  `__declspec` half of `AOS_API` has not been exercised.
 
 ## Suggested order
 
-1. Decide whether the shipped boundary is C++ or an `extern "C"` shim, since
-   it determines whether the public types can stay as they are.
-2. Windows `execute`, if both targets are still required.
-3. Symbol visibility, before any release.
+1. Windows `execute`, if both targets are still required. It is the only
+   piece where the interface is settled and the implementation is missing.
+2. An install target, once someone actually links against the library --
+   headers, the soname symlinks, and a pkg-config file.

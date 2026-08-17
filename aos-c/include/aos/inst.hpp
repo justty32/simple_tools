@@ -1,6 +1,8 @@
 #ifndef AOS_INST_HPP
 #define AOS_INST_HPP
 
+#include "aos/export.h"
+
 #include <cstddef>
 #include <iosfwd>
 #include <string>
@@ -85,7 +87,7 @@ enum class InstState {
  * is no different from one that was read. argv.size() is the argument
  * count; there is no trailing null entry, and no field can be null.
  */
-struct Instruction {
+struct AOS_API Instruction {
     std::vector<std::string> argv;
     /* 第 2 到 6 行是路徑；空行就是空字串。 */
     std::string stdin_path;
@@ -123,7 +125,7 @@ struct Instruction {
  * rewound, so InstState::Incomplete and InstState::TooLong end the run
  * rather than inviting a retry.
  */
-InstState read_instruction(std::istream &in, Instruction &inst,
+AOS_API InstState read_instruction(std::istream &in, Instruction &inst,
                            std::size_t max_record_bytes = kInstRecordMaxBytes);
 
 /*
@@ -134,13 +136,13 @@ InstState read_instruction(std::istream &in, Instruction &inst,
  * rejected instruction leaves the stream untouched. A write that fails
  * part-way through may still have emitted a partial record.
  */
-InstState write_instruction(std::ostream &out, const Instruction &inst);
+AOS_API InstState write_instruction(std::ostream &out, const Instruction &inst);
 
 /* The argv limit compiled into this library. */
-std::size_t inst_argv_max();
+AOS_API std::size_t inst_argv_max();
 
 /* Return a static, human-readable description of state. */
-const char *to_string(InstState state);
+AOS_API const char *to_string(InstState state);
 
 /*
  * Build the null-terminated argument vector execv() and friends expect.
@@ -150,7 +152,7 @@ const char *to_string(InstState state);
  * because execv takes char *const *, not const char *const *; this is where
  * that wart is contained, rather than at every call site.
  */
-std::vector<char *> to_c_argv(Instruction &inst);
+AOS_API std::vector<char *> to_c_argv(Instruction &inst);
 
 }  /* namespace aos */
 

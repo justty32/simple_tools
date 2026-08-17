@@ -1,7 +1,7 @@
 #ifndef AOS_EXEC_HPP
 #define AOS_EXEC_HPP
 
-#include "aos/inst.hpp"
+#include "inst.hpp"
 
 /*
  * Execution: turning one Instruction into a spawned process.
@@ -93,10 +93,10 @@ struct ExecResult {
  * were an exit status: a child that genuinely exits 127 must stay
  * distinguishable from one that never started.
  */
-ExecState execute(Instruction &inst, ExecResult &result);
+AOS_API ExecState execute(Instruction &inst, ExecResult &result);
 
 /* Return a static, human-readable description of state. */
-const char *to_string(ExecState state);
+AOS_API const char *to_string(ExecState state);
 
 }  /* namespace aos */
 

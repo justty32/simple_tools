@@ -1,5 +1,5 @@
-#ifndef AOS_AOS_HPP
-#define AOS_AOS_HPP
+#ifndef AOS_RUN_HPP
+#define AOS_RUN_HPP
 
 namespace aos {
 

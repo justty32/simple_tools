@@ -40,4 +40,11 @@ std::size_t run_inst_write_error_tests();
 /* execute() 的行為；非 POSIX 平台上回傳 0。 */
 std::size_t run_exec_tests();
 
+/*
+ * 公開 C ABI 的測試。它定義在 tests/test_capi.c，由 C 編譯器建置且只看得到
+ * <aos/aos.h> —— 這正是「這道邊界只需要一個 C 編譯器」的實證，所以這裡必須
+ * 用 extern "C" 宣告。
+ */
+extern "C" std::size_t run_capi_tests(void);
+
 #endif

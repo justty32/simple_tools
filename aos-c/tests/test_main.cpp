@@ -17,6 +17,7 @@ int main()
     count += run_inst_write_tests();
     count += run_inst_write_error_tests();
     count += run_exec_tests();
+    count += run_capi_tests();
 
     std::cout << count << " tests passed\n";
     return 0;
