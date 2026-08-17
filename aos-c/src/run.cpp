@@ -17,19 +17,6 @@ void report(std::size_t index, const char *what, const char *detail)
               << '\n';
 }
 
-/*
- * 這筆記錄雖然解析失敗，但串流位置還對得上下一筆嗎？
- *
- * EmptyArgv 和 TooManyArgs 是把整整八行都讀完之後才判定的，所以游標正好停在
- * 下一筆的開頭，跳過這筆就好。其餘的失敗都是在記錄中途放棄的 —— TooLong 是
- * 讀到一半的行就停手，Incomplete 是串流本身沒了 —— 位置已經無從對齊，再讀
- * 下去只會把後面每一筆都解成垃圾，那比直接停下來更糟。
- */
-bool stream_still_aligned(InstState state)
-{
-    return state == InstState::EmptyArgv || state == InstState::TooManyArgs;
-}
-
 int run_stream(std::istream &in)
 {
     Instruction inst;
@@ -43,15 +30,21 @@ int run_stream(std::istream &in)
             break;
         }
 
+        /*
+         * 解析失敗一律停止，即使游標剛好停在八行邊界上。
+         *
+         * 這個格式的記錄之間沒有分隔符號，所以「八行邊界」只是相對於已經讀
+         * 過的內容而言，不代表檔案本身沒有錯位。而且寫入端根本不會產出空的
+         * argv 或超量引數 —— 檔案裡出現這些，幾乎必然表示某一筆少了或多了
+         * 行，後面每一筆都跟著位移。位移之後的記錄語法完全合法，只是內容來
+         * 自別筆的欄位：繼續讀下去等於執行沒有人寫過的指令。
+         */
         if (state != InstState::Ok) {
             report(index, "could not read", to_string(state));
+            std::cerr << "aos: the file is not what it claims to be; "
+                         "the remaining input is not read\n";
             ++index;
             ++failed;
-            if (stream_still_aligned(state)) {
-                continue;
-            }
-            std::cerr << "aos: cannot resynchronise after that; "
-                         "the remaining input is not read\n";
             break;
         }
 
