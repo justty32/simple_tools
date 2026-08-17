@@ -41,9 +41,17 @@ make shared         # 建共享函式庫 build/<mode>/libaos.so
 make clean          # 清掉整個 build/
 ```
 
-Windows 用 MinGW-w64 的話把 `make` 換成 `mingw32-make.exe`。可以編譯，但**行程建立
-目前只有 POSIX 實作** —— 在 Windows 上執行會回傳
-`AOS_EXEC_PLATFORM_UNSUPPORTED`。
+### Windows
+
+用 MinGW-w64 的話把 `make` 換成 `mingw32-make.exe`。整個專案（含測試）可以編譯、
+連結、執行，`make shared` 會產出 `aos.dll` 加一個匯入函式庫。
+
+**但行程建立目前只有 POSIX 實作。** 讀取、寫入、序列化在 Windows 上都正常，
+`aos_instruction_execute` 則直接回傳 `AOS_EXEC_PLATFORM_UNSUPPORTED` —— 也就是說
+`aos-c` 這個程式在 Windows 上跑不了任何指令。測試套件會跳過執行相關的案例
+（POSIX 上 126 個，Windows 上 95 個）。
+
+靜態連結時記得定義 `AOS_STATIC`，見 [docs/capi.md](docs/capi.md)。
 
 `make strict` 是送出改動前該跑的那一個：它用 `-Wall -Wextra -Wpedantic -Werror`
 重建全部，然後跑完整測試套件。
@@ -55,11 +63,15 @@ aos-c insts        # 讀一個檔案
 aos-c < insts      # 或從標準輸入讀，管線也可以
 ```
 
-指令依序執行。**程式回傳非零不會中斷後面的指令** —— 那是資料，會寫進 exit 欄位
-指定的檔案。真正會中斷的是「指令根本沒跑起來」（找不到指令、cwd 不存在、重導向的
-檔案開不起來）或記錄格式壞掉。
+指令依序執行，而且**會一路跑到底**：
 
-`aos-c` 全部跑完回傳 0，第一次遇到執行期失敗回傳 1。
+- 程式回傳非零 —— 不影響後面。那是資料，會寫進 exit 欄位指定的檔案
+- 某筆根本跑不起來（找不到指令、cwd 不存在、重導向開不了）—— 回報之後跳到下一筆
+- 記錄格式壞掉 —— 只要串流還對得齊就跳過那筆繼續；對不齊了（記錄被截斷）才會停，
+  因為硬讀下去會把後面每一筆都解成垃圾
+
+全部成功時完全不輸出，回傳 0。有任何一筆失敗就回傳 1，並在最後印出
+`aos: N of M instructions failed`。細節見 [docs/exec.md](docs/exec.md#多筆指令)。
 
 ## 當函式庫用
 
@@ -86,10 +98,9 @@ int main(void)
            == AOS_INST_OK) {
         aos_exec_result result;
 
-        if (aos_instruction_execute(inst, &result) != AOS_EXEC_OK) {
-            break;
+        if (aos_instruction_execute(inst, &result) == AOS_EXEC_OK) {
+            printf("%s -> %d\n", aos_instruction_arg(inst, 0), result.status);
         }
-        printf("%s -> %d\n", aos_instruction_arg(inst, 0), result.status);
     }
 
     aos_instruction_free(inst);
@@ -120,10 +131,9 @@ int main()
     while (aos::read_instruction(in, inst) == aos::InstState::Ok) {
         aos::ExecResult result;
 
-        if (aos::execute(inst, result) != aos::ExecState::Ok) {
-            break;
+        if (aos::execute(inst, result) == aos::ExecState::Ok) {
+            std::cout << inst.argv[0] << " -> " << result.status << '\n';
         }
-        std::cout << inst.argv[0] << " -> " << result.status << '\n';
     }
     return 0;
 }

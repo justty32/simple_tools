@@ -169,13 +169,14 @@ while ((state = aos::read_instruction(in, inst)) == aos::InstState::Ok) {
     aos::ExecResult result;
     aos::ExecState exec_state = aos::execute(inst, result);
 
+    /* 一筆跑不起來就記下來繼續，後面的指令跟它沒有關係 */
     if (exec_state != aos::ExecState::Ok) {
         std::cerr << "跑不起來：" << aos::to_string(exec_state) << '\n';
-        break;
+        continue;
     }
     std::cout << inst.argv[0] << " -> " << result.status << '\n';
 }
-if (state != aos::InstState::Eof && state != aos::InstState::Ok) {
+if (state != aos::InstState::Eof) {
     std::cerr << "讀不了：" << aos::to_string(state) << '\n';
 }
 ```
@@ -280,3 +281,6 @@ g++ -std=c++11 my.cpp -Iinclude -Lbuild/debug -laos \
 
 函式庫用 `-fvisibility=hidden` 建置，所以只有標了 `AOS_API` 的東西看得到 —— 共有
 8 個 C++ 進入點，`read_line`、`split_argv` 這些內部函式一個都不在符號表上。
+
+Windows 上靜態連結時要定義 `AOS_STATIC`，理由和用法跟
+[C API 那邊](capi.md#windows靜態連結要定義-aos_static)一樣。

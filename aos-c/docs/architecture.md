@@ -169,7 +169,8 @@ a compatibility break, not a bug fix.
 | status of a signalled child | `128 + signum` | shell convention, and it keeps the field one number on every platform |
 | `extra` | ignored | |
 | failure to spawn | a runtime error, and **nothing** is written to `exit_path` | see below |
-| several instructions | sequential; a non-zero child does not stop the run, a runtime failure does | a child's status is data, and recording it is what `exit_path` is for |
+| several instructions | sequential, and the run continues past every failure it can | later instructions do not depend on earlier ones, so abandoning them turns one failure into many things simply not done |
+| a parse failure mid-file | skipped when the stream is still aligned (`EmptyArgv`, `TooManyArgs`, both judged only after all eight lines were consumed); fatal otherwise | resuming from an unknown offset would decode every later record into garbage, which is worse than stopping |
 
 ### Telling "command not found" from "the command exited 127"
 
@@ -273,8 +274,15 @@ promise, does not constrain it.
   touching a compiled consumer. That asymmetry is the clearest illustration
   of what the C boundary buys.
 - **Error enums are append-only** on the C side. New states go at the end.
-- **Windows.** `execute` returns `PlatformUnsupported` there, and the
-  `__declspec` half of `AOS_API` has not been exercised.
+- **Windows.** Everything but `execute` works there, and the whole suite has
+  been cross-compiled and run under MinGW -- 95 of the 126 cases, the
+  remainder being the POSIX-only execution tests. Getting there found two
+  real defects, both of which are the kind that only a second platform
+  exposes: two helpers used solely by the POSIX branch tripped
+  `-Wunused-function`, which `-Werror` turned into a build failure, and
+  `AOS_API` needed a third state, because a statically linked consumer was
+  being handed `__declspec(dllimport)` and so emitted `__imp_` references no
+  DLL was there to satisfy. `execute` itself is still unimplemented.
 
 ## Suggested order
 

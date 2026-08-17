@@ -23,6 +23,8 @@ extern char **environ;
 namespace aos {
 namespace {
 
+#if AOS_EXEC_POSIX
+
 /*
  * 把結束狀態寫進 exit_path。父行程在 waitpid 之後才呼叫，因此這裡的失敗
  * 是「子行程跑完了但狀態記不下來」，跟子行程本身的成敗無關。
@@ -65,8 +67,6 @@ bool load_env_file(const std::string &path, std::vector<std::string> &entries)
     }
     return !in.bad();
 }
-
-#if AOS_EXEC_POSIX
 
 /* 子行程在 exec 之前可能失敗的每個步驟，用來把 errno 對應回 ExecState。 */
 enum class Stage : unsigned char {

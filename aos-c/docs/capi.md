@@ -319,18 +319,19 @@ int main(int argc, char **argv)
         aos_exec_result result;
         aos_exec_state exec_state = aos_instruction_execute(inst, &result);
 
+        /* 一筆跑不起來就記下來繼續，後面的指令跟它沒有關係 */
         if (exec_state != AOS_EXEC_OK) {
             fprintf(stderr, "第 %zu 筆跑不起來：%s（%s）\n", index,
                     aos_exec_state_string(exec_state), strerror(result.error));
-            break;
+        } else {
+            /* 注意：這個指標下一次 read 之後就失效了 */
+            printf("第 %zu 筆 %s 結束，狀態 %d\n", index,
+                   aos_instruction_arg(inst, 0), result.status);
         }
-        /* 注意：這個指標下一次 read 之後就失效了 */
-        printf("第 %zu 筆 %s 結束，狀態 %d\n", index,
-               aos_instruction_arg(inst, 0), result.status);
         ++index;
     }
 
-    if (state != AOS_INST_EOF && state != AOS_INST_OK) {
+    if (state != AOS_INST_EOF) {
         fprintf(stderr, "第 %zu 筆讀不了：%s\n", index,
                 aos_inst_state_string(state));
     }
@@ -393,6 +394,25 @@ gcc -std=c99 my.c -Iinclude -Lbuild/debug -laos \
 
 連結器要用 C 編譯器就好 —— 函式庫自己已經帶著它需要的 C++ 執行期相依，你不需要
 知道那件事。
+
+### Windows：靜態連結要定義 `AOS_STATIC`
+
+Windows 上 `AOS_API` 有三種狀態，因為 `__declspec(dllimport)` 會讓編譯器產生只有
+DLL 能滿足的 `__imp_` 間接引用：
+
+| 你在做什麼 | 要定義的巨集 |
+| --- | --- |
+| 連結 `aos.dll` | 什麼都不用（預設就是 `dllimport`） |
+| 直接連目的檔或靜態函式庫 | **`AOS_STATIC`** |
+| 建置 DLL 本身 | `AOS_BUILDING_LIBRARY` |
+
+```sh
+gcc -std=c99 -DAOS_STATIC my.c libaos.a -o my.exe    # 靜態
+gcc -std=c99 my.c -laos -o my.exe                     # 連 DLL
+```
+
+忘了定義 `AOS_STATIC` 會得到連結期錯誤（找不到 `__imp_aos_*`），不會變成難查的
+執行期問題。POSIX 上這個巨集沒有作用，定義了也無妨。
 
 共享函式庫的 soname 是 `libaos.so.0`，只有在 C ABI 破壞時才會進位。C++ 介面沒有
 做任何承諾，所以它不會影響 soname。
