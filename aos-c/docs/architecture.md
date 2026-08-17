@@ -6,81 +6,75 @@
 ┌─ main ──────────────────────────────────────────────────────┐
 │  open a stream  ->  read records  ->  execute them          │
 ├─ execution ─────────────────────────────────────────────────┤
-│  aos_inst_t  ->  a spawned process                          │
+│  Instruction  ->  a spawned process        aos/exec.hpp     │
 ├─ core ──────────────────────────────────────────────────────┤
-│  aos_inst_t                                                 │
-│  read:   FILE *  ->  aos_inst_t   (one record per call)     │
-│  write:  aos_inst_t  ->  FILE *                             │
+│  Instruction                               aos/inst.hpp     │
+│  read:   std::istream  ->  Instruction   (one per call)     │
+│  write:  Instruction   ->  std::ostream                     │
 └─────────────────────────────────────────────────────────────┘
 ```
 
-The core is one module, `aos/inst.h` and `src/inst.c`. It moves one record
-between a stream and an `aos_inst_t`, in both directions, and it is the only
-parser in the project.
+`aos/inst.hpp` is the only parser in the project. It moves one record
+between a stream and an `Instruction`, in both directions, and knows nothing
+about processes. `aos/exec.hpp` takes an `Instruction` and knows nothing
+about streams. Looping over many records belongs to the caller, which is all
+`aos::run` in `aos.cpp` does.
 
 There is no file layer. A caller that wants every record in a file opens the
-file and calls `aos_inst_read` until it returns `AOS_INST_EOF`.
+file and calls `read_instruction` until it returns `InstState::Eof`.
+
+The project is C++11. Nothing below the execution layer uses anything newer,
+and nothing below it is platform-specific.
 
 ## Why the core is shaped this way
 
-The reader consumes exactly one record per call, straight from a `FILE *`.
-Three things follow, and they are the reason for the shape:
+The reader consumes exactly one record per call, straight from a
+`std::istream`. Three things follow:
 
-- **Pipes and stdin work.** Nothing seeks, and nothing needs to know the
-  length of the input in advance.
+- **Pipes and `std::cin` work.** Nothing seeks, and nothing needs to know
+  the length of the input in advance.
 - **Memory is O(longest record), not O(input).** A hundred-gigabyte
-  instruction stream is read through a buffer sized by its longest record.
+  instruction stream is read through one `Instruction`.
 - **The first record is available before the rest of the input exists.** A
   producer and a consumer can run at the same time.
 
-### One buffer per instruction, owned by the instruction
+### Every field owns its own bytes
 
-`aos_inst_t` holds nine public fields — `argc`, `argv`, and seven strings —
-and four private ones. Every public string points into a single `storage`
-buffer that the instruction owns, and `argv` points into a single owned slot
-array. Two allocations per record, not one per line.
+`Instruction` is a plain struct of a `std::vector<std::string>` and seven
+`std::string`s. That is the whole type. There is no shared buffer, no
+offsets, no capacity bookkeeping, and no private section.
 
-Both allocations are kept across reads. A caller that reads a whole stream
-through one `aos_inst_t` stops allocating entirely once the buffers have
-reached the size of the longest record seen so far:
+This is the part that changed most from the C version, where the same design
+needed a `storage` buffer, an `argv_slots` array, two capacities, and eight
+stack offsets to resolve after `realloc` moved things. All of it existed to
+answer *who owns these bytes*, and `std::string` answers that by
+construction. Three consequences:
 
-```c
-aos_inst_t inst;
-aos_inst_state state;
+- An `Instruction` stays valid after the stream it came from is gone.
+- One built by hand for `write_instruction` is not a special case with its
+  own ownership rules — it is the same type, and there is nothing to free.
+- Three error states disappeared outright. `NullArgument` and `NullField`
+  cannot happen because a `std::string` cannot be null, and allocation
+  failure is `std::bad_alloc` rather than a state every caller must check.
 
-aos_inst_init(&inst);
-while ((state = aos_inst_read(stream, &inst)) == AOS_INST_OK) {
-    /* 使用 inst；其中的字串在下次讀取前都有效 */
+`Instruction::clear()` clears each string rather than assigning a fresh one,
+so the buffers survive into the next read. A caller reading a whole stream
+through one instruction settles into steady state without reallocating:
+
+```cpp
+aos::Instruction inst;
+
+while (aos::read_instruction(in, inst) == aos::InstState::Ok) {
+    /* 使用 inst；它擁有自己的位元組，在下一次讀取前都有效 */
 }
-aos_inst_free(&inst);
 ```
 
-Storage moves under `realloc` while a record is being read, so the reader
-records the eight field positions as offsets and turns them into pointers
-only once the eighth line is in. That is eight `size_t` on the stack, and it
-is what removes the need to measure a record before parsing it.
+### Why the reader does not use std::getline
 
-### Why the strings are `const char *` even though the struct owns them
-
-The same type has to serve both directions. The reader fills an
-`aos_inst_t` that owns its memory; a caller of the writer wants to assign
-string literals and pass the result straight in:
-
-```c
-aos_inst_t inst;
-const char *argv[] = { "echo", "hi", NULL };
-
-aos_inst_init(&inst);
-inst.argc = 2U;
-inst.argv = argv;
-inst.stdin_path = "";           /* ……其他六個欄位亦同 */
-aos_inst_write(stream, &inst);
-```
-
-Making the fields `const char *` is what lets that second case be written at
-all. Ownership lives entirely in the private `storage` and `argv_slots`
-pointers, which stay `NULL` in a hand-built instruction — so `aos_inst_free`
-on one frees nothing and is safe, rather than being a documented hazard.
+`std::getline` will read a line of any length into memory. That makes the
+record budget below unenforceable, so the reader reads bytes and checks the
+budget as it goes. That is the only reason; nothing else about the reader
+wants byte-at-a-time input.
 
 ## What this design trades away
 
@@ -88,28 +82,25 @@ Recorded here so it is a decision and not an oversight.
 
 - **Random access across records.** There is no array of every instruction
   in a file, and no "instruction 47". A caller that needs to revisit records
-  must keep what it needs, and the strings are only valid until the next
-  read, so keeping means copying.
+  keeps copies — which, unlike in the C version, is just a copy of the
+  `Instruction`.
 - **Retry after a short read.** A stream cannot be rewound, so
-  `AOS_INST_INCOMPLETE` is terminal: the bytes are gone. The previous
-  buffer-based parser could in principle be handed more data and asked
-  again. Nothing in this project needed that, and a blocking `FILE *`
+  `InstState::Incomplete` is terminal: the bytes are gone. A blocking stream
   already waits for a slow writer rather than reporting a short record.
-- **Serializing into a caller's buffer.** The writer targets a `FILE *`
-  only. Anything wanting bytes in memory needs a new entry point.
-- **A per-record error index.** The caller counts records itself; it knows
-  how many `aos_inst_read` calls succeeded before the failing one.
+- **Serializing into a caller's buffer.** The writer targets a
+  `std::ostream`, which `std::ostringstream` makes a non-issue for anyone
+  who wants bytes in memory.
+- **A per-record error index.** The caller counts records itself.
 
 ## Failure leaves nothing behind
 
-Every public field of an `aos_inst_t` is cleared when a read begins and set
-only once the record is complete. So on **every** failing return — including
-`AOS_INST_EOF` — the instruction is empty: `argc == 0`, `argv == NULL`,
-every string `NULL`. A caller cannot accidentally use a half-parsed record,
-and the previous record never survives a failed read.
+Every field is cleared when a read begins and set only once the record is
+complete, so on **every** failing return — including `InstState::Eof` — the
+instruction is empty. A caller cannot mistake a half-parsed record for a
+whole one, and the previous record never survives a failed read.
 
-`split_argv` checks both the empty-argv case and the argument limit before
-it writes the first NUL, so a rejected argv line is never left half-split.
+`split_argv` counts and checks the arguments before it builds any of them,
+so a rejected argv line leaves nothing half-built.
 
 The writer is symmetric: it validates the entire record before emitting a
 byte, so a rejected instruction leaves the stream untouched. The one
@@ -118,132 +109,127 @@ a partial record on the stream, and no validation can prevent that.
 
 ## The record budget
 
-`aos_inst_read` grows its storage buffer to fit whatever it is reading, so
-without a limit a single malformed line would allocate without bound. An
-instruction file is a trust boundary (see below), so a budget always
-applies:
+The reader grows a `std::string` to fit whatever it is reading, so without a
+limit one malformed line would allocate without bound. An instruction file
+is a trust boundary, so a budget always applies:
 
-```c
-aos_inst_state aos_inst_read(FILE *, aos_inst_t *);                 /* 預設值 */
-aos_inst_state aos_inst_read_max(FILE *, aos_inst_t *, size_t);     /* 明確指定 */
+```cpp
+InstState read_instruction(std::istream &in, Instruction &inst,
+                           std::size_t max_record_bytes = kInstRecordMaxBytes);
 ```
 
-The budget counts the eight lines plus the NUL that terminates each of them.
-Exceeding it is `AOS_INST_TOO_LONG`. `AOS_INST_RECORD_MAX_BYTES` is the
-default the convenience form passes, not a ceiling on the API — any positive
-budget is valid, and zero is rejected as an invalid argument rather than
-being read as "unlimited".
+It counts the bytes of the eight lines as they arrive, excluding the LF that
+ends each of them. A CRLF's CR counts, because the CR is stripped only after
+the budget check. Exceeding the budget is `InstState::TooLong`. Zero is
+rejected as an invalid argument rather than read as "unlimited".
 
-It is a **runtime parameter, not a macro**. That is deliberate: a
-compile-time limit in a public header is a trap for a shared library, where
-the value compiled into the library governs and a consumer that redefines
-the macro changes only its own copy of the header. It is also why the test
-build needs no `-D` override and therefore no separate object tree.
+The budget is a **default argument, not a macro**. A compile-time limit in a
+public header is a trap for a shared library, where the value the library
+was built with governs and a consumer that redefines the macro changes only
+its own copy of the header. It is also why the test build needs no `-D`
+override and therefore no separate object tree. `inst_argv_max()` exists for
+the same reason: it reports the argument limit compiled into the library
+rather than making consumers trust their copy of `kInstArgvMax`.
 
-## What the instructions are for: execution
+## Execution
 
-An instruction is a serialized process spawn. That is what every field is:
+An instruction is a serialized process spawn. `aos::execute` takes an
+`Instruction` and nothing else — never a path, never a stream — so it stays
+testable without touching the reader and does not care where the record came
+from.
 
-| line | role at execution time |
-| --- | --- |
-| `argv` | the command and its arguments |
-| `stdin_path` / `stdout_path` / `stderr_path` | redirections |
-| `exit_path` | where the exit status is written |
-| `cwd` | working directory for the child |
-| `env_path` | environment for the child |
-| `extra` | reserved |
+### The field semantics, now decided
 
-`main()` opens a stream, reads instructions from it, and executes them.
+The parser treats these fields as opaque bytes; execution cannot. Each of
+these was undefined by the format, and each is now a choice. Changing one is
+a compatibility break, not a bug fix.
 
-Execution should take an `aos_inst_t`, never a path or a stream. Kept that
-way it stays testable without touching the filesystem, and it does not care
-where the record came from.
+| field | decision | why |
+| --- | --- | --- |
+| `argv` | `argv[0]` is looked up on `PATH`, as `execvp` does | matches what a user typing the same command would get |
+| empty `stdin_path` / `stdout_path` / `stderr_path` | inherit the caller's handle | attaching the null device would silently swallow output |
+| existing `stdout_path` / `stderr_path` | truncate (`O_TRUNC`) | matches a shell's `>`; appending cannot be undone by the caller, truncating can be avoided by choosing a fresh path |
+| empty `cwd` | inherit the caller's working directory | |
+| empty `env_path` | inherit the caller's environment entirely | |
+| non-empty `env_path` | a file of `KEY=VALUE` lines that **replaces** the environment | extending is the caller's job to express; replacing is the reproducible option, and it is the one that cannot be built out of the other |
+| `env_path` line without `=` | `EnvFileFailed` | better to fail than to guess |
+| empty `exit_path` | the status is discarded | |
+| non-empty `exit_path` | truncated, then the decimal status and a newline | |
+| status of a signalled child | `128 + signum` | shell convention, and it keeps the field one number on every platform |
+| `extra` | ignored | |
+| failure to spawn | a runtime error, and **nothing** is written to `exit_path` | see below |
+| several instructions | sequential; a non-zero child does not stop the run, a runtime failure does | a child's status is data, and recording it is what `exit_path` is for |
 
-### This is the first non-portable component
+### Telling "command not found" from "the command exited 127"
 
-Everything up to here is plain C99 with no platform assumptions. Process
-spawning is not:
+These have to stay distinguishable, and after `fork` the child has no way to
+return anything but an exit status. So the child inherits the write end of a
+pipe marked `FD_CLOEXEC` and writes which step failed and its `errno` if it
+cannot get as far as `execvp`. A successful `execvp` closes the pipe, and
+the parent reads zero bytes.
 
-- POSIX: `fork` / `execvp`, `dup2` for redirection, `chdir`, `waitpid`
-- Windows: `CreateProcess` with `STARTUPINFO` handle redirection; there is
-  no `fork`
+That is what makes `ChdirFailed` and `OpenStdoutFailed` distinct states
+rather than a single opaque `SpawnFailed`, and it is why a child that
+genuinely exits 127 is reported as a normal result while a missing command
+is not.
 
-Both targets are required. The platform split should be isolated behind one
-thin internal interface — ideally a single function taking an `aos_inst_t`
-and returning an exit status — so the core and the tests stay pure C99.
+### Portability
 
-One wrinkle the type makes visible: `argv` is `const char **`, and
-`execv`/`execvp` take `char *const *`. The cast is unavoidable in C and
-belongs inside the POSIX spawn function, not in its callers.
+This is the only non-portable component. POSIX (`fork`, `execvp`, `dup2`,
+`chdir`, `waitpid`) is implemented. Windows needs `CreateProcess` with
+`STARTUPINFO` handle redirection and has no `fork`, so it is a second
+implementation rather than a variation on this one; until it exists,
+`execute` compiles there and returns `ExecState::PlatformUnsupported` rather
+than pretending. The split is contained entirely in `exec.cpp` — the header
+is platform-neutral, and `inst.hpp` and the tests stay pure C++11.
 
-### Semantics the format does not yet define
+`_POSIX_C_SOURCE` is defined at the top of `exec.cpp` because `-std=c++11`
+defines `__STRICT_ANSI__`, which otherwise hides the POSIX declarations.
 
-The parser treats these fields as opaque bytes. Execution cannot. Each of
-the following is currently undefined and has to be decided before an
-implementation can be written; they are listed here rather than guessed at.
+### The one wart the type system cannot remove
 
-- **Empty `stdin_path` / `stdout_path` / `stderr_path`** — inherit the
-  parent's handle, or attach the null device? These differ observably.
-- **Empty `cwd`** — inherit the parent's working directory?
-- **Existing `stdout_path` / `stderr_path`** — truncate or append?
-- **`env_path` file format** — the parser calls lines 7 and 8 opaque, so no
-  format exists yet. Also: does it replace the parent environment entirely,
-  or extend it? Empty means what?
-- **`exit_path` contents** — decimal status plus newline? What is written
-  when the child is killed by a signal on POSIX, where there is no exit
-  code? Windows has no equivalent, so a portable encoding has to be chosen.
-- **Failure to spawn** (command not found, `cwd` missing, redirection target
-  unopenable) — is that recorded in `exit_path` like a normal exit, or is it
-  a runtime error that stops the run?
-- **Multiple instructions** — sequential or concurrent? Does a failing
-  instruction stop the remaining ones?
-- **`extra`** — reserved for what? Deciding now avoids a compatibility break
-  later.
+`execv` and friends take `char *const *`. `to_c_argv` builds that from an
+`Instruction`, which is why it takes a non-const reference despite modifying
+nothing. Containing the wart in one function is the most C++ can do about
+it; the alternative is a `const_cast` at every call site.
 
 ### The instruction file is a trust boundary
 
 Executing an instruction file runs arbitrary commands with the invoking
 user's privileges. That is the intended purpose, not a flaw, but it means
 write access to an instruction file is equivalent to code execution. Worth
-stating plainly in the user-facing documentation once the runtime exists.
+stating plainly in the user-facing documentation.
 
 ## Eventual goal: a shared library
 
-The intended end state is a `.so` / `.dll` with a public API that other
-programs link against. Three of the constraints that are expensive to
-retrofit are already satisfied:
+The intended end state is a `.so` / `.dll` that other programs link against.
+Some constraints are already satisfied:
 
-- **Symbol prefix.** Every public function and type is `aos_inst_*` /
-  `aos_inst_t`, so nothing lands in the global namespace under a name as
-  collision-prone as `instruction_read`.
-- **No internal symbols to leak.** Every helper in `src/inst.c` is `static`.
-  There is no internal header and nothing outside the module to export.
+- **Namespacing.** Everything is in `namespace aos`, so nothing collides.
+- **No internal symbols to leak.** Every helper in `inst.cpp` and `exec.cpp`
+  is in an anonymous namespace.
 - **The two limits.** The record budget is a runtime argument, and
-  `aos_inst_argv_max()` reports the argv limit compiled into the library
-  rather than making consumers trust their copy of the macro.
+  `inst_argv_max()` reports the value the library was built with.
 
-What is still outstanding:
+What is still outstanding, and the C++ rewrite made one of these harder:
 
-- **`aos_inst_t` layout freezes at the first release.** The struct is public
-  and used by value, so its layout is ABI — including the four private
-  fields, which are private by documentation only. C offers no way to hide
-  them without an opaque pointer and a heap allocation per instruction.
-  Changing them after release requires a soname bump.
-- **Error enums become append-only.** Consumers compile against numeric
-  values, so new states may only be appended. Reordering or inserting values
-  silently changes the meaning of a stored or transmitted code.
-- **Visibility.** Building a shared object still wants `-fvisibility=hidden`
-  plus an export macro, or a linker version script.
+- **The C++ ABI is a much bigger commitment than the C one was.** Exporting
+  `std::string` and `std::vector` across a library boundary ties consumers
+  to the same compiler, standard library, and `_GLIBCXX_USE_CXX11_ABI`
+  setting. A C++ shared library with this interface is really "a library for
+  programs built exactly like this one". A genuinely stable boundary would
+  need an `extern "C"` shim — which is roughly the C API this code replaced.
+  Worth deciding before anyone links against it.
+- **`Instruction`'s layout is ABI.** It is public and used by value, so
+  adding a field after release requires a soname bump.
+- **Error enums are append-only.** Consumers compile against numeric values,
+  so new states may only be appended.
+- **Visibility.** Building a shared object still wants
+  `-fvisibility=hidden` plus an export macro, or a version script.
 
 ## Suggested order
 
-1. The execution layer: settle the undefined semantics above, then one
-   platform-split spawn function taking an `aos_inst_t`, then wire `main()`
-   from stream to execution.
-2. Before any shared-library release: symbol visibility, and a decision on
-   whether `aos_inst_t` stays a by-value public struct.
-
-Items that were on this list and are no longer needed: two-phase commit in
-the parser, a separate streaming reader, moving the stream writer out of the
-core, and retiring `instruction_scan()`. The single-module rewrite removed
-the conditions that made each of them necessary.
+1. Decide whether the shipped boundary is C++ or an `extern "C"` shim, since
+   it determines whether the public types can stay as they are.
+2. Windows `execute`, if both targets are still required.
+3. Symbol visibility, before any release.

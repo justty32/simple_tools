@@ -1,0 +1,357 @@
+/* 順序要在任何標頭之前，理由與 src/exec.cpp 相同：-std=c++11 會定義
+ * __STRICT_ANSI__，藏起 mkdtemp、setenv 這些 POSIX 介面。 */
+#define _POSIX_C_SOURCE 200809L
+
+#include "test_common.hpp"
+
+#if defined(__unix__) || defined(__APPLE__)
+
+#include "aos/exec.hpp"
+
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
+#include <dirent.h>
+#include <fstream>
+#include <sstream>
+#include <string>
+#include <unistd.h>
+#include <vector>
+
+/*
+ * test_common.hpp 把 run_exec_tests() 宣告在全域範圍（供 test_main.cpp
+ * 呼叫），所以這裡引入 aos 而不是把整個檔案包進 namespace aos 裡。
+ */
+using namespace aos;
+
+namespace {
+
+std::string read_file(const std::string &path)
+{
+    std::ifstream in(path.c_str());
+    std::ostringstream buffer;
+
+    buffer << in.rdbuf();
+    return buffer.str();
+}
+
+void write_file(const std::string &path, const std::string &content)
+{
+    std::ofstream out(path.c_str(), std::ios::out | std::ios::trunc);
+
+    out << content;
+}
+
+bool file_exists(const std::string &path)
+{
+    return access(path.c_str(), F_OK) == 0;
+}
+
+/* 建一個獨一無二的暫存目錄，讓每次測試執行都有乾淨的檔案系統空間。 */
+std::string make_temp_dir()
+{
+    std::string tmpl = "/tmp/aos_c_exec_test_XXXXXX";
+    std::vector<char> buf(tmpl.begin(), tmpl.end());
+
+    buf.push_back('\0');
+
+    const char *result = mkdtemp(buf.data());
+
+    CHECK(result != nullptr);
+    return std::string(buf.data());
+}
+
+/* 刪掉目錄底下所有檔案再刪目錄本身；不假設有哪些檔名存在。 */
+void remove_temp_dir(const std::string &dir)
+{
+    DIR *d = opendir(dir.c_str());
+
+    if (d != nullptr) {
+        struct dirent *entry;
+
+        while ((entry = readdir(d)) != nullptr) {
+            const std::string name = entry->d_name;
+
+            if (name == "." || name == "..") {
+                continue;
+            }
+            std::remove((dir + "/" + name).c_str());
+        }
+        closedir(d);
+    }
+    rmdir(dir.c_str());
+}
+
+std::size_t test_echo_stdout(const std::string &dir)
+{
+    Instruction inst = make_inst({ "echo", "hello world" });
+    ExecResult result;
+
+    inst.stdout_path = dir + "/echo_out";
+
+    CHECK(execute(inst, result) == ExecState::Ok);
+    CHECK(result.status == 0);
+    CHECK(!result.signalled);
+    CHECK(read_file(inst.stdout_path) == "hello world\n");
+    return 1;
+}
+
+std::size_t test_exit_path_written(const std::string &dir)
+{
+    Instruction inst = make_inst({ "sh", "-c", "exit 3" });
+    ExecResult result;
+
+    inst.exit_path = dir + "/exit_status";
+
+    CHECK(execute(inst, result) == ExecState::Ok);
+    CHECK(result.status == 3);
+    CHECK(!result.signalled);
+    CHECK(read_file(inst.exit_path) == "3\n");
+    return 1;
+}
+
+std::size_t test_signalled_child(const std::string &dir)
+{
+    /* 未使用 dir，但保持相同的呼叫慣例，方便日後這裡也要用到檔案。 */
+    static_cast<void>(dir);
+
+    Instruction inst = make_inst({ "sh", "-c", "kill -TERM $$" });
+    ExecResult result;
+
+    CHECK(execute(inst, result) == ExecState::Ok);
+    CHECK(result.signalled);
+    /* 128 加訊號編號，沿用 shell 慣例；SIGTERM 是 15。 */
+    CHECK(result.status == 143);
+    return 1;
+}
+
+std::size_t test_command_not_found(const std::string &dir)
+{
+    Instruction inst = make_inst({ "aos-c-test-no-such-command-xyz" });
+    ExecResult result;
+    const std::string exit_path = dir + "/never_created_exit";
+
+    inst.exit_path = exit_path;
+
+    CHECK(execute(inst, result) == ExecState::SpawnFailed);
+    /* 沒能起來的行程不算「跑完並結束」，exit_path 就不該被建立。 */
+    CHECK(!file_exists(exit_path));
+    return 1;
+}
+
+std::size_t test_genuine_exit_127_distinguishable(const std::string &dir)
+{
+    static_cast<void>(dir);
+
+    Instruction inst = make_inst({ "sh", "-c", "exit 127" });
+    ExecResult result;
+
+    /* 與上一個案例的 SpawnFailed 對照：這裡是子行程真的跑完並回傳 127。 */
+    CHECK(execute(inst, result) == ExecState::Ok);
+    CHECK(result.status == 127);
+    CHECK(!result.signalled);
+    return 1;
+}
+
+std::size_t test_cwd(const std::string &dir)
+{
+    std::size_t cases = 0;
+
+    {
+        Instruction inst = make_inst({ "sh", "-c", "pwd" });
+        ExecResult result;
+
+        inst.cwd = dir;
+        inst.stdout_path = dir + "/pwd_out";
+
+        CHECK(execute(inst, result) == ExecState::Ok);
+
+        std::string output = read_file(inst.stdout_path);
+        if (!output.empty() && output.back() == '\n') {
+            output.pop_back();
+        }
+        CHECK(output == dir);
+        ++cases;
+    }
+    {
+        Instruction inst = make_inst({ "sh", "-c", "pwd" });
+        ExecResult result;
+
+        inst.cwd = dir + "/no-such-subdirectory";
+
+        CHECK(execute(inst, result) == ExecState::ChdirFailed);
+        ++cases;
+    }
+
+    return cases;
+}
+
+std::size_t test_stdin_redirection(const std::string &dir)
+{
+    Instruction inst = make_inst({ "cat" });
+    ExecResult result;
+    const std::string stdin_path = dir + "/cat_in";
+
+    write_file(stdin_path, "piped content\n");
+    inst.stdin_path = stdin_path;
+    inst.stdout_path = dir + "/cat_out";
+
+    CHECK(execute(inst, result) == ExecState::Ok);
+    CHECK(read_file(inst.stdout_path) == "piped content\n");
+    return 1;
+}
+
+std::size_t test_stdout_truncation(const std::string &dir)
+{
+    Instruction inst = make_inst({ "echo", "hi" });
+    ExecResult result;
+    const std::string path = dir + "/truncate_out";
+
+    /* 預先塞進比接下來輸出還長的內容，確認舊內容的尾巴不會殘留。 */
+    write_file(path, "this line is much longer than the new output");
+    inst.stdout_path = path;
+
+    CHECK(execute(inst, result) == ExecState::Ok);
+    CHECK(read_file(path) == "hi\n");
+    return 1;
+}
+
+std::size_t test_stderr_redirection(const std::string &dir)
+{
+    Instruction inst = make_inst({ "sh", "-c", "echo oops >&2" });
+    ExecResult result;
+    const std::string path = dir + "/stderr_out";
+
+    inst.stderr_path = path;
+
+    CHECK(execute(inst, result) == ExecState::Ok);
+    CHECK(read_file(path) == "oops\n");
+    return 1;
+}
+
+std::size_t test_env_path_replaces_environment(const std::string &dir)
+{
+    Instruction inst = make_inst(
+        { "sh", "-c", "echo $MYVAR:$AOS_C_TEST_PARENT_ONLY" });
+    ExecResult result;
+    const std::string env_path = dir + "/env_file";
+    const std::string out_path = dir + "/env_out";
+
+    write_file(env_path, "# a comment line\n\nMYVAR=hello\n");
+    /* 父行程自己設的變數，用來確認換環境是取代而不是延伸。 */
+    setenv("AOS_C_TEST_PARENT_ONLY", "leaked", 1);
+
+    inst.env_path = env_path;
+    inst.stdout_path = out_path;
+
+    CHECK(execute(inst, result) == ExecState::Ok);
+    /* 冒號後面必須是空的：子行程看不到父行程的環境變數。 */
+    CHECK(read_file(out_path) == "hello:\n");
+
+    unsetenv("AOS_C_TEST_PARENT_ONLY");
+    return 1;
+}
+
+std::size_t test_env_path_errors(const std::string &dir)
+{
+    std::size_t cases = 0;
+
+    {
+        Instruction inst = make_inst({ "echo", "x" });
+        ExecResult result;
+
+        inst.env_path = dir + "/no-such-env-file";
+
+        CHECK(execute(inst, result) == ExecState::EnvFileFailed);
+        ++cases;
+    }
+    {
+        Instruction inst = make_inst({ "echo", "x" });
+        ExecResult result;
+        const std::string path = dir + "/bad_env_file";
+
+        write_file(path, "THIS_LINE_HAS_NO_EQUALS_SIGN\n");
+        inst.env_path = path;
+
+        CHECK(execute(inst, result) == ExecState::EnvFileFailed);
+        ++cases;
+    }
+
+    return cases;
+}
+
+std::size_t test_empty_argv_is_invalid_argument()
+{
+    Instruction inst;
+    ExecResult result;
+
+    CHECK(execute(inst, result) == ExecState::InvalidArgument);
+    return 1;
+}
+
+std::size_t test_to_string_covers_every_state()
+{
+    const ExecState states[] = {
+        ExecState::Ok,
+        ExecState::InvalidArgument,
+        ExecState::OpenStdinFailed,
+        ExecState::OpenStdoutFailed,
+        ExecState::OpenStderrFailed,
+        ExecState::EnvFileFailed,
+        ExecState::ChdirFailed,
+        ExecState::SpawnFailed,
+        ExecState::WaitFailed,
+        ExecState::ExitWriteFailed,
+        ExecState::PlatformUnsupported
+    };
+    std::size_t cases = 0;
+
+    for (ExecState state : states) {
+        const char *text = to_string(state);
+
+        CHECK(text != nullptr);
+        CHECK(std::strlen(text) > 0);
+        ++cases;
+    }
+
+    const char *unknown = to_string(static_cast<ExecState>(9999));
+
+    CHECK(unknown != nullptr);
+    CHECK(std::strlen(unknown) > 0);
+    ++cases;
+
+    return cases;
+}
+
+}  /* namespace */
+
+#endif  /* defined(__unix__) || defined(__APPLE__) */
+
+std::size_t run_exec_tests()
+{
+#if defined(__unix__) || defined(__APPLE__)
+    const std::string dir = make_temp_dir();
+    std::size_t count = 0;
+
+    count += test_echo_stdout(dir);
+    count += test_exit_path_written(dir);
+    count += test_signalled_child(dir);
+    count += test_command_not_found(dir);
+    count += test_genuine_exit_127_distinguishable(dir);
+    count += test_cwd(dir);
+    count += test_stdin_redirection(dir);
+    count += test_stdout_truncation(dir);
+    count += test_stderr_redirection(dir);
+    count += test_env_path_replaces_environment(dir);
+    count += test_env_path_errors(dir);
+    count += test_empty_argv_is_invalid_argument();
+    count += test_to_string_covers_every_state();
+
+    remove_temp_dir(dir);
+    return count;
+#else
+    /* 這一層目前只有 POSIX 實作；其他平台上 execute() 只會回報
+     * PlatformUnsupported，沒有行程可測，所以不執行任何案例。 */
+    return 0;
+#endif
+}
