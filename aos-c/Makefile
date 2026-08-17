@@ -11,15 +11,13 @@ TARGET_NAME = aos-c
 TEST_TARGET_NAME = aos-c-tests
 SOURCES = $(wildcard src/*.c)
 OBJECTS = $(patsubst src/%.c,$(BUILD_DIR)/%.o,$(SOURCES))
-LIB_SOURCES = $(filter-out src/main.c,$(SOURCES))
-TEST_LIB_OBJECTS = $(patsubst src/%.c,$(BUILD_DIR)/testlib/%.o,$(LIB_SOURCES))
+# The tests link the same objects as the program, minus its entry point.
+# The record budget is a runtime argument to aos_inst_read_max, so a test
+# build needs no macro override and therefore no separate object tree.
+LIB_OBJECTS = $(filter-out $(BUILD_DIR)/main.o,$(OBJECTS))
 TEST_SOURCES = $(wildcard tests/*.c)
 TEST_OBJECTS = $(patsubst tests/%.c,$(BUILD_DIR)/tests/%.o,$(TEST_SOURCES))
-DEPS = $(OBJECTS:.o=.d) $(TEST_LIB_OBJECTS:.o=.d) $(TEST_OBJECTS:.o=.d)
-
-# Test builds need a small file-size cap so boundary tests don't allocate
-# the real 64 MiB production limit. Production builds are unaffected.
-TEST_FILE_MAX_BYTES = 65536
+DEPS = $(OBJECTS:.o=.d) $(TEST_OBJECTS:.o=.d)
 
 ifeq ($(MODE),release)
 CFLAGS += -O2 -DNDEBUG
@@ -60,25 +58,19 @@ test: $(TEST_TARGET)
 $(TARGET): $(OBJECTS)
 	$(CC) $(LDFLAGS) $(OBJECTS) -o $@ $(LDLIBS)
 
-$(TEST_TARGET): $(TEST_LIB_OBJECTS) $(TEST_OBJECTS)
-	$(CC) $(LDFLAGS) $(TEST_LIB_OBJECTS) $(TEST_OBJECTS) -o $@ $(LDLIBS)
+$(TEST_TARGET): $(LIB_OBJECTS) $(TEST_OBJECTS)
+	$(CC) $(LDFLAGS) $(LIB_OBJECTS) $(TEST_OBJECTS) -o $@ $(LDLIBS)
 
 $(BUILD_DIR)/%.o: src/%.c | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(DEPFLAGS) -c $< -o $@
 
-$(BUILD_DIR)/testlib/%.o: src/%.c | $(BUILD_DIR)/testlib
-	$(CC) $(CPPFLAGS) $(CFLAGS) -DAOS_INSTRUCTION_FILE_MAX_BYTES=$(TEST_FILE_MAX_BYTES) $(DEPFLAGS) -c $< -o $@
-
 $(BUILD_DIR)/tests/%.o: tests/%.c | $(BUILD_DIR)/tests
-	$(CC) $(CPPFLAGS) -Itests $(CFLAGS) -DAOS_INSTRUCTION_FILE_MAX_BYTES=$(TEST_FILE_MAX_BYTES) $(DEPFLAGS) -c $< -o $@
+	$(CC) $(CPPFLAGS) -Itests $(CFLAGS) $(DEPFLAGS) -c $< -o $@
 
 $(BUILD_DIR):
 	$(MKDIR)
 
 $(BUILD_DIR)/tests: | $(BUILD_DIR)
-	$(MKDIR)
-
-$(BUILD_DIR)/testlib: | $(BUILD_DIR)
 	$(MKDIR)
 
 clean:

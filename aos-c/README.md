@@ -54,3 +54,5 @@ C:\dev\mingw64\bin\mingw32-make.exe clean
 - `src/` contains C source files and the program entry point.
 - `include/aos/` contains public headers.
 - `tests/` contains standalone test sources (using the `CHECK` macro from `tests/test_check.h`, no framework), built and run via `make test`.
+- `docs/architecture.md` describes the instruction format, the reader and
+  writer in `include/aos/inst.h`, and what the design deliberately gives up.

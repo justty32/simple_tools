@@ -1,68 +1,72 @@
 #ifndef TEST_COMMON_H
 #define TEST_COMMON_H
 
-#include "aos/instruction.h"
+#include "aos/inst.h"
+#include "test_check.h"
 
 #include <stddef.h>
+#include <stdio.h>
 #include <string.h>
 
-/* Argument slot count sized for the max argv plus a trailing NULL, shared
- * by every test file that calls instruction_read. */
-#define SLOTS_COUNT (AOS_INSTRUCTION_ARGV_MAX + 1U)
+/*
+ * Both helpers are `static inline` so that including this header in a
+ * translation unit that happens not to call one is neither a multiple
+ * definition error nor an unused-function warning.
+ */
 
 /*
- * Fills `instr` with the given argv/argc and empty-string placeholders for
- * every other field, so each write test only has to override the fields it
- * cares about. Shared by test_instruction_write.c and
- * test_instruction_write_errors.c; `static inline` avoids both a multiple
- * definition error across translation units and an unused-function warning
- * in whichever file doesn't call it in every build configuration.
+ * Return a readable stream holding text, positioned at its first byte.
+ * tmpfile() keeps the reader tests off the filesystem; the stream is closed
+ * with fclose() like any other.
  */
-static inline void fill_instruction(instruction_t *instr, const char **argv,
-                                     size_t argc)
+static inline FILE *stream_from(const char *text)
 {
-    memset(instr, 0, sizeof(*instr));
-    instr->argc = argc;
-    instr->argv = argv;
-    instr->stdin_path = "";
-    instr->stdout_path = "";
-    instr->stderr_path = "";
-    instr->exit_path = "";
-    instr->cwd = "";
-    instr->env_path = "";
-    instr->extra = "";
+    size_t length = strlen(text);
+    FILE *stream = tmpfile();
+
+    CHECK(stream != NULL);
+    if (length > 0U) {
+        CHECK(fwrite(text, 1U, length, stream) == length);
+    }
+    rewind(stream);
+    return stream;
 }
 
-/* Runs every instruction_read success-path test and returns how many it
- * ran. */
-size_t run_instruction_read_tests(void);
+/*
+ * Fill inst with the given argv and an empty string for all seven other
+ * fields, so a write test only has to override what it is testing. The
+ * result borrows every string and owns nothing, which is exactly the
+ * hand-built case aos_inst_write is meant to accept.
+ */
+static inline void fill_inst(aos_inst_t *inst, const char **argv, size_t argc)
+{
+    aos_inst_init(inst);
+    inst->argc = argc;
+    inst->argv = argv;
+    inst->stdin_path = "";
+    inst->stdout_path = "";
+    inst->stderr_path = "";
+    inst->exit_path = "";
+    inst->cwd = "";
+    inst->env_path = "";
+    inst->extra = "";
+}
 
-/* Runs every instruction_read rejection/boundary test. */
-size_t run_instruction_read_error_tests(void);
+/* Each test file exports one runner returning how many cases it ran. */
 
-/* Runs every instruction_write / instruction_write_buffer success-path
- * test. */
-size_t run_instruction_write_tests(void);
+/* aos_inst_read success paths: fields, argv splitting, CRLF, reuse. */
+size_t run_inst_read_tests(void);
 
-/* Runs every instruction_write / instruction_write_buffer rejection test. */
-size_t run_instruction_write_error_tests(void);
+/* aos_inst_read rejection paths: EOF, INCOMPLETE, EMPTY_ARGV, read errors. */
+size_t run_inst_read_error_tests(void);
 
-/* Runs every instruction_file_t test and returns how many it ran. */
-size_t run_instruction_file_tests(void);
+/* The record budget and the argv limit, at and either side of the boundary. */
+size_t run_inst_limit_tests(void);
 
-/* Runs the total-memory-budget boundary tests (exact cap / one byte over). */
-size_t run_instruction_budget_tests(void);
+/* aos_inst_write success paths, including a write/read round trip. */
+size_t run_inst_write_tests(void);
 
-/* Runs the test proving non-argv Tabs never consume argv slots. */
-size_t run_instruction_budget_tabs_tests(void);
-
-/* Runs the multi-record argv_slots layout test. */
-size_t run_instruction_file_slots_tests(void);
-
-/* Runs the error_index / instruction_error diagnostics tests. */
-size_t run_instruction_file_error_index_tests(void);
-
-/* Runs the instruction_write(FILE *, ...) success-path test. */
-size_t run_instruction_write_file_tests(void);
+/* aos_inst_write validation rejections, and that they emit nothing. */
+size_t run_inst_write_error_tests(void);
 
 #endif

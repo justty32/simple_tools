@@ -2,165 +2,143 @@
 
 ## Layers
 
-The design is three layers, innermost first. Everything else follows from this
-ordering.
-
 ```text
-┌─ file layer ────────────────────────────────────────────────┐
-│  many instructions in one file; ownership of buffers        │
-│  instruction_file_read / instruction_file_free              │
+┌─ main ──────────────────────────────────────────────────────┐
+│  open a stream  ->  read records  ->  execute them          │
+├─ execution ─────────────────────────────────────────────────┤
+│  aos_inst_t  ->  a spawned process                          │
 ├─ core ──────────────────────────────────────────────────────┤
-│  instruction_t                                              │
-│  parse:  char **ptr        -> instruction_t   (streamable)  │
-│  write:  instruction_t     -> char **ptr                    │
+│  aos_inst_t                                                 │
+│  read:   FILE *  ->  aos_inst_t   (one record per call)     │
+│  write:  aos_inst_t  ->  FILE *                             │
 └─────────────────────────────────────────────────────────────┘
 ```
 
-The core knows nothing about files. It moves one record between a byte cursor
-and an `instruction_t`, in both directions, and **must be usable on a stream** —
-that is, it must work when the caller can only supply bytes a chunk at a time.
+The core is one module, `aos/inst.h` and `src/inst.c`. It moves one record
+between a stream and an `aos_inst_t`, in both directions, and it is the only
+parser in the project.
 
-The file layer sits on top and adds exactly two things: reading many records,
-and owning the memory they borrow from.
+There is no file layer. A caller that wants every record in a file opens the
+file and calls `aos_inst_read` until it returns `AOS_INST_EOF`.
 
 ## Why the core is shaped this way
 
-`instruction_t` is deliberately small (72 bytes on x64). It holds `argc`, a
-borrowed `const char **argv`, and seven borrowed field pointers. It owns
-nothing. Both the argv slot array and the character buffer belong to the caller.
+The reader consumes exactly one record per call, straight from a `FILE *`.
+Three things follow, and they are the reason for the shape:
 
-That is what makes the core streamable: a caller with a single record-sized
-buffer and a single slot array can parse an unbounded number of records through
-it, reusing both.
+- **Pipes and stdin work.** Nothing seeks, and nothing needs to know the
+  length of the input in advance.
+- **Memory is O(longest record), not O(input).** A hundred-gigabyte
+  instruction stream is read through a buffer sized by its longest record.
+- **The first record is available before the rest of the input exists.** A
+  producer and a consumer can run at the same time.
 
-The parser's real precondition is narrow:
+### One buffer per instruction, owned by the instruction
 
-> `*ptr` points at a writable, NUL-terminated byte range containing at least one
-> complete eight-line record.
+`aos_inst_t` holds nine public fields — `argc`, `argv`, and seven strings —
+and four private ones. Every public string points into a single `storage`
+buffer that the instruction owns, and `argv` points into a single owned slot
+array. Two allocations per record, not one per line.
 
-Never "the whole file".
-
-## Consequences for the current code
-
-Two things sit in the wrong layer today.
-
-### `instruction_write(FILE *, ...)` is not core
-
-The core writer is `instruction_write_buffer(char **ptr, size_t *remaining, ...)`,
-which matches the layering. But `instruction_write.c` also exports
+Both allocations are kept across reads. A caller that reads a whole stream
+through one `aos_inst_t` stops allocating entirely once the buffers have
+reached the size of the longest record seen so far:
 
 ```c
-instruction_write_state instruction_write(FILE *stream, const instruction_t *);
+aos_inst_t inst;
+aos_inst_state state;
+
+aos_inst_init(&inst);
+while ((state = aos_inst_read(stream, &inst)) == AOS_INST_OK) {
+    /* use inst; its strings are valid until the next read */
+}
+aos_inst_free(&inst);
 ```
 
-That is a stream-level operation living in the core module, and it duplicates
-the serialization logic rather than building on the `char **` writer. By the
-layering above it belongs outside the core — either in the file layer or in a
-thin stream layer beside it.
+Storage moves under `realloc` while a record is being read, so the reader
+records the eight field positions as offsets and turns them into pointers
+only once the eighth line is in. That is eight `size_t` on the stack, and it
+is what removes the need to measure a record before parsing it.
 
-### `instruction_scan()` is a file-layer concern that leaked into core
+### Why the strings are `const char *` even though the struct owns them
 
-`instruction_scan()` lives in `instruction.c` but exists solely so the file
-layer can pre-size its two metadata arrays. It is not part of "parse one record
-from a cursor".
-
-It is there for a real reason. Each `instruction_t.argv` points **into** the
-shared `argv_slots` array, so growing that array with `realloc` while parsing
-would dangle every `argv` handed out so far. Pre-measuring avoids storing
-offsets and rewriting them at the end.
-
-But that reason is an artifact of the file layer allocating one flat array up
-front. A file layer built on a streaming core would accumulate records instead
-and would not need the scan at all.
-
-## The blocker: reads are not atomic on failure
-
-A streaming core must support "not enough data yet, try again later". The
-current parser cannot, because it mutates its input before discovering the
-record is short, and advances `*ptr` as it goes:
-
-```text
-attempt 1 -- incomplete record (4 of 8 lines)
-  before   cursor_offset=0  bytes=[a\nb\nc\nd\n]
-  -> instruction has fewer than eight lines
-  after    cursor_offset=8  bytes=[a\0b\0c\0d\0]   <-- rewritten, cursor moved
-
-attempt 2 -- feeder appends the tail and retries from the start
-  buffer   cursor_offset=0  bytes=[a\0b\0c\0d\0e\nf\ng\nh\n]
-  -> instruction has fewer than eight lines        <-- fails forever
-```
-
-Line 0's LF is now a NUL, so `strchr` stops there and that record can never be
-parsed again.
-
-`TOO_FEW_LINES` is also inherently ambiguous between "the buffer ran out" and
-"the file ran out". Only the feeder knows which. That is correct layering, not a
-gap: the parser reports what it sees, the feeder decides what it means.
-
-## Planned change: make the core symmetric
-
-Split `split_lines()` into measure and commit phases. It already keeps a
-`lines[]` array; add a parallel `lengths[]`, locate all eight line bounds
-without writing anything, then write the NULs and advance `*ptr` only once all
-eight are known.
-
-`split_argv()` needs the same treatment. It runs after `split_lines()` has
-committed and writes NULs over tabs, so `EMPTY_ARGV` or `TOO_MANY_ARGUMENTS`
-would still leave a half-rewritten buffer. Counting tabs and validating both
-limits before splitting keeps the contract to one sentence rather than "atomic
-for one error code but not the others".
-
-The guarantee to document on `instruction_read()`:
-
-> On failure `*ptr` and the input buffer are both unchanged; the caller may
-> retry after supplying more data.
-
-This is not only a streaming enabler. The write direction **already** promises
-that a validation or capacity failure leaves `*ptr`, `*remaining`, and the
-destination untouched. Today the two halves of the core disagree; this makes
-them symmetric.
-
-Cost: eight `size_t` on the stack. `line_bound()` is already called once per
-line, so no extra scanning is introduced.
-
-## Sketch: the streaming reader
-
-Once reads are atomic, this sits beside `instruction_file` rather than replacing
-it:
+The same type has to serve both directions. The reader fills an
+`aos_inst_t` that owns its memory; a caller of the writer wants to assign
+string literals and pass the result straight in:
 
 ```c
-typedef struct instruction_reader instruction_reader;
+aos_inst_t inst;
+const char *argv[] = { "echo", "hi", NULL };
 
-/* Caller owns both buffers; the reader allocates nothing. */
-void instruction_reader_init(instruction_reader *r, FILE *stream,
-                             char *record_buf, size_t record_bytes,
-                             const char **argv_slots, size_t slot_count);
-
-/* Strings in *out borrow record_buf and stay valid until the next call. */
-instruction_state instruction_reader_next(instruction_reader *r,
-                                          instruction_t *out);
+aos_inst_init(&inst);
+inst.argc = 2U;
+inst.argv = argv;
+inst.stdin_path = "";           /* ... and the other six */
+aos_inst_write(stream, &inst);
 ```
 
-Memory becomes O(longest record) instead of O(file), the aggregate budget stops
-being a limit at all, and the first record is available before the rest of the
-input has been read.
+Making the fields `const char *` is what lets that second case be written at
+all. Ownership lives entirely in the private `storage` and `argv_slots`
+pointers, which stay `NULL` in a hand-built instruction — so `aos_inst_free`
+on one frees nothing and is safe, rather than being a documented hazard.
 
-Two things are genuinely new, and neither touches the parsing algorithm:
+## What this design trades away
 
-- A record longer than `record_bytes` needs its own error condition.
-- Borrowed strings are valid only until the next call, so a caller that wants to
-  retain a record must copy it.
+Recorded here so it is a decision and not an oversight.
 
-Random access across all records is what gets traded away. That is what the file
-layer is for.
+- **Random access across records.** There is no array of every instruction
+  in a file, and no "instruction 47". A caller that needs to revisit records
+  must keep what it needs, and the strings are only valid until the next
+  read, so keeping means copying.
+- **Retry after a short read.** A stream cannot be rewound, so
+  `AOS_INST_INCOMPLETE` is terminal: the bytes are gone. The previous
+  buffer-based parser could in principle be handed more data and asked
+  again. Nothing in this project needed that, and a blocking `FILE *`
+  already waits for a slow writer rather than reporting a short record.
+- **Serializing into a caller's buffer.** The writer targets a `FILE *`
+  only. Anything wanting bytes in memory needs a new entry point.
+- **A per-record error index.** The caller counts records itself; it knows
+  how many `aos_inst_read` calls succeeded before the failing one.
 
-## Note: the file layer cannot stream today
+## Failure leaves nothing behind
 
-Independent of the above, `instruction_file_read()` takes a **path**, and
-`instruction_file_load()` sizes the file with `fseek(SEEK_END)` / `ftell`. A pipe
-or `stdin` therefore cannot be read at all — the seek fails and the call returns
-`INSTRUCTION_FILE_SEEK_FAILED`. This is structural, not a bug, but it is worth
-knowing before the file layer is expected to consume streams.
+Every public field of an `aos_inst_t` is cleared when a read begins and set
+only once the record is complete. So on **every** failing return — including
+`AOS_INST_EOF` — the instruction is empty: `argc == 0`, `argv == NULL`,
+every string `NULL`. A caller cannot accidentally use a half-parsed record,
+and the previous record never survives a failed read.
+
+`split_argv` checks both the empty-argv case and the argument limit before
+it writes the first NUL, so a rejected argv line is never left half-split.
+
+The writer is symmetric: it validates the entire record before emitting a
+byte, so a rejected instruction leaves the stream untouched. The one
+asymmetry left is physical — an I/O error part-way through a write may leave
+a partial record on the stream, and no validation can prevent that.
+
+## The record budget
+
+`aos_inst_read` grows its storage buffer to fit whatever it is reading, so
+without a limit a single malformed line would allocate without bound. An
+instruction file is a trust boundary (see below), so a budget always
+applies:
+
+```c
+aos_inst_state aos_inst_read(FILE *, aos_inst_t *);                 /* default */
+aos_inst_state aos_inst_read_max(FILE *, aos_inst_t *, size_t);     /* explicit */
+```
+
+The budget counts the eight lines plus the NUL that terminates each of them.
+Exceeding it is `AOS_INST_TOO_LONG`. `AOS_INST_RECORD_MAX_BYTES` is the
+default the convenience form passes, not a ceiling on the API — any positive
+budget is valid, and zero is rejected as an invalid argument rather than
+being read as "unlimited".
+
+It is a **runtime parameter, not a macro**. That is deliberate: a
+compile-time limit in a public header is a trap for a shared library, where
+the value compiled into the library governs and a consumer that redefines
+the macro changes only its own copy of the header. It is also why the test
+build needs no `-D` override and therefore no separate object tree.
 
 ## What the instructions are for: execution
 
@@ -175,26 +153,11 @@ An instruction is a serialized process spawn. That is what every field is:
 | `env_path` | environment for the child |
 | `extra` | reserved |
 
-`main()` names a file, reads the instructions in it, and executes them.
+`main()` opens a stream, reads instructions from it, and executes them.
 
-### The execution layer depends on the core, not on the file layer
-
-```text
-┌─ main ──────────────────────────────────────────────────────┐
-│  file layer  ->  execution layer                            │
-├─ execution ─────────────────────────────────────────────────┤
-│  instruction_t  ->  a spawned process                       │
-├─ file layer ────────────────────────────────────────────────┤
-│  many instructions in one file                              │
-├─ core ──────────────────────────────────────────────────────┤
-│  instruction_t, parse, write                                │
-└─────────────────────────────────────────────────────────────┘
-```
-
-Execution should take an `instruction_t`, never a file path or a
-`instruction_file_t`. Kept that way it works unchanged against the file layer
-today and against the streaming reader later, and it stays testable without
-touching the filesystem.
+Execution should take an `aos_inst_t`, never a path or a stream. Kept that
+way it stays testable without touching the filesystem, and it does not care
+where the record came from.
 
 ### This is the first non-portable component
 
@@ -202,33 +165,36 @@ Everything up to here is plain C99 with no platform assumptions. Process
 spawning is not:
 
 - POSIX: `fork` / `execvp`, `dup2` for redirection, `chdir`, `waitpid`
-- Windows: `CreateProcess` with `STARTUPINFO` handle redirection; there is no
-  `fork`
+- Windows: `CreateProcess` with `STARTUPINFO` handle redirection; there is
+  no `fork`
 
-Both targets are required. The platform split should be isolated behind one thin
-internal interface — ideally a single function that takes an `instruction_t` and
-returns an exit status — so the core, the file layer, and the tests stay pure
-C99 and portable.
+Both targets are required. The platform split should be isolated behind one
+thin internal interface — ideally a single function taking an `aos_inst_t`
+and returning an exit status — so the core and the tests stay pure C99.
+
+One wrinkle the type makes visible: `argv` is `const char **`, and
+`execv`/`execvp` take `char *const *`. The cast is unavoidable in C and
+belongs inside the POSIX spawn function, not in its callers.
 
 ### Semantics the format does not yet define
 
-The parser treats these fields as opaque bytes. Execution cannot. Each of the
-following is currently undefined and has to be decided before an implementation
-can be written; they are listed here rather than guessed at.
+The parser treats these fields as opaque bytes. Execution cannot. Each of
+the following is currently undefined and has to be decided before an
+implementation can be written; they are listed here rather than guessed at.
 
-- **Empty `stdin_path` / `stdout_path` / `stderr_path`** — inherit the parent's
-  handle, or attach the null device? These differ observably.
+- **Empty `stdin_path` / `stdout_path` / `stderr_path`** — inherit the
+  parent's handle, or attach the null device? These differ observably.
 - **Empty `cwd`** — inherit the parent's working directory?
 - **Existing `stdout_path` / `stderr_path`** — truncate or append?
 - **`env_path` file format** — the parser calls lines 7 and 8 opaque, so no
-  format exists yet. Also: does it replace the parent environment entirely, or
-  extend it? Empty means what?
-- **`exit_path` contents** — decimal status plus newline? What is written when
-  the child is killed by a signal on POSIX, where there is no exit code? Windows
-  has no equivalent, so a portable encoding has to be chosen.
+  format exists yet. Also: does it replace the parent environment entirely,
+  or extend it? Empty means what?
+- **`exit_path` contents** — decimal status plus newline? What is written
+  when the child is killed by a signal on POSIX, where there is no exit
+  code? Windows has no equivalent, so a portable encoding has to be chosen.
 - **Failure to spawn** (command not found, `cwd` missing, redirection target
-  unopenable) — is that recorded in `exit_path` like a normal exit, or is it a
-  runtime error that stops the run?
+  unopenable) — is that recorded in `exit_path` like a normal exit, or is it
+  a runtime error that stops the run?
 - **Multiple instructions** — sequential or concurrent? Does a failing
   instruction stop the remaining ones?
 - **`extra`** — reserved for what? Deciding now avoids a compatibility break
@@ -236,86 +202,48 @@ can be written; they are listed here rather than guessed at.
 
 ### The instruction file is a trust boundary
 
-Executing an instruction file runs arbitrary commands with the invoking user's
-privileges. That is the intended purpose, not a flaw, but it means write access
-to an instruction file is equivalent to code execution. Worth stating plainly in
-the user-facing documentation once the runtime exists.
+Executing an instruction file runs arbitrary commands with the invoking
+user's privileges. That is the intended purpose, not a flaw, but it means
+write access to an instruction file is equivalent to code execution. Worth
+stating plainly in the user-facing documentation once the runtime exists.
 
 ## Eventual goal: a shared library
 
-The intended end state is a `.so` / `.dll` with a public API that other programs
-link against. That is later work, but some of its constraints are cheap to
-satisfy now and expensive to retrofit, so they are recorded here.
+The intended end state is a `.so` / `.dll` with a public API that other
+programs link against. Three of the constraints that are expensive to
+retrofit are already satisfied:
 
-### Symbol names need a prefix — cheapest to fix now
+- **Symbol prefix.** Every public function and type is `aos_inst_*` /
+  `aos_inst_t`, so nothing lands in the global namespace under a name as
+  collision-prone as `instruction_read`.
+- **No internal symbols to leak.** Every helper in `src/inst.c` is `static`.
+  There is no internal header and nothing outside the module to export.
+- **The two limits.** The record budget is a runtime argument, and
+  `aos_inst_argv_max()` reports the argv limit compiled into the library
+  rather than making consumers trust their copy of the macro.
 
-Public functions and types are currently unprefixed: `instruction_read`,
-`instruction_t`, `instruction_state`, `instruction_file_read`. In a shared
-library these land in a global symbol namespace where `instruction_read` is a
-very plausible collision.
+What is still outstanding:
 
-The macros already use `AOS_`; the functions and types do not. Renaming to
-`aos_instruction_*` costs almost nothing today and becomes a breaking change for
-every consumer once the library ships.
-
-### Internal symbols will be exported unless stopped
-
-`instruction_scan()` is declared in `src/instruction_internal.h` and is not
-`static`, so it is a normal external symbol. Building a shared object as-is
-would export it as part of the public ABI. This needs either
-`-fvisibility=hidden` plus an explicit export macro, or a linker version script.
-
-### Compile-time limits must become runtime values
-
-Two limits are `#define`s in public headers:
-
-- `AOS_INSTRUCTION_ARGV_MAX`
-- `AOS_INSTRUCTION_FILE_MAX_BYTES`
-
-Once the code is a shared library, the value compiled into the library is the
-one that governs. A consumer that overrides the macro would change its own copy
-of the header and nothing else, so the code would silently behave against a
-different limit than the header appears to promise.
-
-This is not hypothetical: the test build already overrides
-`AOS_INSTRUCTION_FILE_MAX_BYTES` via `-D` precisely because it is compile-time.
-That technique works only while the library and its caller are compiled
-together.
-
-Both should become runtime values before the library ships — a getter for the
-argv limit, and a settable field or parameter for the memory budget.
-
-### `instruction_t` layout freezes at the first release
-
-The struct is public and used by value, so its layout is ABI. It has already
-changed once during development (inline `argv[257]` to `const char **argv`).
-That freedom ends when the library ships; after that, layout changes require a
-soname bump.
-
-### Error enums become append-only
-
-Consumers compile against numeric values, so new states may only be appended.
-Reordering or inserting values silently changes the meaning of stored or
-transmitted codes.
+- **`aos_inst_t` layout freezes at the first release.** The struct is public
+  and used by value, so its layout is ABI — including the four private
+  fields, which are private by documentation only. C offers no way to hide
+  them without an opaque pointer and a heap allocation per instruction.
+  Changing them after release requires a soname bump.
+- **Error enums become append-only.** Consumers compile against numeric
+  values, so new states may only be appended. Reordering or inserting values
+  silently changes the meaning of a stored or transmitted code.
+- **Visibility.** Building a shared object still wants `-fvisibility=hidden`
+  plus an export macro, or a linker version script.
 
 ## Suggested order
 
-1. Two-phase commit in `instruction_read()`, with tests proving the buffer is
-   untouched on every failure path and that a partial-then-completed record
-   parses on retry.
-2. `instruction_reader` on top of it.
-3. Move `instruction_write(FILE *, ...)` out of the core, implemented over
-   `instruction_write_buffer()` rather than duplicating serialization.
-4. Optionally reimplement `instruction_file_read()` as stream-and-accumulate,
-   which retires `instruction_scan()` and leaves exactly one parser.
-5. The execution layer: settle the undefined semantics above first, then a
-   single platform-split spawn function taking an `instruction_t`, then wire
-   `main()` as file layer to execution layer.
-6. Before any shared-library release: the `aos_` symbol prefix, symbol
-   visibility, and moving the two compile-time limits to runtime.
+1. The execution layer: settle the undefined semantics above, then one
+   platform-split spawn function taking an `aos_inst_t`, then wire `main()`
+   from stream to execution.
+2. Before any shared-library release: symbol visibility, and a decision on
+   whether `aos_inst_t` stays a by-value public struct.
 
-Two notes on ordering. The renaming in item 6 is worth doing early rather than
-last: every step above adds call sites, and each one makes the rename larger.
-And item 5 does not depend on items 1 through 4 — execution consumes an
-`instruction_t`, which already exists and is stable — so it can proceed in
-parallel if that is the more interesting half.
+Items that were on this list and are no longer needed: two-phase commit in
+the parser, a separate streaming reader, moving the stream writer out of the
+core, and retiring `instruction_scan()`. The single-module rewrite removed
+the conditions that made each of them necessary.
