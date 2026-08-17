@@ -1,8 +1,7 @@
 /*
- * Entry point for the aos-c test suite. Each test file exports one
- * run_*_tests() function (declared in test_common.h) that runs its cases
- * and returns how many it ran; this file just calls all of them in order
- * and prints the combined total.
+ * aos-c 測試套件的進入點。每個測試檔案都會匯出一個 run_*_tests() 函式
+ * （宣告於 test_common.h），用來執行其中的測試案例並回傳執行數量；
+ * 此檔案只會依序呼叫所有函式，並印出合計數量。
  */
 #include "test_common.h"
 

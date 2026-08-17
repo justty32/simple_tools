@@ -1,15 +1,13 @@
 /*
- * aos_inst_write validation rejections. Every rejection must also leave
- * the stream untouched, since the header promises the whole record is
- * validated before the first byte is written.
+ * aos_inst_write 的驗證拒絕路徑。由於標頭保證會在寫入第一個位元組之前驗證
+ * 整筆記錄，因此每次拒絕也都不能改動串流。
  */
 #include "test_common.h"
 
 #include <stdlib.h>
 #include <string.h>
 
-/* Runs one write attempt on a fresh tmpfile and checks both the returned
- * state and that nothing was written to the stream. */
+/* 在全新的 tmpfile 上嘗試寫入一次，並同時檢查回傳狀態及串流未寫入任何內容。 */
 static void check_rejected(const aos_inst_t *inst, aos_inst_state expected)
 {
     FILE *stream = tmpfile();
@@ -43,9 +41,8 @@ static size_t test_null_argv_with_positive_argc(void)
 }
 
 /*
- * argc alone decides this: inst_validate rejects on the count before it
- * ever indexes into argv, so the array need not actually hold that many
- * live entries for the check to be exercised safely.
+ * 此結果只由 argc 決定：inst_validate 會先依數量拒絕，再存取 argv 的索引，
+ * 因此陣列不必真的包含那麼多有效項目，也能安全測試此項檢查。
  */
 static size_t test_argc_over_max_is_too_many_args(void)
 {
@@ -102,10 +99,9 @@ static size_t test_argument_contains_cr(void)
 }
 
 /*
- * A lone empty argument has no tab to mark a boundary, so it cannot
- * round-trip: it would serialize to an empty argv line and read back as
- * AOS_INST_EMPTY_ARGV rather than argc == 1. The writer rejects it up
- * front instead of producing an unreadable record.
+ * 單一空引數沒有定位字元可標示邊界，因此無法往返還原：它會序列化成空白的
+ * argv 行，讀回時得到 AOS_INST_EMPTY_ARGV，而不是 argc == 1。寫入器會預先
+ * 拒絕它，避免產生無法讀取的記錄。
  */
 static size_t test_single_empty_argument_is_empty_argv(void)
 {
@@ -117,8 +113,8 @@ static size_t test_single_empty_argument_is_empty_argv(void)
     return 1U;
 }
 
-/* One case per non-argv field, built by resetting a fresh borrowed
- * instruction each time and nulling exactly one field. */
+/* 每個非 argv 欄位各有一個案例；每次重設一個全新的借用指令，並且只將一個
+ * 欄位設為 NULL。 */
 static size_t test_null_field_each_of_seven(void)
 {
     const char *argv[] = { "cmd" };
@@ -192,8 +188,8 @@ static size_t test_null_instruction_is_invalid_argument(void)
 }
 
 /*
- * A hand-built instruction owns none of its storage: aos_inst_free must
- * free nothing (clean under ASan) and still zero the struct.
+ * 手動建構的指令不擁有任何儲存空間：aos_inst_free 不得釋放任何內容
+ * （在 ASan 下不會報錯），但仍須將結構歸零。
  */
 static size_t test_free_on_borrowed_instruction_is_clean(void)
 {

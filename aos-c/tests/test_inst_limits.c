@@ -1,8 +1,7 @@
 /*
- * The two hard limits aos_inst_read enforces: the per-record byte budget
- * and AOS_INST_ARGV_MAX, exercised at and either side of each boundary,
- * plus the buffer-reuse path that keeps storage across records of very
- * different sizes.
+ * aos_inst_read 強制執行的兩項硬性限制：單筆記錄位元組上限與
+ * AOS_INST_ARGV_MAX。本檔案測試各項限制的邊界值及其前後，並測試緩衝區
+ * 重複使用路徑，確認大小差異很大的記錄之間仍會保留儲存空間。
  */
 #include "test_common.h"
 
@@ -10,10 +9,9 @@
 #include <string.h>
 
 /*
- * A record whose eight lines (CR and LF excluded) total 8 bytes, so its
- * storage cost is 8 bytes of content plus one NUL per line: 16 bytes.
- * argv is "p\tq" (argc 2), and stdin..cwd are one byte each; env and extra
- * are empty.
+ * 此記錄的八行內容（不含 CR 與 LF）合計 8 個位元組，因此儲存成本為 8 個
+ * 內容位元組，加上每行一個 NUL，共 16 個位元組。argv 為 "p\tq"
+ * （argc 為 2），stdin 到 cwd 各占一個位元組；env 與 extra 為空。
  */
 #define LIMIT_RECORD_TEXT "p\tq\ni\no\ne\nx\nc\n\n\n"
 #define LIMIT_RECORD_BYTES 16U
@@ -56,9 +54,8 @@ static size_t test_budget_one_byte_short(void)
     return 1U;
 }
 
-/* Build an argv line of `argc` single-character arguments separated by
- * tabs, followed by seven empty lines, giving a complete eight-line
- * record. Caller frees the result. */
+/* 建立一個 argv 行，其中包含 `argc` 個以定位字元分隔的單字元引數，接著附加
+ * 七個空白行，形成完整的八行記錄。結果由呼叫端釋放。 */
 static char *build_argv_record(size_t argc)
 {
     size_t capacity = argc * 2U + 16U;
@@ -130,7 +127,7 @@ static size_t test_argv_max_matches_accessor(void)
     return 1U;
 }
 
-/* Tabs on lines 2-8 are just bytes to the reader; only line 1 is split. */
+/* 對讀取器而言，第 2 至第 8 行的定位字元只是一般位元組；只有第 1 行會分割。 */
 static size_t test_tabs_in_non_argv_lines_are_data(void)
 {
     aos_inst_t inst;
@@ -149,9 +146,9 @@ static size_t test_tabs_in_non_argv_lines_are_data(void)
     return 1U;
 }
 
-/* One instruction, three records of very different lengths back to back:
- * long, then short, then long again. This exercises storage and argv_slots
- * capacity being kept and reused rather than reset each read. */
+/* 使用一個指令連續讀取三筆長度差異很大的記錄：先長、再短、最後再長。
+ * 此案例確認 storage 與 argv_slots 的容量會保留並重複使用，而不是每次讀取時
+ * 重設。 */
 static size_t test_buffer_reuse_across_varied_sizes(void)
 {
     aos_inst_t inst;

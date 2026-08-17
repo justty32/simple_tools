@@ -1,14 +1,14 @@
 /*
- * aos_inst_read success paths: field extraction, argv splitting rules,
- * CRLF handling, and reuse of one instruction across several records.
+ * aos_inst_read 的成功路徑：欄位擷取、argv 分割規則、CRLF 處理，以及使用
+ * 同一個指令讀取多筆記錄。
  */
 #include "test_common.h"
 
 #include <stdlib.h>
 #include <string.h>
 
-/* Build a stream, run one aos_inst_read on it, and hand back the stream so
- * the caller can close it and (for multi-record cases) read again. */
+/* 建立串流並對其執行一次 aos_inst_read，再將串流交還給呼叫端，以便關閉它，
+ * 或在含多筆記錄的案例中再次讀取。 */
 static FILE *read_one(const char *text, aos_inst_t *inst, aos_inst_state *state)
 {
     FILE *stream = stream_from(text);
@@ -172,8 +172,8 @@ static size_t test_crlf_stripped_everywhere(void)
     return 1U;
 }
 
-/* A CR that is not immediately followed by LF is not a CRLF pair, so the
- * reader must keep it as ordinary data rather than stripping it. */
+/* 後方未緊接 LF 的 CR 並不是 CRLF 組合，因此讀取器必須將它保留為一般資料，
+ * 而不是將它移除。 */
 static size_t test_bare_cr_kept_as_data(void)
 {
     aos_inst_t inst;
@@ -188,9 +188,8 @@ static size_t test_bare_cr_kept_as_data(void)
     return 1U;
 }
 
-/* Two records read through one reused instruction: the second read must
- * fully replace the first, not leave stale bytes or stale argv slots
- * behind, and a third read must report a clean EOF. */
+/* 使用同一個指令讀取兩筆記錄：第二次讀取必須完整取代第一次的內容，不得留下
+ * 過時的位元組或 argv 欄位，而第三次讀取必須回報正常的 EOF。 */
 static size_t test_reuse_no_aliasing_then_eof(void)
 {
     aos_inst_t inst;
@@ -221,8 +220,8 @@ static size_t test_reuse_no_aliasing_then_eof(void)
     CHECK(strcmp(inst.argv[0], "one") == 0);
     CHECK(strcmp(inst.extra, "extra1") == 0);
 
-    /* Second record has fewer args and shorter field values: this exercises
-     * both the argv_slots and storage reuse paths. */
+    /* 第二筆記錄的引數較少、欄位值也較短：這會測試 argv_slots 與 storage 的
+     * 重複使用路徑。 */
     state = aos_inst_read(stream, &inst);
     CHECK(state == AOS_INST_OK);
     CHECK(inst.argc == 2U);
@@ -255,8 +254,8 @@ static size_t test_ordinary_punctuation_in_argument(void)
     FILE *stream;
     char text[256];
 
-    /* Build the record with a literal, unescaped argument value; the
-     * format has no quoting or escaping so this must round-trip verbatim. */
+    /* 以原樣、未跳脫的引數值建立記錄；格式不使用引號或跳脫，因此往返後必須
+     * 逐字元保持不變。 */
     (void)snprintf(text, sizeof(text), "%s\n\n\n\n\n\n\n\n", expected);
     stream = read_one(text, &inst, &state);
 

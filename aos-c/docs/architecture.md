@@ -50,7 +50,7 @@ aos_inst_state state;
 
 aos_inst_init(&inst);
 while ((state = aos_inst_read(stream, &inst)) == AOS_INST_OK) {
-    /* use inst; its strings are valid until the next read */
+    /* 使用 inst；其中的字串在下次讀取前都有效 */
 }
 aos_inst_free(&inst);
 ```
@@ -73,7 +73,7 @@ const char *argv[] = { "echo", "hi", NULL };
 aos_inst_init(&inst);
 inst.argc = 2U;
 inst.argv = argv;
-inst.stdin_path = "";           /* ... and the other six */
+inst.stdin_path = "";           /* ……其他六個欄位亦同 */
 aos_inst_write(stream, &inst);
 ```
 
@@ -124,8 +124,8 @@ instruction file is a trust boundary (see below), so a budget always
 applies:
 
 ```c
-aos_inst_state aos_inst_read(FILE *, aos_inst_t *);                 /* default */
-aos_inst_state aos_inst_read_max(FILE *, aos_inst_t *, size_t);     /* explicit */
+aos_inst_state aos_inst_read(FILE *, aos_inst_t *);                 /* 預設值 */
+aos_inst_state aos_inst_read_max(FILE *, aos_inst_t *, size_t);     /* 明確指定 */
 ```
 
 The budget counts the eight lines plus the NUL that terminates each of them.

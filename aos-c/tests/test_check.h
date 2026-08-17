@@ -5,10 +5,9 @@
 #include <stdlib.h>
 
 /*
- * assert() disappears under -DNDEBUG, which the release build defines; a
- * test suite built on it can go green without checking anything. CHECK()
- * has no NDEBUG guard anywhere in its definition, so it cannot be compiled
- * out regardless of preprocessor state.
+ * 發行版本會定義 -DNDEBUG，使 assert() 消失；依賴它的測試套件可能完全沒有
+ * 進行檢查卻仍顯示通過。CHECK() 的定義中沒有任何 NDEBUG 防護，因此無論
+ * 前置處理器的狀態為何，都不會在編譯時被移除。
  */
 #define CHECK(expr) \
     do { \
@@ -17,7 +16,7 @@
         } \
     } while (0)
 
-/* Reports the failing expression and stops the run; first failure wins. */
+/* 回報失敗的運算式並停止執行；只顯示第一個失敗。 */
 static inline void test_check_fail(const char *file, int line,
                                     const char *expr)
 {

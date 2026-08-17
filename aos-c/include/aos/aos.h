@@ -1,7 +1,7 @@
 #ifndef AOS_AOS_H
 #define AOS_AOS_H
 
-/* Run the current aos-c program entry point. */
+/* 執行目前的 aos-c 程式進入點。 */
 int aos_run(void);
 
 #endif

@@ -9,15 +9,14 @@
 #include <string.h>
 
 /*
- * Both helpers are `static inline` so that including this header in a
- * translation unit that happens not to call one is neither a multiple
- * definition error nor an unused-function warning.
+ * 兩個輔助函式都是 `static inline`，因此即使某個編譯單元引入此標頭後沒有
+ * 呼叫其中一個函式，也不會產生重複定義錯誤或未使用函式的警告。
  */
 
 /*
- * Return a readable stream holding text, positioned at its first byte.
- * tmpfile() keeps the reader tests off the filesystem; the stream is closed
- * with fclose() like any other.
+ * 回傳含有 text 的可讀串流，並將位置設在第一個位元組。
+ * tmpfile() 讓讀取器測試不必操作檔案系統；此串流和其他串流一樣使用
+ * fclose() 關閉。
  */
 static inline FILE *stream_from(const char *text)
 {
@@ -33,10 +32,9 @@ static inline FILE *stream_from(const char *text)
 }
 
 /*
- * Fill inst with the given argv and an empty string for all seven other
- * fields, so a write test only has to override what it is testing. The
- * result borrows every string and owns nothing, which is exactly the
- * hand-built case aos_inst_write is meant to accept.
+ * 以指定的 argv 填入 inst，其他七個欄位則填入空字串，讓寫入測試只需覆寫
+ * 要測試的內容。結果會借用每個字串而不擁有任何內容，這正是
+ * aos_inst_write 預期接受的手動建構情況。
  */
 static inline void fill_inst(aos_inst_t *inst, const char **argv, size_t argc)
 {
@@ -52,21 +50,21 @@ static inline void fill_inst(aos_inst_t *inst, const char **argv, size_t argc)
     inst->extra = "";
 }
 
-/* Each test file exports one runner returning how many cases it ran. */
+/* 每個測試檔案都會匯出一個執行函式，回傳其執行的案例數量。 */
 
-/* aos_inst_read success paths: fields, argv splitting, CRLF, reuse. */
+/* aos_inst_read 成功路徑：欄位、argv 分割、CRLF、重複使用。 */
 size_t run_inst_read_tests(void);
 
-/* aos_inst_read rejection paths: EOF, INCOMPLETE, EMPTY_ARGV, read errors. */
+/* aos_inst_read 拒絕路徑：EOF、INCOMPLETE、EMPTY_ARGV、讀取錯誤。 */
 size_t run_inst_read_error_tests(void);
 
-/* The record budget and the argv limit, at and either side of the boundary. */
+/* 記錄大小上限與 argv 數量上限，以及各自的邊界值前後。 */
 size_t run_inst_limit_tests(void);
 
-/* aos_inst_write success paths, including a write/read round trip. */
+/* aos_inst_write 成功路徑，包括寫入／讀取的往返測試。 */
 size_t run_inst_write_tests(void);
 
-/* aos_inst_write validation rejections, and that they emit nothing. */
+/* aos_inst_write 的驗證拒絕路徑，並確認不會輸出任何內容。 */
 size_t run_inst_write_error_tests(void);
 
 #endif

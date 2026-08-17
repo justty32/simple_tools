@@ -1,6 +1,6 @@
 /*
- * aos_inst_write success paths, including full write/read round trips and
- * an exact-bytes check of the wire format.
+ * aos_inst_write 的成功路徑，包括完整的寫入／讀取往返，以及傳輸格式的
+ * 精確位元組檢查。
  */
 #include "test_common.h"
 
@@ -93,8 +93,8 @@ static size_t test_round_trip_two_records(void)
 }
 
 /*
- * Pins the wire format itself: tab-separated argv, LF line endings, and an
- * LF on the eighth line too, not just the first seven.
+ * 鎖定傳輸格式本身：以定位字元分隔的 argv、LF 行尾，而且不只前七行，
+ * 第八行也必須包含 LF。
  */
 static size_t test_output_bytes_exact(void)
 {

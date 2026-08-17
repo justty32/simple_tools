@@ -3,10 +3,10 @@
 #include <stdlib.h>
 #include <string.h>
 
-/* The seven non-argv lines, in serialized order. */
+/* 依序列化順序排列的七個非 argv 欄位。 */
 #define AOS_INST_FIELD_COUNT 7U
 
-/* Initial storage allocation; one read grows it to fit the longest record. */
+/* 儲存空間的初始配置量；讀取時會擴充至足以容納最長的記錄。 */
 #define AOS_INST_STORAGE_MIN 256U
 
 void aos_inst_init(aos_inst_t *inst)
@@ -22,8 +22,8 @@ void aos_inst_free(aos_inst_t *inst)
         return;
     }
     /*
-     * Both are NULL on an instruction whose fields were assigned by hand,
-     * so a borrowed record passed to aos_inst_write is never freed here.
+     * 若指令的欄位是手動指定，這兩者都會是 NULL，
+     * 因此傳給 aos_inst_write 的借用記錄絕不會在此處被釋放。
      */
     free(inst->storage);
     free(inst->argv_slots);
@@ -36,11 +36,10 @@ size_t aos_inst_argv_max(void)
 }
 
 /*
- * Drop the record a previous read left behind while keeping its two
- * allocations, so a caller reading a whole stream through one instruction
- * stops allocating once the buffers have reached the size of its longest
- * record. Every public field is cleared here and set only once the record
- * has been read in full, which is what leaves inst empty on every failure.
+ * 清除上一次讀取留下的記錄，但保留其兩塊已配置的記憶體，讓呼叫端以同一個
+ * 指令讀取整個串流時，緩衝區達到最長記錄所需的大小後便不再重新配置。
+ * 所有公開欄位都會在此清空，並且只在完整讀取記錄後才設定，因此每次失敗時
+ * inst 都會保持為空。
  */
 static void inst_clear(aos_inst_t *inst)
 {
@@ -55,7 +54,7 @@ static void inst_clear(aos_inst_t *inst)
     inst->extra = NULL;
 }
 
-/* Make room for `needed` storage bytes without exceeding the budget. */
+/* 在不超過上限的前提下，確保儲存空間可容納 `needed` 個位元組。 */
 static aos_inst_state storage_reserve(aos_inst_t *inst, size_t needed,
                                       size_t max_record_bytes)
 {
@@ -72,7 +71,7 @@ static aos_inst_state storage_reserve(aos_inst_t *inst, size_t needed,
     capacity = (inst->storage_capacity == 0U) ? AOS_INST_STORAGE_MIN
                                               : inst->storage_capacity;
     while (capacity < needed) {
-        /* Clamping at the budget also keeps the doubling from overflowing. */
+        /* 將容量限制在上限內，也可避免倍增時發生溢位。 */
         if (capacity > max_record_bytes / 2U) {
             capacity = max_record_bytes;
             break;
@@ -93,12 +92,12 @@ static aos_inst_state storage_reserve(aos_inst_t *inst, size_t needed,
 }
 
 /*
- * Append one NUL-terminated line to storage, starting at *length and
- * leaving *length just past its terminator.
+ * 從 *length 指定的位置開始，將一個以 NUL 結尾的行附加至儲存空間，
+ * 並讓 *length 最後指向該終止字元之後。
  *
- * Returns AOS_INST_OK for a line that ended in a newline, AOS_INST_EOF when
- * the stream ended before the line's first byte, AOS_INST_INCOMPLETE when
- * bytes arrived but no newline did, or a failure state.
+ * 若該行以換行字元結尾則回傳 AOS_INST_OK；若串流在該行第一個位元組之前
+ * 結束則回傳 AOS_INST_EOF；若已讀到位元組卻沒有換行字元則回傳
+ * AOS_INST_INCOMPLETE；其他情況則回傳對應的失敗狀態。
  */
 static aos_inst_state read_line(FILE *stream, aos_inst_t *inst,
                                 size_t *length, size_t max_record_bytes)
@@ -129,7 +128,7 @@ static aos_inst_state read_line(FILE *stream, aos_inst_t *inst,
         }
     }
 
-    /* Drop the CR of a CRLF pair; a bare trailing CR is data. */
+    /* 移除 CRLF 組合中的 CR；單獨位於結尾的 CR 則視為資料。 */
     if (c == '\n' && used > start && inst->storage[used - 1U] == '\r') {
         --used;
     }
@@ -145,9 +144,9 @@ static aos_inst_state read_line(FILE *stream, aos_inst_t *inst,
 }
 
 /*
- * Split the argv line on tabs in place and point argv at the result. Both
- * limits are checked before the first NUL is written, so a rejected line is
- * never left half-split.
+ * 直接在原處依定位字元分割 argv 行，並讓 argv 指向分割結果。
+ * 兩項限制都會在寫入第一個 NUL 前檢查，因此遭拒絕的行不會停留在只分割一半
+ * 的狀態。
  */
 static aos_inst_state split_argv(aos_inst_t *inst, char *line)
 {
@@ -198,10 +197,9 @@ aos_inst_state aos_inst_read_max(FILE *stream, aos_inst_t *inst,
                                  size_t max_record_bytes)
 {
     /*
-     * Offsets rather than pointers: storage moves under realloc while the
-     * record is being read, so the eight field positions can only be turned
-     * into pointers once the last line is in. Eight size_t on the stack is
-     * the whole cost of not having to measure the record up front.
+     * 此處使用位移量而非指標：讀取記錄期間，storage 可能因 realloc 而移動，
+     * 所以只能在最後一行讀入後，才把八個欄位的位置轉換成指標。
+     * 不必預先測量記錄大小的全部代價，就是堆疊上的八個 size_t。
      */
     size_t offsets[AOS_INST_LINE_COUNT];
     size_t length = 0U;
@@ -218,7 +216,7 @@ aos_inst_state aos_inst_read_max(FILE *stream, aos_inst_t *inst,
         offsets[index] = length;
         state = read_line(stream, inst, &length, max_record_bytes);
         if (state == AOS_INST_EOF) {
-            /* Between records this is a clean end; inside one it is not. */
+            /* 若位於記錄之間，這是正常結束；若位於記錄內部則不是。 */
             return (index == 0U) ? AOS_INST_EOF : AOS_INST_INCOMPLETE;
         }
         if (state != AOS_INST_OK) {
@@ -246,13 +244,13 @@ aos_inst_state aos_inst_read(FILE *stream, aos_inst_t *inst)
     return aos_inst_read_max(stream, inst, AOS_INST_RECORD_MAX_BYTES);
 }
 
-/* CR is rejected too, because a trailing CR would be consumed as CRLF. */
+/* CR 也會被拒絕，因為結尾的 CR 會被當成 CRLF 的一部分而消耗掉。 */
 static int contains_line_break(const char *text)
 {
     return strchr(text, '\n') != NULL || strchr(text, '\r') != NULL;
 }
 
-/* The seven non-argv lines in serialized order. */
+/* 依序列化順序排列的七個非 argv 欄位。 */
 static void inst_fields(const aos_inst_t *inst,
                         const char *fields[AOS_INST_FIELD_COUNT])
 {
@@ -265,7 +263,7 @@ static void inst_fields(const aos_inst_t *inst,
     fields[6] = inst->extra;
 }
 
-/* Validate the whole record before any of it reaches the stream. */
+/* 在任何內容寫入串流之前，先驗證整筆記錄。 */
 static aos_inst_state inst_validate(const aos_inst_t *inst)
 {
     const char *fields[AOS_INST_FIELD_COUNT];
@@ -298,9 +296,8 @@ static aos_inst_state inst_validate(const aos_inst_t *inst)
         }
     }
     /*
-     * A single empty argument has no tab to mark its boundary, so it would
-     * serialize to an empty argv line and read back as no arguments at all
-     * rather than round-tripping to argc == 1.
+     * 單一空引數沒有定位字元可標示其邊界，因此序列化後會成為空白的 argv 行，
+     * 讀回時也會被視為完全沒有引數，而無法往返還原成 argc == 1。
      */
     if (inst->argc == 1U && inst->argv[0][0] == '\0') {
         return AOS_INST_EMPTY_ARGV;
@@ -333,7 +330,7 @@ aos_inst_state aos_inst_write(FILE *stream, const aos_inst_t *inst)
         return state;
     }
 
-    /* Line 1: tab-separated argv, then LF. */
+    /* 第 1 行：以定位字元分隔的 argv，接著是 LF。 */
     for (index = 0U; index < inst->argc; ++index) {
         if (index > 0U && fputc('\t', stream) == EOF) {
             return AOS_INST_WRITE_ERROR;
@@ -348,7 +345,7 @@ aos_inst_state aos_inst_write(FILE *stream, const aos_inst_t *inst)
 
     inst_fields(inst, fields);
 
-    /* Lines 2 through 8: one validated field and an LF each. */
+    /* 第 2 至第 8 行：每行包含一個已驗證的欄位及一個 LF。 */
     for (index = 0U; index < AOS_INST_FIELD_COUNT; ++index) {
         if (fputs(fields[index], stream) == EOF ||
             fputc('\n', stream) == EOF) {

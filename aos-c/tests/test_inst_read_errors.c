@@ -1,12 +1,12 @@
 /*
- * aos_inst_read rejection paths: EOF, INCOMPLETE, EMPTY_ARGV, invalid
- * arguments, read errors, and aos_inst_state_string coverage.
+ * aos_inst_read 的拒絕路徑：EOF、INCOMPLETE、EMPTY_ARGV、無效引數、
+ * 讀取錯誤，以及 aos_inst_state_string 的涵蓋範圍。
  */
 #include "test_common.h"
 
 #include <string.h>
 
-/* Every failure must leave the instruction empty, per the header contract. */
+/* 根據標頭所定義的契約，每次失敗都必須讓指令保持為空。 */
 static void check_empty(const aos_inst_t *inst)
 {
     CHECK(inst->argc == 0U);
@@ -66,9 +66,8 @@ static size_t test_seven_lines_then_eof(void)
     return 1U;
 }
 
-/* All eight lines present, but the last has no trailing newline: the
- * stream ends mid-line rather than mid-record, a distinct code path from
- * ending between lines. */
+/* 八行都存在，但最後一行沒有結尾換行字元：串流在一行中途結束，而不是在記錄
+ * 中途的行與行之間結束，因此會走不同的程式碼路徑。 */
 static size_t test_eighth_line_missing_newline(void)
 {
     aos_inst_t inst;
@@ -150,13 +149,11 @@ static size_t test_zero_budget_is_invalid_argument(void)
 }
 
 /*
- * A stream opened for writing only cannot satisfy getc, and the C standard
- * leaves it to the implementation whether that sets the error indicator or
- * merely reports end-of-file. Where it sets the indicator, as glibc does,
- * this is the only route to AOS_INST_READ_ERROR that does not need a real
- * I/O failure. An implementation that reports plain EOF instead would
- * return AOS_INST_EOF here and fail this case; that is a portability limit
- * of the test, not of the reader.
+ * 只以寫入模式開啟的串流無法滿足 getc，而 C 標準將「設定錯誤指示器」或
+ * 「僅回報檔案結尾」交由實作決定。在 glibc 等會設定錯誤指示器的環境中，
+ * 這是不需真正發生 I/O 錯誤便能觸發 AOS_INST_READ_ERROR 的唯一路徑。
+ * 若某個實作只回報 EOF，此處便會回傳 AOS_INST_EOF，導致本案例失敗；
+ * 這是測試的可移植性限制，而不是讀取器的限制。
  */
 static size_t test_write_only_stream_is_read_error(void)
 {
@@ -190,8 +187,7 @@ static size_t test_state_string_never_empty(void)
         CHECK(text[0] != '\0');
     }
 
-    /* An out-of-range value must still come back with a description
-     * rather than a NULL or empty string. */
+    /* 超出範圍的值仍必須取得說明，而不是 NULL 或空字串。 */
     CHECK(aos_inst_state_string((aos_inst_state)9999) != NULL);
     CHECK(aos_inst_state_string((aos_inst_state)9999)[0] != '\0');
 
