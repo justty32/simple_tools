@@ -190,6 +190,12 @@ if (state != aos::InstState::Eof) {
 }
 ```
 
+> **這個例子的來源是 `std::ifstream`，所以它開的 fd 會被每個子行程繼承。**
+> `fork` 會複製所有 fd，而 fd 預設會活過 `exec`。普通檔案上這只是不好看；
+> 來源是 FIFO 或管道時是掛死風險 —— 上游會一直看到「還有讀者」而等不到 EOF。
+> 要避免就別用 `std::ifstream`：自己 `open(path, O_RDONLY | O_CLOEXEC)` 再包成
+> 串流，這正是 `aos-c` 這個程式在 `run.cpp` 裡做的事。
+
 ### 把一筆指令變成 bytes
 
 C++ 這邊不需要專門的函式，`std::ostringstream` 就是：

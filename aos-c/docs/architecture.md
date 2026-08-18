@@ -55,9 +55,9 @@ The reader consumes exactly one record per call, straight from a
 
 ### Every field owns its own bytes
 
-`inst_t` is a plain struct of a `std::vector<std::string>` and seven
-`std::string`s. That is the whole type. There is no shared buffer, no
-offsets, no capacity bookkeeping, and no private section.
+`inst_t` is a plain struct of two `std::vector<std::string>`s -- `argv` and
+`env` -- and six `std::string`s. That is the whole type. There is no shared
+buffer, no offsets, no capacity bookkeeping, and no private section.
 
 This is the part that changed most from the C version, where the same design
 needed a `storage` buffer, an `argv_slots` array, two capacities, and eight
@@ -281,8 +281,10 @@ Three things, all of them in `capi.cpp` and nowhere else.
 **No exception may escape.** Unwinding past an `extern "C"` frame into a C
 caller is undefined behaviour, so every entry point that can allocate is
 wrapped and translates a throw into `AOS_INST_ALLOC_FAILED`. This is why the
-C enum has one value the C++ enum does not: allocation failure has to become
-a state when it can no longer be an exception.
+C enum ends with two values the C++ enum does not have: allocation failure
+has to become a state when it can no longer be an exception, and
+`AOS_INST_BUFFER_TOO_SMALL` exists because a C caller serializing into its
+own buffer has no `std::ostringstream` to size it for them.
 
 **The two enums must not drift.** Every C value is checked against its C++
 counterpart with `static_assert`, so adding a state to one and forgetting
@@ -301,9 +303,9 @@ would otherwise be misreported as a clean end of input.
 
 Everything is built with `-fvisibility=hidden`, so a symbol reaches the
 library's surface only by carrying `AOS_API` from `aos/export.h`. Helpers
-live in anonymous namespaces on top of that. The result is 16 C entry points
-and 8 C++ ones, and nothing else -- `read_line`, `split_argv`, `FileBuf` and
-`run_child` are all invisible from outside.
+live in anonymous namespaces on top of that. The result is 21 C entry points
+and 10 C++ ones, and nothing else -- `read_line`, `split_argv`, `FileBuf`,
+`FdBuf` and `run_child` are all invisible from outside.
 
 `make shared` builds `libaos.so.0.1.0` with a soname of `libaos.so.0`. The
 soname only moves when the C ABI breaks; the C++ interface, having made no
@@ -317,8 +319,10 @@ promise, does not constrain it.
   of what the C boundary buys.
 - **Error enums are append-only** on the C side. New states go at the end.
 - **Windows.** Everything but `execute` works there, and the whole suite has
-  been cross-compiled and run under MinGW -- 95 of the 126 cases, the
-  remainder being the POSIX-only execution tests. Getting there found two
+  been cross-compiled and run under MinGW -- 118 of the 150 cases, the
+  remainder being the POSIX-only execution tests. (`run.cpp` also has a
+  POSIX-only path now: the instruction stream is opened with `O_CLOEXEC`,
+  and the Windows branch still uses `std::ifstream`.) Getting there found two
   real defects, both of which are the kind that only a second platform
   exposes: two helpers used solely by the POSIX branch tripped
   `-Wunused-function`, which `-Werror` turned into a build failure, and

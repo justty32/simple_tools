@@ -155,7 +155,19 @@
 
 ## 待辦（本次不實作，僅記錄）
 
-1. 走串流前，把 insts 的讀取 fd 改成帶 `O_CLOEXEC`（結論五）。
-2. 清掉 Windows 分支、讓專案明說只支援 POSIX（已另行交辦）。
-3. 視需要簡化 `ExecState`（例如合併三個 `OpenStd*Failed`）與砍掉未使用的
-   `extra` 欄位——純減法，非必要。
+1. ~~走串流前，把 insts 的讀取 fd 改成帶 `O_CLOEXEC`（結論五）。~~ 已完成
+   （commit 0fc27e2，見 [SPEC_stream_1](SPEC_stream_1.md)）。
+2. 清掉 Windows 分支、讓專案明說只支援 POSIX（已另行交辦）。仍未做：`run.cpp`
+   與 `exec.cpp` 都還留著非 POSIX 的分支。
+3. ~~視需要簡化 `ExecState`（例如合併三個 `OpenStd*Failed`）~~ 已完成，但走的
+   是另一條路：那三個狀態連同 `ChdirFailed` 一起消失，變成子行程的結束碼 126
+   （commit 70bf3a3，見 [SPEC_exec_1](SPEC_exec_1.md)）。砍掉未使用的 `extra`
+   欄位仍未做。
+
+## 這份文件哪裡已經被後續決定取代
+
+- **結論一的「用 CLOEXEC 管道分辨指令不存在」**：管道已經拿掉，現在跟 shell 一樣
+  不分辨（`SPEC_exec_1`）。但結論一的主結論不受影響 —— 不改用 `system()` 的理由
+  是 argv 陣列、重導向／cwd／env 的插手時機，那三點都還成立。
+- **結論四提到「`std::ifstream` 開 FIFO 會阻塞到有寫入端」**：現在自己 `open()`
+  並加上 `O_NONBLOCK`，開檔不再阻塞（`SPEC_stream_1`）。

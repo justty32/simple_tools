@@ -367,6 +367,12 @@ int main(int argc, char **argv)
 }
 ```
 
+> **`fopen` 開的 fd 會被每個子行程繼承。** `fork` 複製所有 fd，而 fd 預設會活過
+> `exec`。普通檔案上這只是不好看；來源是 FIFO 或管道時是掛死風險 —— 上游會一直
+> 看到「還有讀者」而等不到 EOF。要避免的話：`fopen(path, "re")` 的 `e` 就是
+> `O_CLOEXEC`，但它是 glibc／musl／BSD 的擴充而不是標準 C；要可攜就自己
+> `open(path, O_RDONLY | O_CLOEXEC)` 再 `fdopen()`。
+
 ### 產生一個指令檔
 
 ```c
