@@ -55,7 +55,7 @@ make clean          # 清掉整個 build/
 **但行程建立目前只有 POSIX 實作。** 讀取、寫入、序列化在 Windows 上都正常，
 `aos_instruction_execute` 則直接回傳 `AOS_EXEC_PLATFORM_UNSUPPORTED` —— 也就是說
 `aos-c` 這個程式在 Windows 上跑不了任何指令。測試套件會跳過執行相關的案例
-（POSIX 上 126 個，Windows 上 95 個）。
+（POSIX 上 150 個，Windows 上 118 個）。
 
 靜態連結時記得定義 `AOS_STATIC`，見 [docs/capi.md](docs/capi.md)。
 
@@ -66,18 +66,22 @@ make clean          # 清掉整個 build/
 
 ```sh
 aos-c insts        # 讀一個檔案
+aos-c fifo         # 或一條 named FIFO —— 讀到寫入端關閉為止
 aos-c < insts      # 或從標準輸入讀，管線也可以
+producer | aos-c   # 邊產生邊執行
 ```
 
 指令依序執行，而且**會一路跑到底**：
 
 - 程式回傳非零 —— 不影響後面。那是資料，會寫進 exit 欄位指定的檔案
-- 某筆根本跑不起來（找不到指令、cwd 不存在、重導向開不了）—— 回報之後跳到下一筆
-- 記錄格式壞掉 —— 只要串流還對得齊就跳過那筆繼續；對不齊了（記錄被截斷）才會停，
-  因為硬讀下去會把後面每一筆都解成垃圾
+- 某筆根本跑不起來（找不到指令、cwd 不存在、重導向開不了）—— 一樣不影響後面，
+  它是一筆結束碼 127 或 126 的記錄，跟 shell 一樣
+- 記錄格式壞掉 —— **停止整條串流**。記錄之間沒有分隔符號，錯位之後無法重新對齊，
+  硬讀下去會把後面每一筆都解成別筆欄位拼出來的垃圾
 
 全部成功時完全不輸出，回傳 0。有任何一筆失敗就回傳 1，並在最後印出
-`aos: N of M instructions failed`。細節見 [docs/exec.md](docs/exec.md#多筆指令)。
+`aos: N of M instructions failed`。細節見 [docs/exec.md](docs/exec.md#多筆指令)，
+串流用法見 [docs/exec.md](docs/exec.md#串流餵指令)。
 
 ## 當函式庫用
 

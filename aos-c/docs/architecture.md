@@ -197,6 +197,32 @@ status, and `ExecState` keeps only the failures that cannot become one:
 cost, stated plainly: a child that genuinely exits 126 or 127 is
 indistinguishable from one that never ran — exactly as in a shell.
 
+### The instruction stream's own file descriptor
+
+`run.cpp` opens `argv[1]` with `open()` and wraps the descriptor in a
+`streambuf`, rather than using `std::ifstream`, because two flags matter and
+`std::ifstream` can portably set neither.
+
+`O_CLOEXEC` is the important one. `fork` copies every descriptor to the
+child, and a descriptor survives `exec` by default, so without it every
+spawned command would inherit the instruction stream. On a regular file that
+is merely untidy. On a FIFO it is a hang: the upstream writer keeps seeing a
+reader, so it never gets EOF or `EPIPE`, possibly forever, long after aos-c
+itself has exited.
+
+`O_NONBLOCK` is only needed for the open itself: opening a FIFO for reading
+blocks until a writer appears, which would turn "nothing to do" into "hang".
+It is cleared immediately afterwards with `fcntl`, so reads go back to
+blocking semantics -- which are the ones wanted here: no writer means an
+immediate EOF and a quick exit, a writer with nothing ready means wait, and
+the writer closing means EOF and a finished drain. On a regular file the
+flag does nothing either way.
+
+The descriptor for stdin needs none of this: it is already fd 0, and it is
+the caller's, not ours to reopen. What it costs is documented rather than
+fixed: a child with no `stdin_path` of its own inherits fd 0, which when the
+instructions arrive on stdin is the instruction stream itself.
+
 ### Portability
 
 This is the only non-portable component. POSIX (`fork`, `execvp`, `dup2`,
