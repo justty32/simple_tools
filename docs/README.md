@@ -15,4 +15,4 @@
 跨語言研究另有 [C／C++](research/languages/cpp/README.md) 與
 [Lisp／Janet](research/languages/janet/README.md)。瀏覽器首頁是 [index.html](index.html)。
 
-文件角色、權威順序與大小限制見 [CONVENTIONS.md](CONVENTIONS.md)。
+文件角色、權威順序，以及文件與原始碼的大小限制見 [CONVENTIONS.md](CONVENTIONS.md)。

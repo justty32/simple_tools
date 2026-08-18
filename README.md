@@ -13,7 +13,7 @@
 - 想使用或開發 FreePy：先讀 [`freepy/README.md`](freepy/README.md)。
 - 想建立 C／C++ 專案：先讀 [`dcap/README.md`](dcap/README.md)。
 - 想理解整體架構與研究結論：從 [`docs/index.html`](docs/index.html) 的離線導覽選主題；純文字索引仍在 [`docs/README.md`](docs/README.md)。
-- 想知道筆記、規格、README 與程式註解各自應放什麼：見
+- 想知道筆記、規格、README 與程式註解各自應放什麼，以及單檔多大就該拆：見
   [`docs/CONVENTIONS.md`](docs/CONVENTIONS.md)。
 
 ## 一鍵驗證
