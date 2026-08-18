@@ -8,11 +8,11 @@
 │  -> read records    │  │  FILE *, no exceptions escape    │
 │  -> execute them    │  │                     aos/aos.h    │
 ├─ execution ─────────┴──┴──────────────────────────────────┤
-│  Instruction  ->  a spawned process           aos/exec.hpp │
+│  inst_t  ->  a spawned process           aos/exec.hpp │
 ├────────────────────────────────────────────────────────────┤
-│  Instruction                                  aos/inst.hpp │
-│  read:   std::istream  ->  Instruction   (one per call)    │
-│  write:  Instruction   ->  std::ostream                    │
+│  inst_t                                  aos/inst.hpp │
+│  read:   std::istream  ->  inst_t   (one per call)    │
+│  write:  inst_t   ->  std::ostream                    │
 └────────────────────────────────────────────────────────────┘
 ```
 
@@ -21,8 +21,8 @@ second way in, not a layer the rest of the code goes through. Nothing below
 it knows it exists.
 
 `aos/inst.hpp` is the only parser in the project. It moves one record
-between a stream and an `Instruction`, in both directions, and knows nothing
-about processes. `aos/exec.hpp` takes an `Instruction` and knows nothing
+between a stream and an `inst_t`, in both directions, and knows nothing
+about processes. `aos/exec.hpp` takes an `inst_t` and knows nothing
 about streams. Looping over many records belongs to the caller, which is all
 `aos::run` in `run.cpp` does.
 
@@ -45,13 +45,13 @@ The reader consumes exactly one record per call, straight from a
 - **Pipes and `std::cin` work.** Nothing seeks, and nothing needs to know
   the length of the input in advance.
 - **Memory is O(longest record), not O(input).** A hundred-gigabyte
-  instruction stream is read through one `Instruction`.
+  instruction stream is read through one `inst_t`.
 - **The first record is available before the rest of the input exists.** A
   producer and a consumer can run at the same time.
 
 ### Every field owns its own bytes
 
-`Instruction` is a plain struct of a `std::vector<std::string>` and seven
+`inst_t` is a plain struct of a `std::vector<std::string>` and seven
 `std::string`s. That is the whole type. There is no shared buffer, no
 offsets, no capacity bookkeeping, and no private section.
 
@@ -61,19 +61,19 @@ stack offsets to resolve after `realloc` moved things. All of it existed to
 answer *who owns these bytes*, and `std::string` answers that by
 construction. Three consequences:
 
-- An `Instruction` stays valid after the stream it came from is gone.
+- An `inst_t` stays valid after the stream it came from is gone.
 - One built by hand for `write_instruction` is not a special case with its
   own ownership rules — it is the same type, and there is nothing to free.
 - Three error states disappeared outright. `NullArgument` and `NullField`
   cannot happen because a `std::string` cannot be null, and allocation
   failure is `std::bad_alloc` rather than a state every caller must check.
 
-`Instruction::clear()` clears each string rather than assigning a fresh one,
+`inst_t::clear()` clears each string rather than assigning a fresh one,
 so the buffers survive into the next read. A caller reading a whole stream
 through one instruction settles into steady state without reallocating:
 
 ```cpp
-aos::Instruction inst;
+aos::inst_t inst;
 
 while (aos::read_instruction(in, inst) == aos::InstState::Ok) {
     /* 使用 inst；它擁有自己的位元組，在下一次讀取前都有效 */
@@ -94,7 +94,7 @@ Recorded here so it is a decision and not an oversight.
 - **Random access across records.** There is no array of every instruction
   in a file, and no "instruction 47". A caller that needs to revisit records
   keeps copies — which, unlike in the C version, is just a copy of the
-  `Instruction`.
+  `inst_t`.
 - **Retry after a short read.** A stream cannot be rewound, so
   `InstState::Incomplete` is terminal: the bytes are gone. A blocking stream
   already waits for a slow writer rather than reporting a short record.
@@ -125,7 +125,7 @@ limit one malformed line would allocate without bound. An instruction file
 is a trust boundary, so a budget always applies:
 
 ```cpp
-InstState read_instruction(std::istream &in, Instruction &inst,
+InstState read_instruction(std::istream &in, inst_t &inst,
                            std::size_t max_record_bytes = kInstRecordMaxBytes);
 ```
 
@@ -145,7 +145,7 @@ rather than making consumers trust their copy of `kInstArgvMax`.
 ## Execution
 
 An instruction is a serialized process spawn. `aos::execute` takes an
-`Instruction` and nothing else — never a path, never a stream — so it stays
+`inst_t` and nothing else — never a path, never a stream — so it stays
 testable without touching the reader and does not care where the record came
 from.
 
@@ -201,7 +201,7 @@ defines `__STRICT_ANSI__`, which otherwise hides the POSIX declarations.
 ### The one wart the type system cannot remove
 
 `execv` and friends take `char *const *`. `to_c_argv` builds that from an
-`Instruction`, which is why it takes a non-const reference despite modifying
+`inst_t`, which is why it takes a non-const reference despite modifying
 nothing. Containing the wart in one function is the most C++ can do about
 it; the alternative is a `const_cast` at every call site.
 
@@ -269,7 +269,7 @@ promise, does not constrain it.
 
 ### Still outstanding
 
-- **`Instruction`'s layout is ABI for the C++ interface.** The C one is
+- **`inst_t`'s layout is ABI for the C++ interface.** The C one is
   immune -- `aos_instruction` is opaque, so fields can be added without
   touching a compiled consumer. That asymmetry is the clearest illustration
   of what the C boundary buys.

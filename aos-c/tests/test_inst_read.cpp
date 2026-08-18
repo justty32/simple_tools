@@ -57,7 +57,7 @@ std::size_t test_single_valid_record()
         "/tmp/work", "env.txt", "extra data"
     };
     std::istringstream in(build_record(join_tabs(argv), fields));
-    Instruction inst;
+    inst_t inst;
 
     CHECK(read_instruction(in, inst) == InstState::Ok);
     CHECK(inst.argv.size() == 3);
@@ -81,7 +81,7 @@ std::size_t test_argv_splitting()
     /* 三個引數，皆以定位字元分隔。 */
     {
         std::istringstream in(build_record("a\tb\tc", seven("")));
-        Instruction inst;
+        inst_t inst;
 
         CHECK(read_instruction(in, inst) == InstState::Ok);
         CHECK(inst.argv.size() == 3);
@@ -94,7 +94,7 @@ std::size_t test_argv_splitting()
     /* 相鄰定位字元保留中間的空引數。 */
     {
         std::istringstream in(build_record("a\t\tb", seven("")));
-        Instruction inst;
+        inst_t inst;
 
         CHECK(read_instruction(in, inst) == InstState::Ok);
         CHECK(inst.argv.size() == 3);
@@ -107,7 +107,7 @@ std::size_t test_argv_splitting()
     /* 結尾定位字元產生一個結尾空引數。 */
     {
         std::istringstream in(build_record("a\tb\t", seven("")));
-        Instruction inst;
+        inst_t inst;
 
         CHECK(read_instruction(in, inst) == InstState::Ok);
         CHECK(inst.argv.size() == 3);
@@ -123,7 +123,7 @@ std::size_t test_argv_splitting()
 std::size_t test_single_argument_no_tab()
 {
     std::istringstream in(build_record("solo", seven("")));
-    Instruction inst;
+    inst_t inst;
 
     CHECK(read_instruction(in, inst) == InstState::Ok);
     CHECK(inst.argv.size() == 1);
@@ -134,7 +134,7 @@ std::size_t test_single_argument_no_tab()
 std::size_t test_all_other_fields_empty()
 {
     std::istringstream in(build_record("x", seven("")));
-    Instruction inst;
+    inst_t inst;
 
     CHECK(read_instruction(in, inst) == InstState::Ok);
     CHECK(inst.stdin_path == "");
@@ -154,7 +154,7 @@ std::size_t test_crlf_strips_every_field()
         "in", "out", "err", "exit", "cwd", "env", "extra"
     };
     std::istringstream in(build_record(join_tabs(argv), fields, "\r\n"));
-    Instruction inst;
+    inst_t inst;
 
     CHECK(read_instruction(in, inst) == InstState::Ok);
     /* CR 只會在行尾被剝除，這裡每一行都以 CRLF 結尾，所以全部欄位以及
@@ -179,7 +179,7 @@ std::size_t test_bare_cr_in_middle_is_data()
     std::vector<std::string> fields = seven("");
     fields[6] = "ab\rcd";
     std::istringstream in(build_record("x", fields));
-    Instruction inst;
+    inst_t inst;
 
     CHECK(read_instruction(in, inst) == InstState::Ok);
     CHECK(inst.extra == "ab\rcd");
@@ -199,7 +199,7 @@ std::size_t test_two_records_reuse_instruction()
     std::string data = build_record(join_tabs(argv1), fields1) +
                        build_record(join_tabs(argv2), fields2);
     std::istringstream in(data);
-    Instruction inst;
+    inst_t inst;
 
     CHECK(read_instruction(in, inst) == InstState::Ok);
     CHECK(inst.argv.size() == 2);
@@ -231,7 +231,7 @@ std::size_t test_ordinary_special_characters()
 {
     std::vector<std::string> argv = { "a b", "\"quoted\"", "back\\slash" };
     std::istringstream in(build_record(join_tabs(argv), seven("")));
-    Instruction inst;
+    inst_t inst;
 
     CHECK(read_instruction(in, inst) == InstState::Ok);
     CHECK(inst.argv[0] == "a b");
@@ -242,7 +242,7 @@ std::size_t test_ordinary_special_characters()
 
 std::size_t test_to_c_argv()
 {
-    Instruction inst = make_inst({ "prog", "", "arg" });
+    inst_t inst = make_inst({ "prog", "", "arg" });
     std::vector<char *> cargv = to_c_argv(inst);
 
     CHECK(cargv.size() == inst.argv.size() + 1);

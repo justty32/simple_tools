@@ -71,7 +71,7 @@ std::size_t test_budget_exact_and_one_short()
 
     {
         std::istringstream in(record);
-        Instruction inst;
+        inst_t inst;
 
         CHECK(read_instruction(in, inst, 16) == InstState::Ok);
         CHECK(inst.argv.size() == 1);
@@ -81,7 +81,7 @@ std::size_t test_budget_exact_and_one_short()
     }
     {
         std::istringstream in(record);
-        Instruction inst;
+        inst_t inst;
 
         CHECK(read_instruction(in, inst, 15) == InstState::TooLong);
         CHECK(inst.empty());
@@ -97,7 +97,7 @@ std::size_t test_max_argv_count()
 {
     std::vector<std::string> argv = n_args(kInstArgvMax);
     std::istringstream in(build_record(join_tabs(argv), seven("")));
-    Instruction inst;
+    inst_t inst;
 
     CHECK(read_instruction(in, inst) == InstState::Ok);
     CHECK(inst.argv.size() == kInstArgvMax);
@@ -110,7 +110,7 @@ std::size_t test_too_many_argv_count()
 {
     std::vector<std::string> argv = n_args(kInstArgvMax + 1);
     std::istringstream in(build_record(join_tabs(argv), seven("")));
-    Instruction inst;
+    inst_t inst;
 
     CHECK(read_instruction(in, inst) == InstState::TooManyArgs);
     CHECK(inst.empty());
@@ -131,7 +131,7 @@ std::size_t test_tabs_in_other_lines_are_ordinary()
         "a\tb", "c\td\te", "f", "g\t", "\th", "i\t\tj", "k"
     };
     std::istringstream in(build_record("solo", fields));
-    Instruction inst;
+    inst_t inst;
 
     CHECK(read_instruction(in, inst) == InstState::Ok);
     CHECK(inst.argv.size() == 1);
@@ -159,7 +159,7 @@ std::size_t test_reuse_across_very_different_lengths()
                        build_record(join_tabs(argv_short), fields_short) +
                        build_record(join_tabs(argv_long2), fields_long2);
     std::istringstream in(data);
-    Instruction inst;
+    inst_t inst;
 
     CHECK(read_instruction(in, inst) == InstState::Ok);
     CHECK(inst.argv.size() == 50);

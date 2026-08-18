@@ -136,7 +136,7 @@ void child_redirect(int pipe_fd, const std::string &path, int target_fd,
 }
 
 /* 子行程的全部工作：重導向、切目錄、換環境、exec。此函式不會返回。 */
-[[noreturn]] void run_child(int pipe_fd, Instruction &inst,
+[[noreturn]] void run_child(int pipe_fd, inst_t &inst,
                             std::vector<char *> &argv,
                             std::vector<char *> &envp, bool replace_env)
 {
@@ -165,7 +165,7 @@ void child_redirect(int pipe_fd, const std::string &path, int target_fd,
 
 #if AOS_EXEC_POSIX
 
-ExecState execute(Instruction &inst, ExecResult &result)
+ExecState execute(inst_t &inst, ExecResult &result)
 {
     result = ExecResult();
 
@@ -268,7 +268,7 @@ ExecState execute(Instruction &inst, ExecResult &result)
 
 #else /* !AOS_EXEC_POSIX */
 
-ExecState execute(Instruction &inst, ExecResult &result)
+ExecState execute(inst_t &inst, ExecResult &result)
 {
     /*
      * Windows 需要 CreateProcess 搭配 STARTUPINFO 的控制代碼重導向，而且

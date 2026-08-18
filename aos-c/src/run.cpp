@@ -19,7 +19,7 @@ void report(std::size_t index, const char *what, const char *detail)
 
 int run_stream(std::istream &in)
 {
-    Instruction inst;
+    inst_t inst;
     std::size_t index = 0;
     std::size_t failed = 0;
 

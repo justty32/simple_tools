@@ -15,7 +15,7 @@ namespace {
 
 std::size_t test_round_trip_single_record()
 {
-    Instruction inst = make_inst({ "prog", "arg1", "arg2" });
+    inst_t inst = make_inst({ "prog", "arg1", "arg2" });
 
     inst.stdin_path = "in.txt";
     inst.stdout_path = "out.txt";
@@ -30,7 +30,7 @@ std::size_t test_round_trip_single_record()
     CHECK(write_instruction(out, inst) == InstState::Ok);
 
     std::istringstream in(out.str());
-    Instruction read_back;
+    inst_t read_back;
 
     CHECK(read_instruction(in, read_back) == InstState::Ok);
     CHECK(read_back.argv == inst.argv);
@@ -46,8 +46,8 @@ std::size_t test_round_trip_single_record()
 
 std::size_t test_round_trip_two_records_then_eof()
 {
-    Instruction first = make_inst({ "one" });
-    Instruction second = make_inst({ "two", "b" });
+    inst_t first = make_inst({ "one" });
+    inst_t second = make_inst({ "two", "b" });
 
     first.cwd = "/first";
     second.cwd = "/second";
@@ -58,7 +58,7 @@ std::size_t test_round_trip_two_records_then_eof()
     CHECK(write_instruction(out, second) == InstState::Ok);
 
     std::istringstream in(out.str());
-    Instruction inst;
+    inst_t inst;
 
     CHECK(read_instruction(in, inst) == InstState::Ok);
     CHECK(inst.argv == first.argv);
@@ -75,7 +75,7 @@ std::size_t test_round_trip_two_records_then_eof()
 
 std::size_t test_exact_output_bytes()
 {
-    Instruction inst = make_inst({ "a", "b" });
+    inst_t inst = make_inst({ "a", "b" });
 
     inst.stdin_path = "in";
     inst.stdout_path = "out";
@@ -106,7 +106,7 @@ std::size_t test_exact_output_bytes()
 
 std::size_t test_all_seven_fields_survive_round_trip()
 {
-    Instruction inst = make_inst({ "prog" });
+    inst_t inst = make_inst({ "prog" });
 
     inst.stdin_path = "field-1";
     inst.stdout_path = "field-2";
@@ -121,7 +121,7 @@ std::size_t test_all_seven_fields_survive_round_trip()
     CHECK(write_instruction(out, inst) == InstState::Ok);
 
     std::istringstream in(out.str());
-    Instruction read_back;
+    inst_t read_back;
 
     CHECK(read_instruction(in, read_back) == InstState::Ok);
     CHECK(read_back.stdin_path == "field-1");
@@ -136,13 +136,13 @@ std::size_t test_all_seven_fields_survive_round_trip()
 
 std::size_t test_argument_with_spaces_and_quotes_round_trips()
 {
-    Instruction inst = make_inst({ "a b", "\"quoted value\"", "c" });
+    inst_t inst = make_inst({ "a b", "\"quoted value\"", "c" });
     std::ostringstream out;
 
     CHECK(write_instruction(out, inst) == InstState::Ok);
 
     std::istringstream in(out.str());
-    Instruction read_back;
+    inst_t read_back;
 
     CHECK(read_instruction(in, read_back) == InstState::Ok);
     CHECK(read_back.argv == inst.argv);

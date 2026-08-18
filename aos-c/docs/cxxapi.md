@@ -21,12 +21,12 @@
 
 ## 型別
 
-### `aos::Instruction`
+### `aos::inst_t`
 
 一筆指令。是個普通的 struct，欄位全部公開，沒有私有區塊，沒有隱藏狀態：
 
 ```cpp
-struct Instruction {
+struct inst_t {
     std::vector<std::string> argv;
     std::string stdin_path;
     std::string stdout_path;
@@ -45,7 +45,7 @@ struct Instruction {
 複製、可以放進容器、可以搬移，不需要記得釋放任何東西。手工組一筆出來寫檔，跟讀進來
 的那筆是同一個型別，沒有兩套所有權規則。
 
-`clear()` 清空所有欄位但保留各個字串的容量，所以用同一個 `Instruction` 連續讀整條
+`clear()` 清空所有欄位但保留各個字串的容量，所以用同一個 `inst_t` 連續讀整條
 串流時，緩衝區會被重複使用。`read_instruction` 自己會先呼叫它，你通常不用管。
 
 ### `aos::InstState`
@@ -94,19 +94,19 @@ constexpr std::size_t kInstRecordMaxBytes = 1024 * 1024; /* 預設位元組預�
 ## 函式
 
 ```cpp
-InstState read_instruction(std::istream &in, Instruction &inst,
+InstState read_instruction(std::istream &in, inst_t &inst,
                            std::size_t max_record_bytes = kInstRecordMaxBytes);
 
-InstState write_instruction(std::ostream &out, const Instruction &inst);
+InstState write_instruction(std::ostream &out, const inst_t &inst);
 
-ExecState execute(Instruction &inst, ExecResult &result);
+ExecState execute(inst_t &inst, ExecResult &result);
 
 std::size_t inst_argv_max();
 
 const char *to_string(InstState state);
 const char *to_string(ExecState state);
 
-std::vector<char *> to_c_argv(Instruction &inst);
+std::vector<char *> to_c_argv(inst_t &inst);
 ```
 
 ### `read_instruction`
@@ -127,7 +127,7 @@ std::vector<char *> to_c_argv(Instruction &inst);
 
 ### `execute`
 
-把指令跑起來，等它結束。取的是 `Instruction` 而不是路徑或串流，所以測試時不用碰
+把指令跑起來，等它結束。取的是 `inst_t` 而不是路徑或串流，所以測試時不用碰
 檔案系統。
 
 **子行程回傳非零不算失敗** —— 那會是 `ExecState::Ok` 加上 `result.status`。分界線
@@ -137,7 +137,7 @@ std::vector<char *> to_c_argv(Instruction &inst);
 
 ### `to_c_argv`
 
-把 `Instruction` 轉成 `execv` 那一家要的 `char *const *`，最後補一個 `nullptr`。
+把 `inst_t` 轉成 `execv` 那一家要的 `char *const *`，最後補一個 `nullptr`。
 
 ```cpp
 std::vector<char *> argv = aos::to_c_argv(inst);
@@ -162,7 +162,7 @@ execvp(argv[0], argv.data());
 #include <iostream>
 
 std::ifstream in("insts");
-aos::Instruction inst;          /* 同一個重複使用，緩衝區長夠了就不再配置 */
+aos::inst_t inst;          /* 同一個重複使用，緩衝區長夠了就不再配置 */
 aos::InstState state;
 
 while ((state = aos::read_instruction(in, inst)) == aos::InstState::Ok) {
@@ -202,7 +202,7 @@ if (aos::write_instruction(out, inst) == aos::InstState::Ok) {
 
 ```cpp
 std::istringstream in(bytes);
-aos::Instruction inst;
+aos::inst_t inst;
 
 aos::read_instruction(in, inst);
 ```
@@ -224,7 +224,7 @@ aos::write_instruction(out, second);   /* 接在後面，記錄之間不需要�
 ### 手工組一筆出來寫檔
 
 ```cpp
-aos::Instruction inst;
+aos::inst_t inst;
 
 inst.argv = { "echo", "hello world" };   /* 空白是普通字元，這是兩個引數 */
 inst.stdout_path = "out.txt";
@@ -249,8 +249,8 @@ aos::write_instruction(out, inst);
 
 ## 執行緒
 
-- 不同的 `Instruction` 在不同執行緒同時用，安全
-- 同一個 `Instruction` 在多執行緒同時用，不安全，自己加鎖
+- 不同的 `inst_t` 在不同執行緒同時用，安全
+- 同一個 `inst_t` 在多執行緒同時用，不安全，自己加鎖
 - 函式庫沒有全域狀態
 - `execute` 會 `fork`。子行程在 `exec` 之前只呼叫非同步訊號安全的函式，所以在多
   執行緒程式裡也可以用
@@ -260,11 +260,11 @@ aos::write_instruction(out, inst);
 
 | | C++ | C |
 | --- | --- | --- |
-| 型別 | `aos::Instruction`（欄位公開） | `aos_instruction *`（不透明） |
+| 型別 | `aos::inst_t`（欄位公開） | `aos_instruction *`（不透明） |
 | 讀取 | `read_instruction(istream&, ...)` | `aos_instruction_read(FILE *, ...)` |
 | 寫入 | `write_instruction(ostream&, ...)` | `aos_instruction_write(FILE *, ...)` |
 | 變成 bytes | `std::ostringstream` | `aos_instruction_write_buffer` |
-| 執行 | `execute(Instruction&, ExecResult&)` | `aos_instruction_execute` |
+| 執行 | `execute(inst_t&, ExecResult&)` | `aos_instruction_execute` |
 | 取用引數 | `inst.argv[i]` | `aos_instruction_arg(inst, i)` |
 | 設定欄位 | `inst.cwd = "/tmp"` | `aos_instruction_set_field(...)` |
 | 釋放 | 解構子 | `aos_instruction_free` |

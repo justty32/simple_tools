@@ -85,7 +85,7 @@ bool contains_line_break(const std::string &text)
 }
 
 /* 在任何內容送進串流之前，先驗證整筆記錄。 */
-InstState validate(const Instruction &inst)
+InstState validate(const inst_t &inst)
 {
     if (inst.argv.empty()) {
         return InstState::EmptyArgv;
@@ -126,10 +126,10 @@ InstState validate(const Instruction &inst)
 
 }  /* namespace */
 
-void Instruction::clear()
+void inst_t::clear()
 {
     /*
-     * 每個 std::string 清空後仍保留既有容量，所以用同一個 Instruction
+     * 每個 std::string 清空後仍保留既有容量，所以用同一個 inst_t
      * 連續讀取整條串流時，欄位的緩衝區會被重複使用。
      */
     argv.clear();
@@ -142,7 +142,7 @@ void Instruction::clear()
     extra.clear();
 }
 
-InstState read_instruction(std::istream &in, Instruction &inst,
+InstState read_instruction(std::istream &in, inst_t &inst,
                            std::size_t max_record_bytes)
 {
     if (max_record_bytes == 0) {
@@ -195,7 +195,7 @@ InstState read_instruction(std::istream &in, Instruction &inst,
     return InstState::Ok;
 }
 
-InstState write_instruction(std::ostream &out, const Instruction &inst)
+InstState write_instruction(std::ostream &out, const inst_t &inst)
 {
     const InstState state = validate(inst);
     if (state != InstState::Ok) {
@@ -230,7 +230,7 @@ std::size_t inst_argv_max()
     return kInstArgvMax;
 }
 
-std::vector<char *> to_c_argv(Instruction &inst)
+std::vector<char *> to_c_argv(inst_t &inst)
 {
     std::vector<char *> result;
 

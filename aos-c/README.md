@@ -131,7 +131,7 @@ gcc -std=c99 my.c -laos -o my
 int main()
 {
     std::ifstream in("insts");
-    aos::Instruction inst;
+    aos::inst_t inst;
 
     while (aos::read_instruction(in, inst) == aos::InstState::Ok) {
         aos::ExecResult result;

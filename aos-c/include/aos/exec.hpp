@@ -4,9 +4,9 @@
 #include "inst.hpp"
 
 /*
- * Execution: turning one Instruction into a spawned process.
+ * Execution: turning one inst_t into a spawned process.
  *
- * This layer takes an Instruction and nothing else -- never a path, never a
+ * This layer takes an inst_t and nothing else -- never a path, never a
  * stream -- so it stays testable without touching the reader, and it does
  * not care where the record came from. Looping over many instructions
  * belongs to the caller.
@@ -93,7 +93,7 @@ struct ExecResult {
  * were an exit status: a child that genuinely exits 127 must stay
  * distinguishable from one that never started.
  */
-AOS_API ExecState execute(Instruction &inst, ExecResult &result);
+AOS_API ExecState execute(inst_t &inst, ExecResult &result);
 
 /* Return a static, human-readable description of state. */
 AOS_API const char *to_string(ExecState state);

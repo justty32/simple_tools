@@ -84,7 +84,7 @@ void remove_temp_dir(const std::string &dir)
 
 std::size_t test_echo_stdout(const std::string &dir)
 {
-    Instruction inst = make_inst({ "echo", "hello world" });
+    inst_t inst = make_inst({ "echo", "hello world" });
     ExecResult result;
 
     inst.stdout_path = dir + "/echo_out";
@@ -98,7 +98,7 @@ std::size_t test_echo_stdout(const std::string &dir)
 
 std::size_t test_exit_path_written(const std::string &dir)
 {
-    Instruction inst = make_inst({ "sh", "-c", "exit 3" });
+    inst_t inst = make_inst({ "sh", "-c", "exit 3" });
     ExecResult result;
 
     inst.exit_path = dir + "/exit_status";
@@ -115,7 +115,7 @@ std::size_t test_signalled_child(const std::string &dir)
     /* 未使用 dir，但保持相同的呼叫慣例，方便日後這裡也要用到檔案。 */
     static_cast<void>(dir);
 
-    Instruction inst = make_inst({ "sh", "-c", "kill -TERM $$" });
+    inst_t inst = make_inst({ "sh", "-c", "kill -TERM $$" });
     ExecResult result;
 
     CHECK(execute(inst, result) == ExecState::Ok);
@@ -127,7 +127,7 @@ std::size_t test_signalled_child(const std::string &dir)
 
 std::size_t test_command_not_found(const std::string &dir)
 {
-    Instruction inst = make_inst({ "aos-c-test-no-such-command-xyz" });
+    inst_t inst = make_inst({ "aos-c-test-no-such-command-xyz" });
     ExecResult result;
     const std::string exit_path = dir + "/never_created_exit";
 
@@ -143,7 +143,7 @@ std::size_t test_genuine_exit_127_distinguishable(const std::string &dir)
 {
     static_cast<void>(dir);
 
-    Instruction inst = make_inst({ "sh", "-c", "exit 127" });
+    inst_t inst = make_inst({ "sh", "-c", "exit 127" });
     ExecResult result;
 
     /* 與上一個案例的 SpawnFailed 對照：這裡是子行程真的跑完並回傳 127。 */
@@ -158,7 +158,7 @@ std::size_t test_cwd(const std::string &dir)
     std::size_t cases = 0;
 
     {
-        Instruction inst = make_inst({ "sh", "-c", "pwd" });
+        inst_t inst = make_inst({ "sh", "-c", "pwd" });
         ExecResult result;
 
         inst.cwd = dir;
@@ -174,7 +174,7 @@ std::size_t test_cwd(const std::string &dir)
         ++cases;
     }
     {
-        Instruction inst = make_inst({ "sh", "-c", "pwd" });
+        inst_t inst = make_inst({ "sh", "-c", "pwd" });
         ExecResult result;
 
         inst.cwd = dir + "/no-such-subdirectory";
@@ -188,7 +188,7 @@ std::size_t test_cwd(const std::string &dir)
 
 std::size_t test_stdin_redirection(const std::string &dir)
 {
-    Instruction inst = make_inst({ "cat" });
+    inst_t inst = make_inst({ "cat" });
     ExecResult result;
     const std::string stdin_path = dir + "/cat_in";
 
@@ -203,7 +203,7 @@ std::size_t test_stdin_redirection(const std::string &dir)
 
 std::size_t test_stdout_truncation(const std::string &dir)
 {
-    Instruction inst = make_inst({ "echo", "hi" });
+    inst_t inst = make_inst({ "echo", "hi" });
     ExecResult result;
     const std::string path = dir + "/truncate_out";
 
@@ -218,7 +218,7 @@ std::size_t test_stdout_truncation(const std::string &dir)
 
 std::size_t test_stderr_redirection(const std::string &dir)
 {
-    Instruction inst = make_inst({ "sh", "-c", "echo oops >&2" });
+    inst_t inst = make_inst({ "sh", "-c", "echo oops >&2" });
     ExecResult result;
     const std::string path = dir + "/stderr_out";
 
@@ -231,7 +231,7 @@ std::size_t test_stderr_redirection(const std::string &dir)
 
 std::size_t test_env_path_replaces_environment(const std::string &dir)
 {
-    Instruction inst = make_inst(
+    inst_t inst = make_inst(
         { "sh", "-c", "echo $MYVAR:$AOS_C_TEST_PARENT_ONLY" });
     ExecResult result;
     const std::string env_path = dir + "/env_file";
@@ -257,7 +257,7 @@ std::size_t test_env_path_errors(const std::string &dir)
     std::size_t cases = 0;
 
     {
-        Instruction inst = make_inst({ "echo", "x" });
+        inst_t inst = make_inst({ "echo", "x" });
         ExecResult result;
 
         inst.env_path = dir + "/no-such-env-file";
@@ -266,7 +266,7 @@ std::size_t test_env_path_errors(const std::string &dir)
         ++cases;
     }
     {
-        Instruction inst = make_inst({ "echo", "x" });
+        inst_t inst = make_inst({ "echo", "x" });
         ExecResult result;
         const std::string path = dir + "/bad_env_file";
 
@@ -282,7 +282,7 @@ std::size_t test_env_path_errors(const std::string &dir)
 
 std::size_t test_empty_argv_is_invalid_argument()
 {
-    Instruction inst;
+    inst_t inst;
     ExecResult result;
 
     CHECK(execute(inst, result) == ExecState::InvalidArgument);

@@ -28,7 +28,7 @@
 
 /* 不透明控制代碼的實體。C 端只看得到前向宣告，所以佈局不屬於 ABI。 */
 struct aos_instruction {
-    aos::Instruction inst;
+    aos::inst_t inst;
 };
 
 namespace {
@@ -116,7 +116,7 @@ private:
 };
 
 /* 七個非 argv 欄位的查表；未知欄位回傳 nullptr。 */
-const std::string *field_of(const aos::Instruction &inst, aos_inst_field field)
+const std::string *field_of(const aos::inst_t &inst, aos_inst_field field)
 {
     switch (field) {
     case AOS_FIELD_STDIN:
@@ -141,10 +141,10 @@ const std::string *field_of(const aos::Instruction &inst, aos_inst_field field)
  * 設定用的版本。const_cast 只出現在這裡，而這裡的來源本來就是非 const 的
  * 指令，所以它不可能把唯讀路徑變成寫入 —— 查表本身維持 const。
  */
-std::string *mutable_field_of(aos::Instruction &inst, aos_inst_field field)
+std::string *mutable_field_of(aos::inst_t &inst, aos_inst_field field)
 {
     return const_cast<std::string *>(
-        field_of(static_cast<const aos::Instruction &>(inst), field));
+        field_of(static_cast<const aos::inst_t &>(inst), field));
 }
 
 }  /* namespace */

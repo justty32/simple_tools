@@ -25,7 +25,7 @@ std::vector<std::string> n_args(std::size_t n)
 }
 
 /* 每個拒絕案例都必須確認：狀態碼正確，而且沒有任何位元組寫出去。 */
-std::size_t check_rejected(const Instruction &inst, InstState expected)
+std::size_t check_rejected(const inst_t &inst, InstState expected)
 {
     std::ostringstream out;
 
@@ -36,21 +36,21 @@ std::size_t check_rejected(const Instruction &inst, InstState expected)
 
 std::size_t test_empty_argv()
 {
-    Instruction inst;
+    inst_t inst;
 
     return check_rejected(inst, InstState::EmptyArgv);
 }
 
 std::size_t test_too_many_args()
 {
-    Instruction inst = make_inst(n_args(kInstArgvMax + 1));
+    inst_t inst = make_inst(n_args(kInstArgvMax + 1));
 
     return check_rejected(inst, InstState::TooManyArgs);
 }
 
 std::size_t test_argument_contains_tab()
 {
-    Instruction inst = make_inst({ "ok", "has\ttab" });
+    inst_t inst = make_inst({ "ok", "has\ttab" });
 
     return check_rejected(inst, InstState::ArgumentContainsTab);
 }
@@ -60,12 +60,12 @@ std::size_t test_argument_contains_line_break()
     std::size_t cases = 0;
 
     {
-        Instruction inst = make_inst({ "ok", "has\nnewline" });
+        inst_t inst = make_inst({ "ok", "has\nnewline" });
 
         cases += check_rejected(inst, InstState::ArgumentContainsLineBreak);
     }
     {
-        Instruction inst = make_inst({ "ok", "has\rcr" });
+        inst_t inst = make_inst({ "ok", "has\rcr" });
 
         cases += check_rejected(inst, InstState::ArgumentContainsLineBreak);
     }
@@ -79,24 +79,24 @@ std::size_t test_single_empty_argument()
      * 唯一的引數是空字串：沒有定位字元可以標示它的存在，序列化後會變成
      * 一行空白，讀回來會被誤判成完全沒有引數，因此在寫入端就先拒絕。
      */
-    Instruction inst = make_inst({ "" });
+    inst_t inst = make_inst({ "" });
 
     return check_rejected(inst, InstState::EmptyArgv);
 }
 
 std::size_t test_field_contains_line_break()
 {
-    std::string Instruction::* const fields[] = {
-        &Instruction::stdin_path, &Instruction::stdout_path,
-        &Instruction::stderr_path, &Instruction::exit_path,
-        &Instruction::cwd, &Instruction::env_path, &Instruction::extra
+    std::string inst_t::* const fields[] = {
+        &inst_t::stdin_path, &inst_t::stdout_path,
+        &inst_t::stderr_path, &inst_t::exit_path,
+        &inst_t::cwd, &inst_t::env_path, &inst_t::extra
     };
     const char breaks[] = { '\n', '\r' };
     std::size_t cases = 0;
 
-    for (std::string Instruction::* field : fields) {
+    for (std::string inst_t::* field : fields) {
         for (char brk : breaks) {
-            Instruction inst = make_inst({ "prog" });
+            inst_t inst = make_inst({ "prog" });
 
             inst.*field = std::string("value") + brk;
             cases += check_rejected(inst, InstState::FieldContainsLineBreak);
@@ -108,7 +108,7 @@ std::size_t test_field_contains_line_break()
 
 std::size_t test_failed_ostream_is_write_error()
 {
-    Instruction inst = make_inst({ "prog", "arg" });
+    inst_t inst = make_inst({ "prog", "arg" });
     std::ostringstream out;
 
     /* 串流在任何插入動作之前就已失敗，所以插入運算子全部是無效動作。 */

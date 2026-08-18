@@ -27,7 +27,7 @@ std::string n_full_lines(std::size_t n)
 }
 
 /* 讀取失敗後，inst 必須完全清空：七個欄位皆為空字串，argv 也是空的。 */
-void expect_cleared(const Instruction &inst)
+void expect_cleared(const inst_t &inst)
 {
     CHECK(inst.empty());
     CHECK(inst.argv.empty());
@@ -43,7 +43,7 @@ void expect_cleared(const Instruction &inst)
 std::size_t test_empty_stream_is_eof()
 {
     std::istringstream in("");
-    Instruction inst;
+    inst_t inst;
 
     CHECK(read_instruction(in, inst) == InstState::Eof);
     expect_cleared(inst);
@@ -53,7 +53,7 @@ std::size_t test_empty_stream_is_eof()
 std::size_t test_five_lines_then_eof()
 {
     std::istringstream in(n_full_lines(5));
-    Instruction inst;
+    inst_t inst;
 
     CHECK(read_instruction(in, inst) == InstState::Incomplete);
     expect_cleared(inst);
@@ -65,7 +65,7 @@ std::size_t test_eight_lines_missing_final_newline()
     /* 前七行完整，第八行有內容但沒有結尾換行，串流就在其後結束。 */
     std::string data = n_full_lines(7) + "last";
     std::istringstream in(data);
-    Instruction inst;
+    inst_t inst;
 
     CHECK(read_instruction(in, inst) == InstState::Incomplete);
     expect_cleared(inst);
@@ -75,7 +75,7 @@ std::size_t test_eight_lines_missing_final_newline()
 std::size_t test_seven_lines_all_terminated()
 {
     std::istringstream in(n_full_lines(7));
-    Instruction inst;
+    inst_t inst;
 
     CHECK(read_instruction(in, inst) == InstState::Incomplete);
     expect_cleared(inst);
@@ -87,7 +87,7 @@ std::size_t test_empty_argv_line()
     /* argv 行本身是空字串（只有換行字元），其餘七行內容齊全。 */
     std::string data = "\n" + n_full_lines(7);
     std::istringstream in(data);
-    Instruction inst;
+    inst_t inst;
 
     CHECK(read_instruction(in, inst) == InstState::EmptyArgv);
     expect_cleared(inst);
@@ -97,7 +97,7 @@ std::size_t test_empty_argv_line()
 std::size_t test_zero_budget_is_invalid_argument()
 {
     std::istringstream in("x\n\n\n\n\n\n\n\n");
-    Instruction inst;
+    inst_t inst;
 
     CHECK(read_instruction(in, inst, 0) == InstState::InvalidArgument);
     expect_cleared(inst);
@@ -112,7 +112,7 @@ std::size_t test_broken_stream_is_read_error()
      * 而非 Eof 的條件（in.bad() || !in.eof()）。
      */
     std::ifstream in("/nonexistent/aos-c-test-path/does-not-exist-12345");
-    Instruction inst;
+    inst_t inst;
 
     CHECK(!in);
     CHECK(read_instruction(in, inst) == InstState::ReadError);
