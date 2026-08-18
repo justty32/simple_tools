@@ -129,28 +129,121 @@ std::size_t test_command_not_found(const std::string &dir)
 {
     inst_t inst = make_inst({ "aos-c-test-no-such-command-xyz" });
     ExecResult result;
-    const std::string exit_path = dir + "/never_created_exit";
+    const std::string exit_path = dir + "/not_found_exit";
 
     inst.exit_path = exit_path;
 
-    CHECK(execute(inst, result) == ExecState::SpawnFailed);
-    /* 沒能起來的行程不算「跑完並結束」，exit_path 就不該被建立。 */
-    CHECK(!file_exists(exit_path));
+    /*
+     * 找不到指令不是這個函式庫的失敗，而是一筆跑完並產出 127 的記錄 ——
+     * 跟 shell 一樣。exit_path 有設就一定要寫，否則等著讀檔的人永遠不知道
+     * 這一筆結束了。
+     */
+    CHECK(execute(inst, result) == ExecState::Ok);
+    CHECK(result.status == 127);
+    CHECK(!result.signalled);
+    CHECK(read_file(exit_path) == "127\n");
     return 1;
 }
 
-std::size_t test_genuine_exit_127_distinguishable(const std::string &dir)
+std::size_t test_genuine_exit_127_looks_the_same(const std::string &dir)
 {
     static_cast<void>(dir);
 
     inst_t inst = make_inst({ "sh", "-c", "exit 127" });
     ExecResult result;
 
-    /* 與上一個案例的 SpawnFailed 對照：這裡是子行程真的跑完並回傳 127。 */
+    /*
+     * 子行程自己回傳 127，跟上一個案例的「找不到指令」給出一模一樣的結果。
+     * 這是刻意的：要分開它們需要另一條從子行程出來的管道，而 shell 也不
+     * 分 —— 在意指令做了什麼的人，看的是它的 stdout 與 stderr。
+     */
     CHECK(execute(inst, result) == ExecState::Ok);
     CHECK(result.status == 127);
     CHECK(!result.signalled);
     return 1;
+}
+
+/* 佈置失敗（重導向開不起來、cwd 不存在）在子行程裡是 126。 */
+std::size_t test_setup_failure_is_126(const std::string &dir)
+{
+    std::size_t cases = 0;
+
+    /* stdin 讀不到：檔案不存在，而且不會被建立。 */
+    {
+        inst_t inst = make_inst({ "echo", "x" });
+        ExecResult result;
+
+        inst.stdin_path = dir + "/no-such-input-file";
+        inst.stdout_path = dir + "/stdin_fail_out";
+        inst.exit_path = dir + "/stdin_fail_exit";
+
+        CHECK(execute(inst, result) == ExecState::Ok);
+        CHECK(result.status == 126);
+        CHECK(read_file(inst.exit_path) == "126\n");
+        /*
+         * 重導向是照 stdin、stdout、stderr 的順序做的，所以卡在第一個就代表
+         * 後面全都沒發生：輸出檔連建立都沒有，指令本身也從沒跑起來。
+         */
+        CHECK(!file_exists(inst.stdout_path));
+        ++cases;
+    }
+
+    /* stdout 寫不進去：目錄不存在，O_CREAT 也救不了。 */
+    {
+        inst_t inst = make_inst({ "echo", "x" });
+        ExecResult result;
+
+        inst.stdout_path = dir + "/no-such-subdirectory/out";
+
+        CHECK(execute(inst, result) == ExecState::Ok);
+        CHECK(result.status == 126);
+        ++cases;
+    }
+
+    /* cwd 切不過去。 */
+    {
+        inst_t inst = make_inst({ "sh", "-c", "pwd" });
+        ExecResult result;
+
+        inst.cwd = dir + "/no-such-subdirectory";
+
+        CHECK(execute(inst, result) == ExecState::Ok);
+        CHECK(result.status == 126);
+        ++cases;
+    }
+
+    return cases;
+}
+
+/* exit_path 是「這筆做完了」的信號，所以成敗都要寫進去一個碼。 */
+std::size_t test_exit_path_always_written(const std::string &dir)
+{
+    struct Case {
+        const char *name;
+        std::vector<std::string> argv;
+        int status;
+    };
+    const std::vector<Case> cases = {
+        { "ok", { "true" }, 0 },
+        { "nonzero", { "sh", "-c", "exit 3" }, 3 },
+        { "signalled", { "sh", "-c", "kill -TERM $$" }, 143 },
+        { "not_found", { "aos-c-test-no-such-command-xyz" }, 127 }
+    };
+    std::size_t count = 0;
+
+    for (const Case &c : cases) {
+        inst_t inst = make_inst(c.argv);
+        ExecResult result;
+
+        inst.exit_path = dir + "/always_" + c.name;
+
+        CHECK(execute(inst, result) == ExecState::Ok);
+        CHECK(result.status == c.status);
+        CHECK(read_file(inst.exit_path) ==
+              std::to_string(c.status) + "\n");
+        ++count;
+    }
+    return count;
 }
 
 std::size_t test_cwd(const std::string &dir)
@@ -173,16 +266,6 @@ std::size_t test_cwd(const std::string &dir)
         CHECK(output == dir);
         ++cases;
     }
-    {
-        inst_t inst = make_inst({ "sh", "-c", "pwd" });
-        ExecResult result;
-
-        inst.cwd = dir + "/no-such-subdirectory";
-
-        CHECK(execute(inst, result) == ExecState::ChdirFailed);
-        ++cases;
-    }
-
     return cases;
 }
 
@@ -303,10 +386,6 @@ std::size_t test_to_string_covers_every_state()
     const ExecState states[] = {
         ExecState::Ok,
         ExecState::InvalidArgument,
-        ExecState::OpenStdinFailed,
-        ExecState::OpenStdoutFailed,
-        ExecState::OpenStderrFailed,
-        ExecState::ChdirFailed,
         ExecState::SpawnFailed,
         ExecState::WaitFailed,
         ExecState::ExitWriteFailed,
@@ -345,7 +424,9 @@ std::size_t run_exec_tests()
     count += test_exit_path_written(dir);
     count += test_signalled_child(dir);
     count += test_command_not_found(dir);
-    count += test_genuine_exit_127_distinguishable(dir);
+    count += test_genuine_exit_127_looks_the_same(dir);
+    count += test_setup_failure_is_126(dir);
+    count += test_exit_path_always_written(dir);
     count += test_cwd(dir);
     count += test_stdin_redirection(dir);
     count += test_stdout_truncation(dir);

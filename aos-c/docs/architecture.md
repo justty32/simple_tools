@@ -166,25 +166,36 @@ a compatibility break, not a bug fix.
 | an `env` entry that is not `KEY=VALUE` | `EnvEntryMalformed`, at parse time | better to fail than to guess, and better to fail before a process exists than after |
 | duplicate keys in `env` | passed through verbatim | merging would mean owning a policy for which duplicate wins; the producer already has a map and can decide there |
 | empty `exit_path` | the status is discarded | |
-| non-empty `exit_path` | truncated, then the decimal status and a newline | |
+| non-empty `exit_path` | truncated, then the decimal status and a newline, **whatever happened** | it is the "this one is finished" signal, and a signal that is sometimes absent cannot be waited on |
 | status of a signalled child | `128 + signum` | shell convention, and it keeps the field one number on every platform |
+| a child that could not be set up (redirection, `chdir`) | status `126` | shell convention |
+| `execvp` failing (no such command) | status `127` | shell convention; see below |
 | `extra` | ignored | |
-| failure to spawn | a runtime error, and **nothing** is written to `exit_path` | see below |
+| `fork` failing | a runtime error, and **nothing** is written to `exit_path` | it is the one failure with no child, so there is no status to carry it |
 | several instructions | sequential, and the run continues past every failure it can | later instructions do not depend on earlier ones, so abandoning them turns one failure into many things simply not done |
 | a parse failure mid-file | fatal: the rest of the stream is not read | the format has no record separator, so a "still aligned" cursor is only aligned relative to what was already consumed; resuming would decode later records into garbage, which is worse than stopping |
 
-### Telling "command not found" from "the command exited 127"
+### Not telling "command not found" from "the command exited 127"
 
-These have to stay distinguishable, and after `fork` the child has no way to
-return anything but an exit status. So the child inherits the write end of a
-pipe marked `FD_CLOEXEC` and writes which step failed and its `errno` if it
-cannot get as far as `execvp`. A successful `execvp` closes the pipe, and
-the parent reads zero bytes.
+Earlier versions did tell them apart, with the standard trick: the child
+inherits the write end of a pipe marked `FD_CLOEXEC` and writes which step
+failed and its `errno` if it cannot get as far as `execvp`; a successful
+`execvp` closes the pipe and the parent reads zero bytes. It worked, and it
+is gone.
 
-That is what makes `ChdirFailed` and `OpenStdoutFailed` distinct states
-rather than a single opaque `SpawnFailed`, and it is why a child that
-genuinely exits 127 is reported as a normal result while a missing command
-is not.
+It went because the distinction it bought conflicts with how the result is
+consumed. A caller waits for `exit_path` to appear; a "never started" answer
+has no exit code, so it cannot be written there, so that instruction's file
+never appears and its reader waits forever. Fidelity to a shell is worth
+more here: a shell reports 127 for a missing command and 126 for one it
+could not execute, and nobody finds it lacking. What the command actually
+did is a question its stdout and stderr answer.
+
+So the child `_exit`s 126 or 127, the parent treats that as an ordinary
+status, and `ExecState` keeps only the failures that cannot become one:
+`fork` failing, `waitpid` failing, and `exit_path` not being writable. The
+cost, stated plainly: a child that genuinely exits 126 or 127 is
+indistinguishable from one that never ran — exactly as in a shell.
 
 ### Portability
 

@@ -68,15 +68,14 @@ WriteError  EnvEntryMalformed  TooManyEnv
 ```cpp
 enum class ExecState {
     Ok, InvalidArgument,
-    OpenStdinFailed, OpenStdoutFailed, OpenStderrFailed,
-    ChdirFailed, SpawnFailed, WaitFailed,
-    ExitWriteFailed, PlatformUnsupported
+    SpawnFailed,        /* 只剩 fork 失敗 */
+    WaitFailed, ExitWriteFailed, PlatformUnsupported
 };
 
 struct ExecResult {
-    int status = 0;        /* 正常結束是結束碼；被訊號終止是 128 + 訊號編號 */
+    int status = 0;        /* 結束碼；訊號是 128+n；沒起來是 126 / 127 */
     bool signalled = false;
-    int error = 0;         /* 失敗時的 errno */
+    int error = 0;         /* fork / wait 失敗時的 errno */
 };
 ```
 
@@ -133,8 +132,9 @@ std::vector<char *> to_c_envp(inst_t &inst);
 把指令跑起來，等它結束。取的是 `inst_t` 而不是路徑或串流，所以測試時不用碰
 檔案系統。
 
-**子行程回傳非零不算失敗** —— 那會是 `ExecState::Ok` 加上 `result.status`。分界線
-和背後的理由在 [exec.md](exec.md#什麼算失敗)。
+**子行程回傳非零不算失敗**，**指令根本沒起來也不算** —— 兩者都是 `ExecState::Ok`
+加上 `result.status`（沒起來就是 126 或 127，跟 shell 一樣）。分界線和背後的理由
+在 [exec.md](exec.md#什麼算失敗)。
 
 參數是非 const 參考，但**它不會改動你的指令** —— 只是因為底下要呼叫 `to_c_argv`。
 
@@ -178,7 +178,7 @@ while ((state = aos::read_instruction(in, inst)) == aos::InstState::Ok) {
     aos::ExecResult result;
     aos::ExecState exec_state = aos::execute(inst, result);
 
-    /* 一筆跑不起來就記下來繼續，後面的指令跟它沒有關係 */
+    /* 這裡的失敗只剩 fork/wait/寫檔；記下來繼續，後面的指令跟它沒關係 */
     if (exec_state != aos::ExecState::Ok) {
         std::cerr << "跑不起來：" << aos::to_string(exec_state) << '\n';
         continue;

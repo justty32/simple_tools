@@ -22,20 +22,22 @@ namespace aos {
 /*
  * Result of trying to run one instruction.
  *
- * Every state but Ok is a failure of the runtime itself. A child that ran
- * and exited non-zero is Ok: its status is data, reported in ExecResult and
- * written to exit_path, not an error here.
+ * Every state but Ok is a failure of this library itself, and there are
+ * few of them left on purpose. A child that ran and exited non-zero is Ok,
+ * and so is a child that never got as far as its own main(): a redirection
+ * that would not open, a cwd that does not exist, a command that is not on
+ * PATH -- all of those are now an exit status like any other, 126 or 127,
+ * reported in ExecResult and written to exit_path. This is what a shell
+ * does, and the reason to match it is that exit_path's readers need "this
+ * one is finished" to be one signal, not two.
  */
 enum class ExecState {
     Ok = 0,
     InvalidArgument,
-    /* 重導向的檔案開不起來，個別回報以便指出是哪一個。 */
-    OpenStdinFailed,
-    OpenStdoutFailed,
-    OpenStderrFailed,
-    /* cwd 切不過去。 */
-    ChdirFailed,
-    /* fork 失敗，或子行程根本沒能 exec 起來（例如找不到指令）。 */
+    /*
+     * fork 失敗。這是唯一還在這裡回報的啟動錯誤，因為它是唯一一種連子行程
+     * 都不存在、沒有結束碼可以承載的失敗。
+     */
     SpawnFailed,
     /* 子行程起來了，但等待它結束時出錯。 */
     WaitFailed,
@@ -54,8 +56,8 @@ struct ExecResult {
     /* 為 true 代表 status 來自訊號而非 exit()。 */
     bool signalled = false;
     /*
-     * 子行程失敗的 errno，只在 execute() 回傳失敗時有意義，且僅當該失敗來
-     * 自作業系統呼叫時才非零。用來把「找不到指令」和「權限不足」分開。
+     * 失敗的 errno，只在 execute() 回傳 SpawnFailed 或 WaitFailed 時有意義。
+     * 子行程自己的失敗不再走這裡，它走 status（126／127）。
      */
     int error = 0;
 };
@@ -76,7 +78,9 @@ struct ExecResult {
  *               `>>`, because appending cannot be undone by the caller and
  *               truncating can be avoided by choosing a fresh path.
  *   exit_path   empty discards the status; otherwise the file is truncated
- *               and the decimal status plus a newline is written to it.
+ *               and the decimal status plus a newline is written to it,
+ *               whether the command succeeded, failed, or never started.
+ *               It marks the instruction as finished, not as correct.
  *   cwd         empty inherits the caller's working directory.
  *   env         empty inherits the caller's environment entirely.
  *               Otherwise the entries *replace* the environment; they do
@@ -86,11 +90,18 @@ struct ExecResult {
  *               belongs to whoever produced the instruction.
  *   extra       ignored.
  *
- * A failure to spawn -- command not found, cwd missing, a redirection
- * target that will not open -- is a runtime error reported here, and
- * nothing is written to exit_path. It is deliberately not recorded as if it
- * were an exit status: a child that genuinely exits 127 must stay
- * distinguishable from one that never started.
+ * The status, following the shell's conventions:
+ *
+ *   0-255       the child's own exit code.
+ *   128 + n     the child was killed by signal n.
+ *   126         the child could not be set up: a redirection would not
+ *               open, or cwd would not change.
+ *   127         execvp failed: no such command, or it is not executable.
+ *
+ * 126 and 127 are indistinguishable from a child that genuinely exits with
+ * those codes, exactly as in a shell. Telling the two apart would need a
+ * second channel out of the child, and the caller who cares about what the
+ * command did is reading its stdout and stderr anyway.
  */
 AOS_API ExecState execute(inst_t &inst, ExecResult &result);
 

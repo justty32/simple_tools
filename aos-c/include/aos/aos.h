@@ -91,19 +91,22 @@ typedef enum aos_inst_field {
     AOS_FIELD_EXTRA = 5
 } aos_inst_field;
 
-/* Result of trying to run one instruction. See aos_instruction_execute. */
+/*
+ * Result of trying to run one instruction. See aos_instruction_execute.
+ *
+ * There are few failures here on purpose: a command that could not be
+ * started is not one of them. It is an exit status, 126 or 127, exactly as
+ * in a shell.
+ */
 typedef enum aos_exec_state {
     AOS_EXEC_OK = 0,
     AOS_EXEC_INVALID_ARGUMENT = 1,
-    AOS_EXEC_OPEN_STDIN_FAILED = 2,
-    AOS_EXEC_OPEN_STDOUT_FAILED = 3,
-    AOS_EXEC_OPEN_STDERR_FAILED = 4,
-    AOS_EXEC_CHDIR_FAILED = 5,
-    AOS_EXEC_SPAWN_FAILED = 6,
-    AOS_EXEC_WAIT_FAILED = 7,
-    AOS_EXEC_EXIT_WRITE_FAILED = 8,
-    AOS_EXEC_PLATFORM_UNSUPPORTED = 9,
-    AOS_EXEC_ALLOC_FAILED = 10
+    /* fork 失敗：唯一連子行程都不存在的啟動錯誤。 */
+    AOS_EXEC_SPAWN_FAILED = 2,
+    AOS_EXEC_WAIT_FAILED = 3,
+    AOS_EXEC_EXIT_WRITE_FAILED = 4,
+    AOS_EXEC_PLATFORM_UNSUPPORTED = 5,
+    AOS_EXEC_ALLOC_FAILED = 6
 } aos_exec_state;
 
 /*
@@ -112,11 +115,14 @@ typedef enum aos_exec_state {
  * across the boundary rather than owned by the library.
  */
 typedef struct aos_exec_result {
-    /* 正常結束時是結束碼；被訊號終止時是 128 + 訊號編號。 */
+    /*
+     * 正常結束時是結束碼；被訊號終止時是 128 + 訊號編號；子行程沒能起來時
+     * 是 126（佈置失敗）或 127（找不到指令）。
+     */
     int status;
     /* 非零代表 status 來自訊號而非 exit()。 */
     int signalled;
-    /* 失敗時作業系統回報的 errno，否則為 0。 */
+    /* fork 或 wait 失敗時作業系統回報的 errno，否則為 0。 */
     int error;
 } aos_exec_result;
 
@@ -259,7 +265,9 @@ AOS_API aos_inst_state aos_instruction_write_buffer(const aos_instruction *inst,
  *   stdout      reading, or created and truncated for writing. Truncating
  *   stderr      matches a shell's `>` rather than `>>`.
  *   exit        empty discards the status; otherwise the file is truncated
- *               and the decimal status plus a newline is written to it.
+ *               and the decimal status plus a newline is written to it,
+ *               whether the command succeeded, failed, or never started.
+ *               It marks the instruction as finished, not as correct.
  *   cwd         empty inherits the caller's working directory.
  *   env         empty inherits the caller's environment entirely.
  *               Otherwise the entries *replace* the environment; they do
@@ -267,11 +275,16 @@ AOS_API aos_inst_state aos_instruction_write_buffer(const aos_instruction *inst,
  *               stand.
  *   extra       ignored.
  *
- * A failure to spawn -- command not found, cwd missing, a redirection
- * target that will not open -- is a runtime error, and nothing is written
- * to the exit field's file. It is deliberately not recorded as if it were
- * an exit status: a child that genuinely exits 127 must stay
- * distinguishable from one that never started.
+ * The status, following the shell's conventions:
+ *
+ *   0-255       the child's own exit code.
+ *   128 + n     the child was killed by signal n.
+ *   126         the child could not be set up: a redirection would not
+ *               open, or cwd would not change.
+ *   127         execvp failed: no such command, or it is not executable.
+ *
+ * 126 and 127 are indistinguishable from a child that genuinely exits with
+ * those codes, exactly as in a shell.
  *
  * result may be NULL if only the state is wanted. Process spawning is
  * implemented for POSIX; elsewhere this returns

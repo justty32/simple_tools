@@ -52,9 +52,13 @@ int run_stream(std::istream &in)
         const ExecState exec_state = execute(inst, result);
 
         /*
-         * 一筆跑不起來不會停下整輪：後面的指令跟它沒有關係，跳過它們只是把
-         * 一個失敗變成很多個沒做的事。子行程回傳非零更不算失敗，那是資料，
-         * 該由 exit_path 記下來。
+         * 到這裡的失敗只剩 fork、wait、寫 exit 檔這種真正的執行期錯誤：找
+         * 不到指令、重導向開不起來、cwd 不存在，現在都是一筆跑完並產出 127
+         * 或 126 的記錄，不是失敗。子行程回傳非零同樣是資料，該由 exit_path
+         * 記下來。
+         *
+         * 就算失敗也不停下整輪：後面的指令跟這一筆沒有關係，跳過它們只是把
+         * 一個失敗變成很多個沒做的事。
          */
         if (exec_state != ExecState::Ok) {
             report(index, "could not run", to_string(exec_state));

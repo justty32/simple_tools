@@ -61,10 +61,6 @@ AOS_CHECK_STATE(aos::InstState::TooManyEnv, AOS_INST_TOO_MANY_ENV);
 
 AOS_CHECK_STATE(aos::ExecState::Ok, AOS_EXEC_OK);
 AOS_CHECK_STATE(aos::ExecState::InvalidArgument, AOS_EXEC_INVALID_ARGUMENT);
-AOS_CHECK_STATE(aos::ExecState::OpenStdinFailed, AOS_EXEC_OPEN_STDIN_FAILED);
-AOS_CHECK_STATE(aos::ExecState::OpenStdoutFailed, AOS_EXEC_OPEN_STDOUT_FAILED);
-AOS_CHECK_STATE(aos::ExecState::OpenStderrFailed, AOS_EXEC_OPEN_STDERR_FAILED);
-AOS_CHECK_STATE(aos::ExecState::ChdirFailed, AOS_EXEC_CHDIR_FAILED);
 AOS_CHECK_STATE(aos::ExecState::SpawnFailed, AOS_EXEC_SPAWN_FAILED);
 AOS_CHECK_STATE(aos::ExecState::WaitFailed, AOS_EXEC_WAIT_FAILED);
 AOS_CHECK_STATE(aos::ExecState::ExitWriteFailed, AOS_EXEC_EXIT_WRITE_FAILED);

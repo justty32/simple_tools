@@ -74,13 +74,14 @@ argv 和 env 是清單而不是字串，所以不在這裡：它們各自有 cou
 執行的結果。逐項意思看 [exec.md 的狀態一覽](exec.md#狀態一覽)。
 
 ```c
-AOS_EXEC_OK                    = 0    AOS_EXEC_SPAWN_FAILED         = 6
-AOS_EXEC_INVALID_ARGUMENT      = 1    AOS_EXEC_WAIT_FAILED          = 7
-AOS_EXEC_OPEN_STDIN_FAILED     = 2    AOS_EXEC_EXIT_WRITE_FAILED    = 8
-AOS_EXEC_OPEN_STDOUT_FAILED    = 3    AOS_EXEC_PLATFORM_UNSUPPORTED = 9
-AOS_EXEC_OPEN_STDERR_FAILED    = 4    AOS_EXEC_ALLOC_FAILED         = 10
-AOS_EXEC_CHDIR_FAILED          = 5
+AOS_EXEC_OK                    = 0    AOS_EXEC_EXIT_WRITE_FAILED    = 4
+AOS_EXEC_INVALID_ARGUMENT      = 1    AOS_EXEC_PLATFORM_UNSUPPORTED = 5
+AOS_EXEC_SPAWN_FAILED          = 2    AOS_EXEC_ALLOC_FAILED         = 6
+AOS_EXEC_WAIT_FAILED           = 3
 ```
+
+這裡沒有「開檔失敗」「chdir 失敗」「找不到指令」—— 那些現在都是結束碼（126 或
+127），不是狀態。
 
 ### `aos_exec_result`
 
@@ -88,15 +89,15 @@ AOS_EXEC_CHDIR_FAILED          = 5
 
 ```c
 typedef struct aos_exec_result {
-    int status;      /* 正常結束是結束碼；被訊號終止是 128 + 訊號編號 */
+    int status;      /* 結束碼；訊號是 128+n；沒起來是 126 / 127 */
     int signalled;   /* 非零代表 status 來自訊號 */
-    int error;       /* 失敗時作業系統的 errno，否則 0 */
+    int error;       /* fork / wait 失敗時的 errno，否則 0 */
 } aos_exec_result;
 ```
 
 只有在 `aos_instruction_execute` 回傳 `AOS_EXEC_OK` 時 `status` 和 `signalled` 才
-有意義。`error` 則是在失敗時才有意義 —— 它就是 `ENOENT`（找不到）和 `EACCES`
-（沒權限）的差別所在，可以直接餵給 `strerror()`。
+有意義。`error` 則只在 `SPAWN_FAILED`（`fork` 失敗）和 `WAIT_FAILED` 時有意義，
+可以直接餵給 `strerror()`。
 
 ## 生命週期
 
@@ -279,8 +280,9 @@ aos_exec_state aos_instruction_execute(aos_instruction *inst,
 `result` 可以傳 `NULL`，如果你只在意回傳的狀態。
 
 **子行程回傳非零不算失敗**，那會是 `AOS_EXEC_OK` 加上 `result.status` 帶著結束碼。
-真正的失敗是「程式根本沒跑起來」。這個分界線和背後的理由寫在
-[exec.md](exec.md#什麼算失敗)。
+**「指令根本沒起來」也不算** —— 那是 `AOS_EXEC_OK` 加上 127（找不到指令）或 126
+（重導向、`chdir` 失敗），跟 shell 一樣。真正的失敗只剩 `fork`、等待、寫 exit 檔
+這三種。這個分界線和背後的理由寫在 [exec.md](exec.md#什麼算失敗)。
 
 目前只有 POSIX 有實作，其他平台會回傳 `AOS_EXEC_PLATFORM_UNSUPPORTED`。
 

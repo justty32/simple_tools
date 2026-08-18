@@ -764,10 +764,6 @@ static size_t test_exec_state_strings(void)
     static const aos_exec_state states[] = {
         AOS_EXEC_OK,
         AOS_EXEC_INVALID_ARGUMENT,
-        AOS_EXEC_OPEN_STDIN_FAILED,
-        AOS_EXEC_OPEN_STDOUT_FAILED,
-        AOS_EXEC_OPEN_STDERR_FAILED,
-        AOS_EXEC_CHDIR_FAILED,
         AOS_EXEC_SPAWN_FAILED,
         AOS_EXEC_WAIT_FAILED,
         AOS_EXEC_EXIT_WRITE_FAILED,
@@ -870,16 +866,27 @@ static size_t test_execute(void)
     remove(exit_path);
     ++cases;
 
-    /* 不存在的指令：連子行程都沒能起來，是啟動錯誤而非執行結果。 */
+    /*
+     * 不存在的指令：跟 shell 一樣是一筆跑完並產出 127 的記錄，而且 exit
+     * 檔照樣要被寫出來 —— 它代表「這筆做完了」，不是「做對了」。
+     */
     inst = aos_instruction_new();
     CHECK(inst != NULL);
     CHECK(aos_instruction_push_arg(
               inst, "aos-c-capi-test-no-such-command-xyz") == AOS_INST_OK);
-    CHECK(aos_instruction_execute(inst, &result) == AOS_EXEC_SPAWN_FAILED);
+    CHECK(aos_instruction_set_field(inst, AOS_FIELD_EXIT, exit_path) ==
+          AOS_INST_OK);
+    CHECK(aos_instruction_execute(inst, &result) == AOS_EXEC_OK);
+    CHECK(result.status == 127);
     aos_instruction_free(inst);
+
+    content = slurp_file(exit_path);
+    CHECK(strcmp(content, "127\n") == 0);
+    free(content);
+    remove(exit_path);
     ++cases;
 
-    /* 子行程正常結束但結束碼非零，跟上面的啟動失敗要能分辨。 */
+    /* 子行程正常結束但結束碼非零。 */
     inst = aos_instruction_new();
     CHECK(inst != NULL);
     CHECK(aos_instruction_push_arg(inst, "sh") == AOS_INST_OK);
