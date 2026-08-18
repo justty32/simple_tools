@@ -1,8 +1,11 @@
 # 規格 3:串流支援
 
-狀態:**討論中定案,尚未實作**。與 [SPEC_env_1](SPEC_env_1.md)、
+狀態:**已實作**(commit 0fc27e2)。與 [SPEC_env_1](SPEC_env_1.md)、
 [SPEC_exec_1](SPEC_exec_1.md) 同屬 inst_t → 執行的重整。承接
 [DISC_CONC_1](DISC_CONC_1.md) 對串流的初步結論。
+
+fd-streambuf 比規格多做一件事:自帶一塊緩衝(否則 FIFO 上會變成每個位元組一次
+`read()`),並記下真正的 read 錯誤,因為 streambuf 沒辦法把它變成 badbit。
 
 ## 消費模型:外部觸發 + 每次 drain-to-EOF(定案)
 
