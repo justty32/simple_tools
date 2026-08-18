@@ -41,33 +41,6 @@ bool write_exit_status(const std::string &path, int status)
     return !out.fail();
 }
 
-/*
- * 讀入 env_path，每行一個 KEY=VALUE。空行略過，'#' 開頭是註解，其餘沒有
- * '=' 的行一律視為錯誤 —— 與其猜使用者的意思，不如讓它明確失敗。
- */
-bool load_env_file(const std::string &path, std::vector<std::string> &entries)
-{
-    std::ifstream in(path.c_str());
-    std::string line;
-
-    if (!in) {
-        return false;
-    }
-    while (std::getline(in, line)) {
-        if (!line.empty() && line.back() == '\r') {
-            line.pop_back();
-        }
-        if (line.empty() || line[0] == '#') {
-            continue;
-        }
-        if (line.find('=') == std::string::npos) {
-            return false;
-        }
-        entries.push_back(line);
-    }
-    return !in.bad();
-}
-
 /* 子行程在 exec 之前可能失敗的每個步驟，用來把 errno 對應回 ExecState。 */
 enum class Stage : unsigned char {
     Stdin,
@@ -174,24 +147,11 @@ ExecState execute(inst_t &inst, ExecResult &result)
     }
 
     /*
-     * 環境檔在 fork 之前就讀好：壞掉的 env_path 應該直接回報，而不是先生
-     * 出一個註定失敗的子行程。
+     * env 是空的就代表繼承，不是「換成一個空的環境」；兩者在 execvp 之前
+     * 只差在要不要動 environ。
      */
-    std::vector<std::string> env_entries;
-    const bool replace_env = !inst.env_path.empty();
-
-    if (replace_env && !load_env_file(inst.env_path, env_entries)) {
-        result.error = errno;
-        return ExecState::EnvFileFailed;
-    }
-
-    std::vector<char *> envp;
-    envp.reserve(env_entries.size() + 1);
-    for (std::string &entry : env_entries) {
-        envp.push_back(&entry[0]);
-    }
-    envp.push_back(nullptr);
-
+    const bool replace_env = !inst.env.empty();
+    std::vector<char *> envp = to_c_envp(inst);
     std::vector<char *> argv = to_c_argv(inst);
 
     /*
@@ -295,8 +255,6 @@ const char *to_string(ExecState state)
         return "could not open stdout redirection";
     case ExecState::OpenStderrFailed:
         return "could not open stderr redirection";
-    case ExecState::EnvFileFailed:
-        return "could not read environment file";
     case ExecState::ChdirFailed:
         return "could not change working directory";
     case ExecState::SpawnFailed:

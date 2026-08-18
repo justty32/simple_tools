@@ -161,16 +161,17 @@ a compatibility break, not a bug fix.
 | empty `stdin_path` / `stdout_path` / `stderr_path` | inherit the caller's handle | attaching the null device would silently swallow output |
 | existing `stdout_path` / `stderr_path` | truncate (`O_TRUNC`) | matches a shell's `>`; appending cannot be undone by the caller, truncating can be avoided by choosing a fresh path |
 | empty `cwd` | inherit the caller's working directory | |
-| empty `env_path` | inherit the caller's environment entirely | |
-| non-empty `env_path` | a file of `KEY=VALUE` lines that **replaces** the environment | extending is the caller's job to express; replacing is the reproducible option, and it is the one that cannot be built out of the other |
-| `env_path` line without `=` | `EnvFileFailed` | better to fail than to guess |
+| empty `env` | inherit the caller's environment entirely | |
+| non-empty `env` | the entries **replace** the environment | extending is the caller's job to express; replacing is the reproducible option, and it is the one that cannot be built out of the other |
+| an `env` entry that is not `KEY=VALUE` | `EnvEntryMalformed`, at parse time | better to fail than to guess, and better to fail before a process exists than after |
+| duplicate keys in `env` | passed through verbatim | merging would mean owning a policy for which duplicate wins; the producer already has a map and can decide there |
 | empty `exit_path` | the status is discarded | |
 | non-empty `exit_path` | truncated, then the decimal status and a newline | |
 | status of a signalled child | `128 + signum` | shell convention, and it keeps the field one number on every platform |
 | `extra` | ignored | |
 | failure to spawn | a runtime error, and **nothing** is written to `exit_path` | see below |
 | several instructions | sequential, and the run continues past every failure it can | later instructions do not depend on earlier ones, so abandoning them turns one failure into many things simply not done |
-| a parse failure mid-file | skipped when the stream is still aligned (`EmptyArgv`, `TooManyArgs`, both judged only after all eight lines were consumed); fatal otherwise | resuming from an unknown offset would decode every later record into garbage, which is worse than stopping |
+| a parse failure mid-file | fatal: the rest of the stream is not read | the format has no record separator, so a "still aligned" cursor is only aligned relative to what was already consumed; resuming would decode later records into garbage, which is worse than stopping |
 
 ### Telling "command not found" from "the command exited 127"
 

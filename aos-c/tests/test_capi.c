@@ -31,10 +31,11 @@
         } \
     } while (0)
 
-/* 七個欄位列舉值，依序列化順序排列，供多個測試共用。 */
-static const aos_inst_field kAllFields[7] = {
+/* 單一字串欄位的列舉值，依序列化順序排列，供多個測試共用。 */
+#define FIELD_COUNT 6
+static const aos_inst_field kAllFields[FIELD_COUNT] = {
     AOS_FIELD_STDIN, AOS_FIELD_STDOUT, AOS_FIELD_STDERR, AOS_FIELD_EXIT,
-    AOS_FIELD_CWD,   AOS_FIELD_ENV,    AOS_FIELD_EXTRA
+    AOS_FIELD_CWD,   AOS_FIELD_EXTRA
 };
 
 static FILE *must_tmpfile(void)
@@ -46,8 +47,8 @@ static FILE *must_tmpfile(void)
 }
 
 /*
- * 建一個帶有引數與全部七個欄位的樣本指令，供 write_buffer 系列測試共用，
- * 避免每個測試都重新拼一次同樣的內容。
+ * 建一個帶有引數、env 與全部字串欄位的樣本指令，供 write_buffer 系列測試
+ * 共用，避免每個測試都重新拼一次同樣的內容。
  */
 static aos_instruction *make_sample_instruction(void)
 {
@@ -59,7 +60,9 @@ static aos_instruction *make_sample_instruction(void)
     for (i = 0; i < 3; ++i) {
         CHECK(aos_instruction_push_arg(inst, argv[i]) == AOS_INST_OK);
     }
-    for (i = 0; i < 7; ++i) {
+    CHECK(aos_instruction_push_env(inst, "K0=v0") == AOS_INST_OK);
+    CHECK(aos_instruction_push_env(inst, "K1=v 1") == AOS_INST_OK);
+    for (i = 0; i < FIELD_COUNT; ++i) {
         char value[16];
 
         snprintf(value, sizeof(value), "buf-field-%zu", i);
@@ -88,6 +91,8 @@ static size_t test_null_accessors(void)
     CHECK(aos_instruction_argc(NULL) == 0);
     CHECK(aos_instruction_arg(NULL, 0) == NULL);
     CHECK(aos_instruction_field(NULL, AOS_FIELD_STDIN) == NULL);
+    CHECK(aos_instruction_env_count(NULL) == 0);
+    CHECK(aos_instruction_env(NULL, 0) == NULL);
     return 1;
 }
 
@@ -115,14 +120,17 @@ static size_t test_null_argument_rejected(void)
     CHECK(aos_instruction_push_arg(inst, NULL) == AOS_INST_INVALID_ARGUMENT);
     CHECK(aos_instruction_set_field(inst, AOS_FIELD_CWD, NULL) ==
           AOS_INST_INVALID_ARGUMENT);
-    /* 兩次呼叫都必須被拒絕在前面，指令本身要維持沒被改動。 */
+    CHECK(aos_instruction_push_env(inst, NULL) == AOS_INST_INVALID_ARGUMENT);
+    CHECK(aos_instruction_push_env(NULL, "K=v") == AOS_INST_INVALID_ARGUMENT);
+    /* 每次呼叫都必須被拒絕在前面，指令本身要維持沒被改動。 */
     CHECK(aos_instruction_argc(inst) == 0);
+    CHECK(aos_instruction_env_count(inst) == 0);
 
     aos_instruction_free(inst);
     return 1;
 }
 
-static size_t test_fields_all_seven_and_out_of_range(void)
+static size_t test_fields_all_and_out_of_range(void)
 {
     aos_instruction *inst = aos_instruction_new();
     size_t i;
@@ -131,7 +139,7 @@ static size_t test_fields_all_seven_and_out_of_range(void)
     /* 未設定的欄位是空字串，不是 NULL；這是呼叫端能安心直接印出來的前提。 */
     CHECK(strcmp(aos_instruction_field(inst, AOS_FIELD_STDIN), "") == 0);
 
-    for (i = 0; i < 7; ++i) {
+    for (i = 0; i < FIELD_COUNT; ++i) {
         char value[16];
         const char *got;
 
@@ -143,7 +151,10 @@ static size_t test_fields_all_seven_and_out_of_range(void)
         CHECK(strcmp(got, value) == 0);
     }
 
-    /* 範圍外的欄位值：field() 回 NULL，set_field() 回 INVALID_ARGUMENT。 */
+    /*
+     * 範圍外的欄位值：field() 回 NULL，set_field() 回 INVALID_ARGUMENT。
+     * env 曾經是這個列舉的一員，現在不是了，所以它也走這條路徑。
+     */
     CHECK(aos_instruction_field(inst, (aos_inst_field)999) == NULL);
     CHECK(aos_instruction_set_field(inst, (aos_inst_field)999, "x") ==
           AOS_INST_INVALID_ARGUMENT);
@@ -160,12 +171,14 @@ static size_t test_clear(void)
     CHECK(inst != NULL);
     CHECK(aos_instruction_push_arg(inst, "a") == AOS_INST_OK);
     CHECK(aos_instruction_push_arg(inst, "b") == AOS_INST_OK);
+    CHECK(aos_instruction_push_env(inst, "K=v") == AOS_INST_OK);
     CHECK(aos_instruction_set_field(inst, AOS_FIELD_CWD, "/tmp") ==
           AOS_INST_OK);
 
     aos_instruction_clear(inst);
     CHECK(aos_instruction_argc(inst) == 0);
-    for (i = 0; i < 7; ++i) {
+    CHECK(aos_instruction_env_count(inst) == 0);
+    for (i = 0; i < FIELD_COUNT; ++i) {
         CHECK(strcmp(aos_instruction_field(inst, kAllFields[i]), "") == 0);
     }
 
@@ -176,13 +189,13 @@ static size_t test_clear(void)
     return 1;
 }
 
-/* 建一個帶有引數與全部七個欄位的指令，寫到暫存檔再讀回，逐項比對。 */
+/* 建一個帶有引數、env 與全部欄位的指令，寫到暫存檔再讀回，逐項比對。 */
 static size_t test_round_trip(void)
 {
     static const char *argv[3] = { "a b", "\"quoted value\"", "c" };
-    static const char *values[7] = {
-        "field-1", "field-2", "field-3", "field-4", "field-5", "field-6",
-        "field-7"
+    static const char *env[2] = { "PATH=/bin", "MSG=hello world" };
+    static const char *values[FIELD_COUNT] = {
+        "field-1", "field-2", "field-3", "field-4", "field-5", "field-6"
     };
     aos_instruction *inst = aos_instruction_new();
     aos_instruction *back = aos_instruction_new();
@@ -195,7 +208,10 @@ static size_t test_round_trip(void)
     for (i = 0; i < 3; ++i) {
         CHECK(aos_instruction_push_arg(inst, argv[i]) == AOS_INST_OK);
     }
-    for (i = 0; i < 7; ++i) {
+    for (i = 0; i < 2; ++i) {
+        CHECK(aos_instruction_push_env(inst, env[i]) == AOS_INST_OK);
+    }
+    for (i = 0; i < FIELD_COUNT; ++i) {
         CHECK(aos_instruction_set_field(inst, kAllFields[i], values[i]) ==
               AOS_INST_OK);
     }
@@ -212,7 +228,13 @@ static size_t test_round_trip(void)
     for (i = 0; i < 3; ++i) {
         CHECK(strcmp(aos_instruction_arg(back, i), argv[i]) == 0);
     }
-    for (i = 0; i < 7; ++i) {
+    CHECK(aos_instruction_env_count(back) == 2);
+    for (i = 0; i < 2; ++i) {
+        CHECK(strcmp(aos_instruction_env(back, i), env[i]) == 0);
+    }
+    /* 索引等於筆數就已經出界，跟 arg() 的規則一致。 */
+    CHECK(aos_instruction_env(back, 2) == NULL);
+    for (i = 0; i < FIELD_COUNT; ++i) {
         CHECK(strcmp(aos_instruction_field(back, kAllFields[i]),
                      values[i]) == 0);
     }
@@ -293,11 +315,12 @@ static size_t test_read_invalid_argument(void)
 static size_t test_record_budget_boundary(void)
 {
     /*
-     * 八行皆兩個位元組長（不含換行），合計恰好 16 位元組。預算檢查發生在
-     * 把字元推進緩衝區「之前」，所以剛好等於預算的記錄會成功，少一個位元
-     * 組的預算則會在最後一行的第二個字元上被擋下。
+     * 八行皆兩個位元組長（不含換行），合計恰好 16 位元組；第 7 行還得是一
+     * 筆合法的 KEY=VALUE，"m=" 剛好在兩個位元組內做到。預算檢查發生在把字
+     * 元推進緩衝區「之前」，所以剛好等於預算的記錄會成功，少一個位元組的
+     * 預算則會在最後一行的第二個字元上被擋下。
      */
-    static const char record[] = "ab\ncd\nef\ngh\nij\nkl\nmn\nop\n";
+    static const char record[] = "ab\ncd\nef\ngh\nij\nkl\nm=\nop\n";
     aos_instruction *inst = aos_instruction_new();
     FILE *f;
     size_t cases = 0;
@@ -345,7 +368,7 @@ static size_t test_write_rejects_tab_and_line_break(void)
     aos_instruction_free(inst);
     ++cases;
 
-    /* 換行會跟行尾終止字元混淆，七個欄位裡任何一個都不能含有它。 */
+    /* 換行會跟行尾終止字元混淆，任何一個欄位都不能含有它。 */
     inst = aos_instruction_new();
     CHECK(inst != NULL);
     CHECK(aos_instruction_push_arg(inst, "prog") == AOS_INST_OK);
@@ -554,7 +577,12 @@ static size_t test_write_buffer_round_trip_through_read(void)
         CHECK(strcmp(aos_instruction_arg(back, i),
                      aos_instruction_arg(inst, i)) == 0);
     }
-    for (i = 0; i < 7; ++i) {
+    CHECK(aos_instruction_env_count(back) == aos_instruction_env_count(inst));
+    for (i = 0; i < aos_instruction_env_count(inst); ++i) {
+        CHECK(strcmp(aos_instruction_env(back, i),
+                     aos_instruction_env(inst, i)) == 0);
+    }
+    for (i = 0; i < FIELD_COUNT; ++i) {
         CHECK(strcmp(aos_instruction_field(back, kAllFields[i]),
                      aos_instruction_field(inst, kAllFields[i])) == 0);
     }
@@ -617,16 +645,45 @@ static size_t test_append_two_records_via_write(void)
     return 1;
 }
 
+/*
+ * env 是清單而不是字串，所以它的錯誤只在寫入時才看得到：push_env 收下任何
+ * 位元組，write 才判斷這一筆能不能讀回來。
+ */
+static size_t test_env_write_validation(void)
+{
+    static const char *bad[3] = { "NOEQUALS", "=value", "A=has\ttab" };
+    size_t cases = 0;
+    size_t i;
+
+    for (i = 0; i < 3; ++i) {
+        aos_instruction *inst = aos_instruction_new();
+        FILE *f = must_tmpfile();
+
+        CHECK(inst != NULL);
+        CHECK(aos_instruction_push_arg(inst, "prog") == AOS_INST_OK);
+        /* 收下時不驗，所以這一步是 OK。 */
+        CHECK(aos_instruction_push_env(inst, bad[i]) == AOS_INST_OK);
+        CHECK(aos_instruction_write(f, inst) ==
+              AOS_INST_ENV_ENTRY_MALFORMED);
+        fclose(f);
+        aos_instruction_free(inst);
+        ++cases;
+    }
+    return cases;
+}
+
 static size_t test_argv_and_record_limits(void)
 {
     const size_t argv_max = aos_inst_argv_max();
+    const size_t env_max = aos_inst_env_max();
     const size_t record_max = aos_inst_record_max_bytes();
     aos_instruction *inst = aos_instruction_new();
     FILE *f;
     size_t i;
 
-    /* 兩個限制都是「函式庫實際編譯出來的值」，呼叫端不該自己硬編一個。 */
+    /* 三個限制都是「函式庫實際編譯出來的值」，呼叫端不該自己硬編一個。 */
     CHECK(argv_max > 0);
+    CHECK(env_max > 0);
     CHECK(record_max > 0);
     CHECK(inst != NULL);
 
@@ -639,6 +696,22 @@ static size_t test_argv_and_record_limits(void)
 
     f = must_tmpfile();
     CHECK(aos_instruction_write(f, inst) == AOS_INST_TOO_MANY_ARGS);
+    fclose(f);
+    aos_instruction_free(inst);
+
+    inst = aos_instruction_new();
+    CHECK(inst != NULL);
+    CHECK(aos_instruction_push_arg(inst, "prog") == AOS_INST_OK);
+    for (i = 0; i < env_max + 1; ++i) {
+        char value[24];
+
+        snprintf(value, sizeof(value), "K%zu=v", i);
+        CHECK(aos_instruction_push_env(inst, value) == AOS_INST_OK);
+    }
+    CHECK(aos_instruction_env_count(inst) == env_max + 1);
+
+    f = must_tmpfile();
+    CHECK(aos_instruction_write(f, inst) == AOS_INST_TOO_MANY_ENV);
     fclose(f);
 
     aos_instruction_free(inst);
@@ -660,6 +733,8 @@ static size_t test_inst_state_strings(void)
         AOS_INST_ARGUMENT_CONTAINS_LINE_BREAK,
         AOS_INST_FIELD_CONTAINS_LINE_BREAK,
         AOS_INST_WRITE_ERROR,
+        AOS_INST_ENV_ENTRY_MALFORMED,
+        AOS_INST_TOO_MANY_ENV,
         /* 只存在於 C 介面：C++ 端沒有對應值可以轉，字串在這裡才第一次
          * 出現。 */
         AOS_INST_ALLOC_FAILED,
@@ -692,7 +767,6 @@ static size_t test_exec_state_strings(void)
         AOS_EXEC_OPEN_STDIN_FAILED,
         AOS_EXEC_OPEN_STDOUT_FAILED,
         AOS_EXEC_OPEN_STDERR_FAILED,
-        AOS_EXEC_ENV_FILE_FAILED,
         AOS_EXEC_CHDIR_FAILED,
         AOS_EXEC_SPAWN_FAILED,
         AOS_EXEC_WAIT_FAILED,
@@ -849,7 +923,7 @@ size_t run_capi_tests(void)
     count += test_null_accessors();
     count += test_arg_out_of_range();
     count += test_null_argument_rejected();
-    count += test_fields_all_seven_and_out_of_range();
+    count += test_fields_all_and_out_of_range();
     count += test_clear();
     count += test_round_trip();
     count += test_read_error_states();
@@ -863,6 +937,7 @@ size_t run_capi_tests(void)
     count += test_write_buffer_null_handling();
     count += test_write_buffer_round_trip_through_read();
     count += test_append_two_records_via_write();
+    count += test_env_write_validation();
     count += test_argv_and_record_limits();
     count += test_inst_state_strings();
     count += test_exec_state_strings();

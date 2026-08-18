@@ -229,19 +229,17 @@ std::size_t test_stderr_redirection(const std::string &dir)
     return 1;
 }
 
-std::size_t test_env_path_replaces_environment(const std::string &dir)
+std::size_t test_env_replaces_environment(const std::string &dir)
 {
     inst_t inst = make_inst(
         { "sh", "-c", "echo $MYVAR:$AOS_C_TEST_PARENT_ONLY" });
     ExecResult result;
-    const std::string env_path = dir + "/env_file";
     const std::string out_path = dir + "/env_out";
 
-    write_file(env_path, "# a comment line\n\nMYVAR=hello\n");
     /* 父行程自己設的變數，用來確認換環境是取代而不是延伸。 */
     setenv("AOS_C_TEST_PARENT_ONLY", "leaked", 1);
 
-    inst.env_path = env_path;
+    inst.env = { "MYVAR=hello" };
     inst.stdout_path = out_path;
 
     CHECK(execute(inst, result) == ExecState::Ok);
@@ -252,32 +250,43 @@ std::size_t test_env_path_replaces_environment(const std::string &dir)
     return 1;
 }
 
-std::size_t test_env_path_errors(const std::string &dir)
+std::size_t test_empty_env_inherits_environment(const std::string &dir)
 {
-    std::size_t cases = 0;
+    inst_t inst = make_inst({ "sh", "-c", "echo $AOS_C_TEST_PARENT_ONLY" });
+    ExecResult result;
+    const std::string out_path = dir + "/env_inherit_out";
 
-    {
-        inst_t inst = make_inst({ "echo", "x" });
-        ExecResult result;
+    setenv("AOS_C_TEST_PARENT_ONLY", "inherited", 1);
 
-        inst.env_path = dir + "/no-such-env-file";
+    /* env 留空：子行程應該原封不動地拿到父行程的環境。 */
+    inst.stdout_path = out_path;
 
-        CHECK(execute(inst, result) == ExecState::EnvFileFailed);
-        ++cases;
-    }
-    {
-        inst_t inst = make_inst({ "echo", "x" });
-        ExecResult result;
-        const std::string path = dir + "/bad_env_file";
+    CHECK(execute(inst, result) == ExecState::Ok);
+    CHECK(read_file(out_path) == "inherited\n");
 
-        write_file(path, "THIS_LINE_HAS_NO_EQUALS_SIGN\n");
-        inst.env_path = path;
+    unsetenv("AOS_C_TEST_PARENT_ONLY");
+    return 1;
+}
 
-        CHECK(execute(inst, result) == ExecState::EnvFileFailed);
-        ++cases;
-    }
+/*
+ * 這一層對 env 不做任何整理：重複的鍵照原樣傳下去，由 libc 自己決定誰贏。
+ * 記下這個行為是為了說明它是選擇而不是疏忽 —— 要去重的話，那是產生端的事。
+ */
+std::size_t test_env_is_passed_through_verbatim(const std::string &dir)
+{
+    inst_t inst = make_inst({ "sh", "-c", "echo $DUP" });
+    ExecResult result;
+    const std::string out_path = dir + "/env_dup_out";
 
-    return cases;
+    inst.env = { "DUP=first", "DUP=second" };
+    inst.stdout_path = out_path;
+
+    CHECK(execute(inst, result) == ExecState::Ok);
+
+    const std::string got = read_file(out_path);
+
+    CHECK(got == "first\n" || got == "second\n");
+    return 1;
 }
 
 std::size_t test_empty_argv_is_invalid_argument()
@@ -297,7 +306,6 @@ std::size_t test_to_string_covers_every_state()
         ExecState::OpenStdinFailed,
         ExecState::OpenStdoutFailed,
         ExecState::OpenStderrFailed,
-        ExecState::EnvFileFailed,
         ExecState::ChdirFailed,
         ExecState::SpawnFailed,
         ExecState::WaitFailed,
@@ -342,8 +350,9 @@ std::size_t run_exec_tests()
     count += test_stdin_redirection(dir);
     count += test_stdout_truncation(dir);
     count += test_stderr_redirection(dir);
-    count += test_env_path_replaces_environment(dir);
-    count += test_env_path_errors(dir);
+    count += test_env_replaces_environment(dir);
+    count += test_empty_env_inherits_environment(dir);
+    count += test_env_is_passed_through_verbatim(dir);
     count += test_empty_argv_is_invalid_argument();
     count += test_to_string_covers_every_state();
 

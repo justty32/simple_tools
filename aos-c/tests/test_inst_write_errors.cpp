@@ -89,7 +89,7 @@ std::size_t test_field_contains_line_break()
     std::string inst_t::* const fields[] = {
         &inst_t::stdin_path, &inst_t::stdout_path,
         &inst_t::stderr_path, &inst_t::exit_path,
-        &inst_t::cwd, &inst_t::env_path, &inst_t::extra
+        &inst_t::cwd, &inst_t::extra
     };
     const char breaks[] = { '\n', '\r' };
     std::size_t cases = 0;
@@ -104,6 +104,37 @@ std::size_t test_field_contains_line_break()
     }
 
     return cases;
+}
+
+std::size_t test_env_entry_malformed()
+{
+    /*
+     * 讀取端只看得到「沒有 '='」和「鍵是空的」，因為定位字元與換行在讀取
+     * 時已經先被當成分隔符號吃掉了。寫入端看得到全部四種，而它們的後果一
+     * 樣：這一筆寫出去就讀不回來，所以共用一個狀態。
+     */
+    const char *const bad[] = { "NOEQUALS", "=value", "A=has\ttab",
+                                "A=has\nnewline", "A=has\rcr" };
+    std::size_t cases = 0;
+
+    for (const char *entry : bad) {
+        inst_t inst = make_inst({ "prog" });
+
+        inst.env = { "OK=1", entry };
+        cases += check_rejected(inst, InstState::EnvEntryMalformed);
+    }
+    return cases;
+}
+
+std::size_t test_too_many_env()
+{
+    inst_t inst = make_inst({ "prog" });
+
+    inst.env.reserve(kInstEnvMax + 1);
+    for (std::size_t i = 0; i <= kInstEnvMax; ++i) {
+        inst.env.push_back("K" + std::to_string(i) + "=v");
+    }
+    return check_rejected(inst, InstState::TooManyEnv);
 }
 
 std::size_t test_failed_ostream_is_write_error()
@@ -130,6 +161,8 @@ std::size_t run_inst_write_error_tests()
     count += test_argument_contains_line_break();
     count += test_single_empty_argument();
     count += test_field_contains_line_break();
+    count += test_env_entry_malformed();
+    count += test_too_many_env();
     count += test_failed_ostream_is_write_error();
     return count;
 }

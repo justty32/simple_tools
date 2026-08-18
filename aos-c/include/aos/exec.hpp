@@ -33,8 +33,6 @@ enum class ExecState {
     OpenStdinFailed,
     OpenStdoutFailed,
     OpenStderrFailed,
-    /* env_path 指的檔案讀不到，或其中某一行不是 KEY=VALUE。 */
-    EnvFileFailed,
     /* cwd 切不過去。 */
     ChdirFailed,
     /* fork 失敗，或子行程根本沒能 exec 起來（例如找不到指令）。 */
@@ -80,11 +78,12 @@ struct ExecResult {
  *   exit_path   empty discards the status; otherwise the file is truncated
  *               and the decimal status plus a newline is written to it.
  *   cwd         empty inherits the caller's working directory.
- *   env_path    empty inherits the caller's environment entirely.
- *               Otherwise the file is read as one KEY=VALUE per line and
- *               *replaces* the environment; it does not extend it. Blank
- *               lines are ignored, lines beginning with '#' are comments,
- *               and any other line without '=' is EnvFileFailed.
+ *   env         empty inherits the caller's environment entirely.
+ *               Otherwise the entries *replace* the environment; they do
+ *               not extend it. The list is passed to the child as it
+ *               stands: nothing here reads, merges, sorts or de-duplicates
+ *               it, because deciding what the environment should contain
+ *               belongs to whoever produced the instruction.
  *   extra       ignored.
  *
  * A failure to spawn -- command not found, cwd missing, a redirection

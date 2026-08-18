@@ -47,8 +47,10 @@
 | `AOS_INST_ARGUMENT_CONTAINS_LINE_BREAK` | 9 | 某個引數裡有換行 |
 | `AOS_INST_FIELD_CONTAINS_LINE_BREAK` | 10 | 某個欄位裡有換行 |
 | `AOS_INST_WRITE_ERROR` | 11 | 寫不出去 |
-| `AOS_INST_ALLOC_FAILED` | 12 | 記憶體不足 |
-| `AOS_INST_BUFFER_TOO_SMALL` | 13 | 給 `write_buffer` 的緩衝區不夠大 |
+| `AOS_INST_ENV_ENTRY_MALFORMED` | 12 | env 的某一筆不是 `KEY=VALUE` |
+| `AOS_INST_TOO_MANY_ENV` | 13 | 環境變數超過上限 |
+| `AOS_INST_ALLOC_FAILED` | 14 | 記憶體不足 |
+| `AOS_INST_BUFFER_TOO_SMALL` | 15 | 給 `write_buffer` 的緩衝區不夠大 |
 
 最後兩個只存在於 C 介面。C++ 那邊記憶體不足是 `std::bad_alloc`，例外不能穿過這道
 邊界，所以在這裡被翻成一個狀態；緩衝區大小的問題則是因為 C++ 有
@@ -56,26 +58,28 @@
 
 ### `aos_inst_field`
 
-七個非 argv 欄位，順序就是它們在檔案裡的順序：
+單一字串的欄位，順序就是它們在檔案裡的順序：
 
 ```c
 AOS_FIELD_STDIN   = 0    AOS_FIELD_CWD    = 4
-AOS_FIELD_STDOUT  = 1    AOS_FIELD_ENV    = 5
-AOS_FIELD_STDERR  = 2    AOS_FIELD_EXTRA  = 6
+AOS_FIELD_STDOUT  = 1    AOS_FIELD_EXTRA  = 5
+AOS_FIELD_STDERR  = 2
 AOS_FIELD_EXIT    = 3
 ```
+
+argv 和 env 是清單而不是字串，所以不在這裡：它們各自有 count/get/push 三個函式。
 
 ### `aos_exec_state`
 
 執行的結果。逐項意思看 [exec.md 的狀態一覽](exec.md#狀態一覽)。
 
 ```c
-AOS_EXEC_OK                    = 0    AOS_EXEC_CHDIR_FAILED         = 6
-AOS_EXEC_INVALID_ARGUMENT      = 1    AOS_EXEC_SPAWN_FAILED         = 7
-AOS_EXEC_OPEN_STDIN_FAILED     = 2    AOS_EXEC_WAIT_FAILED          = 8
-AOS_EXEC_OPEN_STDOUT_FAILED    = 3    AOS_EXEC_EXIT_WRITE_FAILED    = 9
-AOS_EXEC_OPEN_STDERR_FAILED    = 4    AOS_EXEC_PLATFORM_UNSUPPORTED = 10
-AOS_EXEC_ENV_FILE_FAILED       = 5    AOS_EXEC_ALLOC_FAILED         = 11
+AOS_EXEC_OK                    = 0    AOS_EXEC_SPAWN_FAILED         = 6
+AOS_EXEC_INVALID_ARGUMENT      = 1    AOS_EXEC_WAIT_FAILED          = 7
+AOS_EXEC_OPEN_STDIN_FAILED     = 2    AOS_EXEC_EXIT_WRITE_FAILED    = 8
+AOS_EXEC_OPEN_STDOUT_FAILED    = 3    AOS_EXEC_PLATFORM_UNSUPPORTED = 9
+AOS_EXEC_OPEN_STDERR_FAILED    = 4    AOS_EXEC_ALLOC_FAILED         = 10
+AOS_EXEC_CHDIR_FAILED          = 5
 ```
 
 ### `aos_exec_result`
@@ -117,14 +121,19 @@ size_t      aos_instruction_argc(const aos_instruction *inst);
 const char *aos_instruction_arg(const aos_instruction *inst, size_t index);
 const char *aos_instruction_field(const aos_instruction *inst,
                                   aos_inst_field field);
+size_t      aos_instruction_env_count(const aos_instruction *inst);
+const char *aos_instruction_env(const aos_instruction *inst, size_t index);
 ```
 
 `argc` 回傳引數數量；傳 `NULL` 會得到 0。
 
 `arg` 回傳第 `index` 個引數，超出範圍或傳 `NULL` 會得到 `NULL`。
 
-`field` 回傳七個欄位之一。**沒設定過的欄位是空字串 `""`，不是 `NULL`** —— 只有在
-傳了 `NULL` 指令或未知欄位時才會回 `NULL`。
+`field` 回傳單一字串欄位之一。**沒設定過的欄位是空字串 `""`，不是 `NULL`** ——
+只有在傳了 `NULL` 指令或未知欄位時才會回 `NULL`。
+
+`env_count` 和 `env` 是 argv 那一組的翻版：0 筆代表子行程繼承你的環境，有任何一筆
+就是整組取代。
 
 ### 指標的存活期（重要）
 
@@ -134,6 +143,7 @@ const char *aos_instruction_field(const aos_instruction *inst,
 - `aos_instruction_read`
 - `aos_instruction_clear`
 - `aos_instruction_push_arg`
+- `aos_instruction_push_env`
 - `aos_instruction_set_field`
 - `aos_instruction_free`
 
@@ -145,6 +155,8 @@ const char *aos_instruction_field(const aos_instruction *inst,
 ```c
 aos_inst_state aos_instruction_push_arg(aos_instruction *inst,
                                         const char *value);
+aos_inst_state aos_instruction_push_env(aos_instruction *inst,
+                                        const char *entry);
 aos_inst_state aos_instruction_set_field(aos_instruction *inst,
                                          aos_inst_field field,
                                          const char *value);
@@ -152,14 +164,24 @@ aos_inst_state aos_instruction_set_field(aos_instruction *inst,
 
 `push_arg` 在 argv 尾端**追加**一個引數。第一次呼叫加進去的就是要執行的程式名稱。
 
-`set_field` 設定七個欄位之一。
+`push_env` 追加一筆環境變數，收的是**一整串 `"KEY=VALUE"`**，不是 key 和 value
+兩個參數 —— 那才是指令裡存的東西，也才是交給子行程的東西。會用 key/value 思考的
+呼叫端手上本來就有自己的 map，攤平成字串是一次 `snprintf` 的事；做在這裡反而等於
+要這個函式庫替重複的鍵訂一套合併政策，而沒有人要求過它有。
 
-兩者都會**複製** `value`，所以你傳進去的字串之後怎麼處理都沒關係。
+**`push_env` 不驗格式**，收下什麼就是什麼；格式是在 `write` 的時候檢查的
+（`AOS_INST_ENV_ENTRY_MALFORMED`）。這樣組指令的過程不會為了一個之後才看得出來的
+理由失敗。
+
+`set_field` 設定單一字串欄位之一。
+
+三者都會**複製**傳進去的字串，所以你之後怎麼處理它都沒關係。
 
 回傳 `AOS_INST_OK`、`AOS_INST_INVALID_ARGUMENT`（傳了 `NULL` 或未知欄位）、或
 `AOS_INST_ALLOC_FAILED`。
 
-沒有「刪掉某個引數」的函式。要改 argv 就 `aos_instruction_clear` 之後重建。
+沒有「刪掉某個引數」的函式。要改 argv 或 env 就 `aos_instruction_clear` 之後
+重建。
 
 ## 讀寫
 
@@ -266,13 +288,14 @@ aos_exec_state aos_instruction_execute(aos_instruction *inst,
 
 ```c
 size_t      aos_inst_argv_max(void);
+size_t      aos_inst_env_max(void);
 size_t      aos_inst_record_max_bytes(void);
 const char *aos_inst_state_string(aos_inst_state state);
 const char *aos_exec_state_string(aos_exec_state state);
 const char *aos_version_string(void);
 ```
 
-前兩個回傳**這個函式庫編譯時**的上限值。要用就呼叫它們，不要自己寫死常數 —— 動態
+前三個回傳**這個函式庫編譯時**的上限值。要用就呼叫它們，不要自己寫死常數 —— 動態
 連結的時候，實際生效的是函式庫裡的值，不是你手上那份標頭裡的。
 
 兩個 `_state_string` 回傳靜態的英文說明字串，**永遠不會是 `NULL`**，就算你傳一個

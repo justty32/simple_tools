@@ -14,12 +14,17 @@
  *
  * An instruction is eight lines, one per field:
  *   argv, stdin, stdout, stderr, exit, cwd, env, extra.
- * The argv line is tab-separated with no quoting or escaping; spaces,
- * quotes and backslashes are ordinary characters, and adjacent tabs
+ * The argv and env lines are tab-separated with no quoting or escaping;
+ * spaces, quotes and backslashes are ordinary characters, and adjacent tabs
  * preserve empty arguments. Every line, including the eighth, must end with
  * a newline, which is what lets a truncated record be told apart from a
  * complete one whose eighth line happens to be empty. Both LF and CRLF are
  * accepted on input; the writer always emits LF.
+ *
+ * The env line carries the environment itself, one KEY=VALUE per tab-
+ * separated entry, rather than a path to read it from. An empty env line is
+ * an empty environment list, which is legal and means "inherit"; an empty
+ * argv line is not.
  *
  * Reading is stream-based and consumes exactly one record per call, so
  * pipes and std::cin work and memory is bounded by the longest record
@@ -40,6 +45,12 @@ namespace aos {
  * inst_argv_max() 而非直接讀取這個常數。
  */
 constexpr std::size_t kInstArgvMax = 256;
+
+/*
+ * 一筆指令可攜帶的最大環境變數數量。與 argv 同一個數量級，理由也相同：
+ * 這是不受信任輸入的界線，而不是對真實用量的預測。
+ */
+constexpr std::size_t kInstEnvMax = 256;
 
 /* 一筆序列化記錄的行數；更動它就是更動格式。 */
 constexpr std::size_t kInstLineCount = 8;
@@ -76,7 +87,15 @@ enum class InstState {
     ArgumentContainsLineBreak,
     FieldContainsLineBreak,
     /* 寫入：串流回報錯誤，可能已寫出半筆記錄。 */
-    WriteError
+    WriteError,
+    /*
+     * 讀寫共用：env 的某一筆不是合法的 KEY=VALUE —— 沒有 '='、鍵是空的，
+     * 或含有格式用作分隔符號的位元組。這幾種情形合成一個狀態，因為 env 的
+     * 產生端是機器而不是人，分得再細也沒有人會據此分開處理。
+     */
+    EnvEntryMalformed,
+    /* 讀寫共用：env 行的筆數超過 kInstEnvMax。 */
+    TooManyEnv
 };
 
 /*
@@ -95,8 +114,17 @@ struct AOS_API inst_t {
     std::string stderr_path;
     std::string exit_path;
     std::string cwd;
-    /* 第 7、8 行對解析器而言是不透明資料，可以是空的。 */
-    std::string env_path;
+    /*
+     * 第 7 行：整組環境變數，每個元素是一整串 "KEY=VALUE"。空的清單代表
+     * 繼承呼叫端的環境；非空則是整組替換，不是擴充。
+     *
+     * 存成扁平的清單而不是 map，是因為這一層對 env 的本分只有「照收、原樣
+     * 傳給子程式」：查詢與修改單一變數屬於產生端，它自己用 map，攤平成幾筆
+     * KEY=VALUE 再交過來。這裡因此一行查詢碼都不需要，而清單既貼近格式，也
+     * 貼近 execvp 之前要的 char **。
+     */
+    std::vector<std::string> env;
+    /* 第 8 行對解析器而言是不透明資料，可以是空的。 */
     std::string extra;
 
     /* 清空每個欄位，回到預設建構後的狀態。 */
@@ -138,8 +166,9 @@ AOS_API InstState read_instruction(std::istream &in, inst_t &inst,
  */
 AOS_API InstState write_instruction(std::ostream &out, const inst_t &inst);
 
-/* The argv limit compiled into this library. */
+/* The argv and env limits compiled into this library. */
 AOS_API std::size_t inst_argv_max();
+AOS_API std::size_t inst_env_max();
 
 /* Return a static, human-readable description of state. */
 AOS_API const char *to_string(InstState state);
@@ -153,6 +182,16 @@ AOS_API const char *to_string(InstState state);
  * that wart is contained, rather than at every call site.
  */
 AOS_API std::vector<char *> to_c_argv(inst_t &inst);
+
+/*
+ * Build the null-terminated environment vector environ and execve expect,
+ * with the same borrowing and the same lifetime rule as to_c_argv.
+ *
+ * An empty inst.env yields a vector holding only the terminating null. That
+ * is an empty environment, not "inherit": the caller decides which of the
+ * two it wants by looking at inst.env before it gets here.
+ */
+AOS_API std::vector<char *> to_c_envp(inst_t &inst);
 
 }  /* namespace aos */
 

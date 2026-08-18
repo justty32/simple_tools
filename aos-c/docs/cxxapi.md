@@ -33,7 +33,7 @@ struct inst_t {
     std::string stderr_path;
     std::string exit_path;
     std::string cwd;
-    std::string env_path;
+    std::vector<std::string> env;   /* 每個元素是一整串 "KEY=VALUE" */
     std::string extra;
 
     void clear();
@@ -56,7 +56,7 @@ struct inst_t {
 Ok  InvalidArgument  Eof  Incomplete  TooLong  ReadError
 EmptyArgv  TooManyArgs
 ArgumentContainsTab  ArgumentContainsLineBreak  FieldContainsLineBreak
-WriteError
+WriteError  EnvEntryMalformed  TooManyEnv
 ```
 
 意思跟 [C API 的對照表](capi.md#aos_inst_state)一樣，但這裡**少兩個**：C 那邊的
@@ -69,7 +69,7 @@ WriteError
 enum class ExecState {
     Ok, InvalidArgument,
     OpenStdinFailed, OpenStdoutFailed, OpenStderrFailed,
-    EnvFileFailed, ChdirFailed, SpawnFailed, WaitFailed,
+    ChdirFailed, SpawnFailed, WaitFailed,
     ExitWriteFailed, PlatformUnsupported
 };
 
@@ -84,12 +84,13 @@ struct ExecResult {
 
 ```cpp
 constexpr std::size_t kInstArgvMax        = 256;        /* 引數數量上限 */
+constexpr std::size_t kInstEnvMax         = 256;        /* 環境變數數量上限 */
 constexpr std::size_t kInstLineCount      = 8;          /* 一筆記錄的行數 */
 constexpr std::size_t kInstRecordMaxBytes = 1024 * 1024; /* 預設位元組預算 */
 ```
 
 動態連結的時候，**實際生效的是函式庫裡編譯進去的值**，不是你手上這份標頭裡的。要
-確保一致就呼叫 `aos::inst_argv_max()`。
+確保一致就呼叫 `aos::inst_argv_max()` 與 `aos::inst_env_max()`。
 
 ## 函式
 
@@ -102,11 +103,13 @@ InstState write_instruction(std::ostream &out, const inst_t &inst);
 ExecState execute(inst_t &inst, ExecResult &result);
 
 std::size_t inst_argv_max();
+std::size_t inst_env_max();
 
 const char *to_string(InstState state);
 const char *to_string(ExecState state);
 
 std::vector<char *> to_c_argv(inst_t &inst);
+std::vector<char *> to_c_envp(inst_t &inst);
 ```
 
 ### `read_instruction`
@@ -150,6 +153,12 @@ execvp(argv[0], argv.data());
 這個函式存在的唯一理由是 `execv` 要的是 `char *const *` 而不是
 `const char *const *`。C++ 消不掉這個歷史包袱，能做的只是把它關在一個函式裡，而不
 是讓每個呼叫端各自 `const_cast`。
+
+### `to_c_envp`
+
+同一件事，來源換成 `inst.env`，給的是 `environ` / `execve` 要的形狀。空的 `env`
+攤出來就只有結尾那個 `nullptr` —— 那是「一個空的環境」，不是「繼承」；要不要繼承
+是呼叫端看 `inst.env` 空不空來決定的，`execute` 就是這樣做的。
 
 ## 常見用法
 

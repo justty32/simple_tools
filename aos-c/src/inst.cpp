@@ -7,8 +7,8 @@
 namespace aos {
 namespace {
 
-/* 七個非 argv 欄位的數量。 */
-constexpr std::size_t kFieldCount = kInstLineCount - 1;
+/* 除了 argv 與 env 之外，其餘六行都是單純的字串欄位。 */
+constexpr std::size_t kStringFieldCount = 6;
 
 /* read_line 的結果，只在這個檔案內使用。 */
 enum class LineState { Ok, Eof, Incomplete, TooLong, ReadError };
@@ -46,35 +46,90 @@ LineState read_line(std::istream &in, std::string &line,
     return line.empty() ? LineState::Eof : LineState::Incomplete;
 }
 
+/* 一行裡的 token 數；空行也算一個（空的）token。 */
+std::size_t token_count(const std::string &line)
+{
+    const std::ptrdiff_t tabs = std::count(line.begin(), line.end(), '\t');
+
+    return 1 + static_cast<std::size_t>(tabs);
+}
+
+/* 依定位字元切開一行。空 token 會保留，因為它們在格式裡是有意義的資料。 */
+void split_tabs(const std::string &line, std::vector<std::string> &out)
+{
+    out.clear();
+    out.reserve(token_count(line));
+    for (std::string::size_type start = 0;;) {
+        const std::string::size_type tab = line.find('\t', start);
+
+        if (tab == std::string::npos) {
+            out.push_back(line.substr(start));
+            break;
+        }
+        out.push_back(line.substr(start, tab - start));
+        start = tab + 1;
+    }
+}
+
 /*
- * 依定位字元切開 argv 行。引數數量會在配置任何東西之前先數過並檢查，
- * 因此遭拒絕的行不會留下半套結果。
+ * 切開 argv 行。引數數量會在配置任何東西之前先數過並檢查，因此遭拒絕的行
+ * 不會留下半套結果。
  */
 InstState split_argv(const std::string &line, std::vector<std::string> &argv)
 {
     if (line.empty()) {
         return InstState::EmptyArgv;
     }
-
-    const std::size_t count =
-        1 + static_cast<std::size_t>(std::count(line.begin(), line.end(), '\t'));
-    if (count > kInstArgvMax) {
+    if (token_count(line) > kInstArgvMax) {
         return InstState::TooManyArgs;
     }
+    split_tabs(line, argv);
+    return InstState::Ok;
+}
 
-    argv.clear();
-    argv.reserve(count);
-    for (std::string::size_type start = 0;;) {
-        const std::string::size_type tab = line.find('\t', start);
+/*
+ * 一筆 env 必須看起來像 KEY=VALUE：要有 '='，而且它不能在最前面。值可以是
+ * 空的，也可以自己含 '='，只有第一個 '=' 是分隔符號。
+ */
+bool valid_env_entry(const std::string &entry)
+{
+    const std::string::size_type eq = entry.find('=');
 
-        if (tab == std::string::npos) {
-            argv.push_back(line.substr(start));
-            break;
+    return eq != std::string::npos && eq != 0;
+}
+
+/*
+ * 切開 env 行。空行是空的清單，不是錯誤 —— 這是它與 argv 行唯一的差別，
+ * 也是「繼承呼叫端環境」在格式裡的寫法。
+ */
+InstState split_env(const std::string &line, std::vector<std::string> &env)
+{
+    env.clear();
+    if (line.empty()) {
+        return InstState::Ok;
+    }
+    if (token_count(line) > kInstEnvMax) {
+        return InstState::TooManyEnv;
+    }
+    split_tabs(line, env);
+    for (const std::string &entry : env) {
+        if (!valid_env_entry(entry)) {
+            return InstState::EnvEntryMalformed;
         }
-        argv.push_back(line.substr(start, tab - start));
-        start = tab + 1;
     }
     return InstState::Ok;
+}
+
+/* 以定位字元接回一行並換行。空清單就是一行空的。 */
+void write_tabbed(std::ostream &out, const std::vector<std::string> &values)
+{
+    for (std::size_t i = 0; i < values.size(); ++i) {
+        if (i > 0) {
+            out << '\t';
+        }
+        out << values[i];
+    }
+    out << '\n';
 }
 
 /* CR 也會被拒絕，因為結尾的 CR 讀回來時會被當成 CRLF 的一部分吃掉。 */
@@ -110,10 +165,23 @@ InstState validate(const inst_t &inst)
         return InstState::EmptyArgv;
     }
 
-    const std::string *const fields[kFieldCount] = {
+    if (inst.env.size() > kInstEnvMax) {
+        return InstState::TooManyEnv;
+    }
+    for (const std::string &entry : inst.env) {
+        /*
+         * 定位字元與換行都會讓這一筆讀不回來，跟「不是 KEY=VALUE」一樣是
+         * 寫不出去的記錄，所以共用同一個狀態。
+         */
+        if (entry.find('\t') != std::string::npos ||
+            contains_line_break(entry) || !valid_env_entry(entry)) {
+            return InstState::EnvEntryMalformed;
+        }
+    }
+
+    const std::string *const fields[kStringFieldCount] = {
         &inst.stdin_path, &inst.stdout_path, &inst.stderr_path,
-        &inst.exit_path,  &inst.cwd,         &inst.env_path,
-        &inst.extra
+        &inst.exit_path,  &inst.cwd,         &inst.extra
     };
     for (const std::string *field : fields) {
         if (contains_line_break(*field)) {
@@ -138,7 +206,7 @@ void inst_t::clear()
     stderr_path.clear();
     exit_path.clear();
     cwd.clear();
-    env_path.clear();
+    env.clear();
     extra.clear();
 }
 
@@ -152,15 +220,16 @@ InstState read_instruction(std::istream &in, inst_t &inst,
     inst.clear();
 
     /*
-     * 第 2 到 8 行直接讀進目的欄位，省下一輪複製，也讓每個字串沿用既有
-     * 容量；只有 argv 行需要暫存，因為它還得再切開。
+     * 單純的字串欄位直接讀進目的地，省下一輪複製，也讓每個字串沿用既有
+     * 容量；argv 與 env 兩行需要暫存，因為它們還得再切開。
      */
-    std::string *const fields[kFieldCount] = {
-        &inst.stdin_path, &inst.stdout_path, &inst.stderr_path,
-        &inst.exit_path,  &inst.cwd,         &inst.env_path,
-        &inst.extra
-    };
     std::string argv_line;
+    std::string env_line;
+    std::string *const lines[kInstLineCount] = {
+        &argv_line,        &inst.stdin_path, &inst.stdout_path,
+        &inst.stderr_path, &inst.exit_path,  &inst.cwd,
+        &env_line,         &inst.extra
+    };
     std::size_t used = 0;
 
     /* 任何失敗都要讓 inst 保持清空，半筆記錄絕不能被當成完整的一筆。 */
@@ -170,7 +239,7 @@ InstState read_instruction(std::istream &in, inst_t &inst,
     };
 
     for (std::size_t i = 0; i < kInstLineCount; ++i) {
-        std::string &line = (i == 0) ? argv_line : *fields[i - 1];
+        std::string &line = *lines[i];
 
         switch (read_line(in, line, max_record_bytes - used)) {
         case LineState::Ok:
@@ -188,9 +257,14 @@ InstState read_instruction(std::istream &in, inst_t &inst,
         used += line.size();
     }
 
-    const InstState state = split_argv(argv_line, inst.argv);
-    if (state != InstState::Ok) {
-        return fail(state);
+    const InstState argv_state = split_argv(argv_line, inst.argv);
+    if (argv_state != InstState::Ok) {
+        return fail(argv_state);
+    }
+
+    const InstState env_state = split_env(env_line, inst.env);
+    if (env_state != InstState::Ok) {
+        return fail(env_state);
     }
     return InstState::Ok;
 }
@@ -202,24 +276,22 @@ InstState write_instruction(std::ostream &out, const inst_t &inst)
         return state;
     }
 
-    /* 第 1 行：以定位字元分隔的 argv，然後換行。 */
-    for (std::size_t i = 0; i < inst.argv.size(); ++i) {
-        if (i > 0) {
-            out << '\t';
-        }
-        out << inst.argv[i];
-    }
-    out << '\n';
+    /* 第 1 行：以定位字元分隔的 argv。 */
+    write_tabbed(out, inst.argv);
 
-    const std::string *const fields[kFieldCount] = {
+    /* 第 2 到 6 行：每行一個已驗證的路徑欄位。 */
+    const std::string *const paths[kStringFieldCount - 1] = {
         &inst.stdin_path, &inst.stdout_path, &inst.stderr_path,
-        &inst.exit_path,  &inst.cwd,         &inst.env_path,
-        &inst.extra
+        &inst.exit_path,  &inst.cwd
     };
-    /* 第 2 到 8 行：每行一個已驗證的欄位加換行。 */
-    for (const std::string *field : fields) {
+    for (const std::string *field : paths) {
         out << *field << '\n';
     }
+
+    /* 第 7 行：以定位字元分隔的 env，空清單就是一行空的。 */
+    write_tabbed(out, inst.env);
+    /* 第 8 行。 */
+    out << inst.extra << '\n';
 
     /* ostream 的失敗狀態是黏著的，所以最後檢查一次就夠。 */
     return out ? InstState::Ok : InstState::WriteError;
@@ -230,17 +302,37 @@ std::size_t inst_argv_max()
     return kInstArgvMax;
 }
 
-std::vector<char *> to_c_argv(inst_t &inst)
+std::size_t inst_env_max()
+{
+    return kInstEnvMax;
+}
+
+namespace {
+
+/* argv 與 env 攤成 char ** 的做法完全相同，差別只在來源。 */
+std::vector<char *> borrow(std::vector<std::string> &values)
 {
     std::vector<char *> result;
 
-    result.reserve(inst.argv.size() + 1);
-    for (std::string &argument : inst.argv) {
+    result.reserve(values.size() + 1);
+    for (std::string &value : values) {
         /* C++11 起 std::string 的儲存區保證連續且以 NUL 結尾。 */
-        result.push_back(&argument[0]);
+        result.push_back(&value[0]);
     }
     result.push_back(nullptr);
     return result;
+}
+
+}  /* namespace */
+
+std::vector<char *> to_c_argv(inst_t &inst)
+{
+    return borrow(inst.argv);
+}
+
+std::vector<char *> to_c_envp(inst_t &inst)
+{
+    return borrow(inst.env);
 }
 
 const char *to_string(InstState state)
@@ -270,6 +362,10 @@ const char *to_string(InstState state)
         return "instruction field contains a line break";
     case InstState::WriteError:
         return "could not write instruction";
+    case InstState::EnvEntryMalformed:
+        return "environment entry is not KEY=VALUE";
+    case InstState::TooManyEnv:
+        return "instruction has too many environment entries";
     }
     return "unknown instruction result";
 }

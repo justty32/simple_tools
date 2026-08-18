@@ -55,13 +55,15 @@ AOS_CHECK_STATE(aos::InstState::ArgumentContainsLineBreak,
 AOS_CHECK_STATE(aos::InstState::FieldContainsLineBreak,
                 AOS_INST_FIELD_CONTAINS_LINE_BREAK);
 AOS_CHECK_STATE(aos::InstState::WriteError, AOS_INST_WRITE_ERROR);
+AOS_CHECK_STATE(aos::InstState::EnvEntryMalformed,
+                AOS_INST_ENV_ENTRY_MALFORMED);
+AOS_CHECK_STATE(aos::InstState::TooManyEnv, AOS_INST_TOO_MANY_ENV);
 
 AOS_CHECK_STATE(aos::ExecState::Ok, AOS_EXEC_OK);
 AOS_CHECK_STATE(aos::ExecState::InvalidArgument, AOS_EXEC_INVALID_ARGUMENT);
 AOS_CHECK_STATE(aos::ExecState::OpenStdinFailed, AOS_EXEC_OPEN_STDIN_FAILED);
 AOS_CHECK_STATE(aos::ExecState::OpenStdoutFailed, AOS_EXEC_OPEN_STDOUT_FAILED);
 AOS_CHECK_STATE(aos::ExecState::OpenStderrFailed, AOS_EXEC_OPEN_STDERR_FAILED);
-AOS_CHECK_STATE(aos::ExecState::EnvFileFailed, AOS_EXEC_ENV_FILE_FAILED);
 AOS_CHECK_STATE(aos::ExecState::ChdirFailed, AOS_EXEC_CHDIR_FAILED);
 AOS_CHECK_STATE(aos::ExecState::SpawnFailed, AOS_EXEC_SPAWN_FAILED);
 AOS_CHECK_STATE(aos::ExecState::WaitFailed, AOS_EXEC_WAIT_FAILED);
@@ -115,7 +117,7 @@ private:
     char ch_;
 };
 
-/* 七個非 argv 欄位的查表；未知欄位回傳 nullptr。 */
+/* 單一字串欄位的查表；未知欄位回傳 nullptr。 */
 const std::string *field_of(const aos::inst_t &inst, aos_inst_field field)
 {
     switch (field) {
@@ -129,8 +131,6 @@ const std::string *field_of(const aos::inst_t &inst, aos_inst_field field)
         return &inst.exit_path;
     case AOS_FIELD_CWD:
         return &inst.cwd;
-    case AOS_FIELD_ENV:
-        return &inst.env_path;
     case AOS_FIELD_EXTRA:
         return &inst.extra;
     }
@@ -181,6 +181,19 @@ const char *aos_instruction_arg(const aos_instruction *inst, size_t index)
     return inst->inst.argv[index].c_str();
 }
 
+size_t aos_instruction_env_count(const aos_instruction *inst)
+{
+    return (inst == nullptr) ? 0 : inst->inst.env.size();
+}
+
+const char *aos_instruction_env(const aos_instruction *inst, size_t index)
+{
+    if (inst == nullptr || index >= inst->inst.env.size()) {
+        return nullptr;
+    }
+    return inst->inst.env[index].c_str();
+}
+
 const char *aos_instruction_field(const aos_instruction *inst,
                                   aos_inst_field field)
 {
@@ -203,6 +216,20 @@ aos_inst_state aos_instruction_push_arg(aos_instruction *inst,
         inst->inst.argv.push_back(value);
     } catch (...) {
         /* 實作端唯一會拋的就是配置失敗（bad_alloc 或 length_error）。 */
+        return AOS_INST_ALLOC_FAILED;
+    }
+    return AOS_INST_OK;
+}
+
+aos_inst_state aos_instruction_push_env(aos_instruction *inst,
+                                        const char *entry)
+{
+    if (inst == nullptr || entry == nullptr) {
+        return AOS_INST_INVALID_ARGUMENT;
+    }
+    try {
+        inst->inst.env.push_back(entry);
+    } catch (...) {
         return AOS_INST_ALLOC_FAILED;
     }
     return AOS_INST_OK;
@@ -340,6 +367,11 @@ size_t aos_inst_argv_max(void)
     return aos::inst_argv_max();
 }
 
+size_t aos_inst_env_max(void)
+{
+    return aos::inst_env_max();
+}
+
 size_t aos_inst_record_max_bytes(void)
 {
     return aos::kInstRecordMaxBytes;
@@ -356,7 +388,7 @@ const char *aos_inst_state_string(aos_inst_state state)
     if (value == AOS_INST_BUFFER_TOO_SMALL) {
         return "output buffer is too small";
     }
-    if (value < AOS_INST_OK || value > AOS_INST_WRITE_ERROR) {
+    if (value < AOS_INST_OK || value > AOS_INST_TOO_MANY_ENV) {
         return "unknown instruction result";
     }
     return aos::to_string(static_cast<aos::InstState>(value));

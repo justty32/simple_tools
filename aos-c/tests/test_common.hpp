@@ -9,7 +9,7 @@
 #include <vector>
 
 /*
- * 用給定的 argv 組出一筆指令，其餘七個欄位留空，讓每個寫入測試只需要覆寫
+ * 用給定的 argv 組出一筆指令，其餘欄位留空，讓每個寫入測試只需要覆寫
  * 它真正要測的欄位。
  */
 inline aos::inst_t make_inst(const std::vector<std::string> &argv)

@@ -22,6 +22,7 @@ cat status.txt   # 0
 ```
 
 八行分別是 argv、stdin、stdout、stderr、exit、cwd、env、extra。留空代表照預設來。
+env 那一行放的是環境變數本身（Tab 分隔的 `KEY=VALUE`），不是一個檔案路徑。
 完整規格看 [docs/format.md](docs/format.md)，執行時每個欄位的行為看
 [docs/exec.md](docs/exec.md)。
 

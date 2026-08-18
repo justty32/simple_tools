@@ -22,12 +22,14 @@
  *
  * An instruction is eight lines, one field per line:
  *   argv, stdin, stdout, stderr, exit, cwd, env, extra.
- * The argv line is tab-separated with no quoting or escaping; spaces,
- * quotes and backslashes are ordinary characters, and adjacent tabs
- * preserve empty arguments. Every line, including the eighth, must end with
- * a newline, which is what lets a truncated record be told apart from a
- * complete one whose eighth line happens to be empty. Both LF and CRLF are
- * accepted on input; the writer always emits LF.
+ * The argv and env lines are tab-separated with no quoting or escaping;
+ * spaces, quotes and backslashes are ordinary characters, and adjacent tabs
+ * preserve empty arguments. The env line carries the environment itself,
+ * one KEY=VALUE per entry, and an empty env line is an empty list, which is
+ * legal; an empty argv line is not. Every line, including the eighth, must
+ * end with a newline, which is what lets a truncated record be told apart
+ * from a complete one whose eighth line happens to be empty. Both LF and
+ * CRLF are accepted on input; the writer always emits LF.
  */
 
 #ifdef __cplusplus
@@ -62,24 +64,31 @@ typedef enum aos_inst_state {
     AOS_INST_ARGUMENT_CONTAINS_LINE_BREAK = 9,
     AOS_INST_FIELD_CONTAINS_LINE_BREAK = 10,
     AOS_INST_WRITE_ERROR = 11,
+    /* 讀寫共用：env 的某一筆不是合法的 KEY=VALUE。 */
+    AOS_INST_ENV_ENTRY_MALFORMED = 12,
+    /* 讀寫共用：env 的筆數超過 aos_inst_env_max()。 */
+    AOS_INST_TOO_MANY_ENV = 13,
     /*
      * 只存在於 C 介面。實作內部的配置失敗是 std::bad_alloc，但例外不能穿
      * 過這道邊界，所以在這裡被翻譯成一個狀態。
      */
-    AOS_INST_ALLOC_FAILED = 12,
+    AOS_INST_ALLOC_FAILED = 14,
     /* 同樣只存在於 C 介面：aos_instruction_write_buffer 的緩衝區不夠大。 */
-    AOS_INST_BUFFER_TOO_SMALL = 13
+    AOS_INST_BUFFER_TOO_SMALL = 15
 } aos_inst_state;
 
-/* The seven non-argv fields, in the order they are serialized. */
+/*
+ * The single-string fields, in the order they are serialized. argv and env
+ * are lists rather than strings, so they are not here: they have their own
+ * count/get/push functions.
+ */
 typedef enum aos_inst_field {
     AOS_FIELD_STDIN = 0,
     AOS_FIELD_STDOUT = 1,
     AOS_FIELD_STDERR = 2,
     AOS_FIELD_EXIT = 3,
     AOS_FIELD_CWD = 4,
-    AOS_FIELD_ENV = 5,
-    AOS_FIELD_EXTRA = 6
+    AOS_FIELD_EXTRA = 5
 } aos_inst_field;
 
 /* Result of trying to run one instruction. See aos_instruction_execute. */
@@ -89,13 +98,12 @@ typedef enum aos_exec_state {
     AOS_EXEC_OPEN_STDIN_FAILED = 2,
     AOS_EXEC_OPEN_STDOUT_FAILED = 3,
     AOS_EXEC_OPEN_STDERR_FAILED = 4,
-    AOS_EXEC_ENV_FILE_FAILED = 5,
-    AOS_EXEC_CHDIR_FAILED = 6,
-    AOS_EXEC_SPAWN_FAILED = 7,
-    AOS_EXEC_WAIT_FAILED = 8,
-    AOS_EXEC_EXIT_WRITE_FAILED = 9,
-    AOS_EXEC_PLATFORM_UNSUPPORTED = 10,
-    AOS_EXEC_ALLOC_FAILED = 11
+    AOS_EXEC_CHDIR_FAILED = 5,
+    AOS_EXEC_SPAWN_FAILED = 6,
+    AOS_EXEC_WAIT_FAILED = 7,
+    AOS_EXEC_EXIT_WRITE_FAILED = 8,
+    AOS_EXEC_PLATFORM_UNSUPPORTED = 9,
+    AOS_EXEC_ALLOC_FAILED = 10
 } aos_exec_state;
 
 /*
@@ -139,14 +147,25 @@ AOS_API const char *aos_instruction_arg(const aos_instruction *inst,
                                         size_t index);
 
 /*
- * One of the seven non-argv fields, never NULL for a valid field; an unset
+ * One of the single-string fields, never NULL for a valid field; an unset
  * field is the empty string. Same lifetime as aos_instruction_arg.
  */
 AOS_API const char *aos_instruction_field(const aos_instruction *inst,
                                           aos_inst_field field);
 
 /*
- * Append an argument, or set one of the seven fields. value is copied.
+ * The environment, entry by entry. Zero entries means the child inherits
+ * this process's environment; any entry at all replaces it wholesale.
+ * aos_instruction_env returns NULL when index is out of range, and borrows
+ * the instruction's storage exactly as aos_instruction_arg does.
+ */
+AOS_API size_t aos_instruction_env_count(const aos_instruction *inst);
+AOS_API const char *aos_instruction_env(const aos_instruction *inst,
+                                        size_t index);
+
+/*
+ * Append an argument, or set one of the single-string fields. value is
+ * copied.
  * Return AOS_INST_OK, AOS_INST_INVALID_ARGUMENT for a NULL pointer or an
  * unknown field, or AOS_INST_ALLOC_FAILED.
  */
@@ -155,6 +174,21 @@ AOS_API aos_inst_state aos_instruction_push_arg(aos_instruction *inst,
 AOS_API aos_inst_state aos_instruction_set_field(aos_instruction *inst,
                                                  aos_inst_field field,
                                                  const char *value);
+
+/*
+ * Append one environment entry, which must be a whole "KEY=VALUE" string.
+ *
+ * It takes the entry, not a key and a value, because that is what the
+ * instruction stores and what the child is handed. A caller that thinks in
+ * keys and values already has a map of its own; flattening it is one
+ * snprintf, and doing it here would mean this library owning a merge policy
+ * for duplicate keys that nothing has asked it to have.
+ *
+ * The entry is validated on write, not here, so that building an
+ * instruction never fails for a reason the caller cannot see yet.
+ */
+AOS_API aos_inst_state aos_instruction_push_env(aos_instruction *inst,
+                                                const char *entry);
 
 /*
  * Read the next record from stream.
@@ -228,10 +262,9 @@ AOS_API aos_inst_state aos_instruction_write_buffer(const aos_instruction *inst,
  *               and the decimal status plus a newline is written to it.
  *   cwd         empty inherits the caller's working directory.
  *   env         empty inherits the caller's environment entirely.
- *               Otherwise the file is read as one KEY=VALUE per line and
- *               *replaces* the environment; it does not extend it. Blank
- *               lines are ignored, '#' begins a comment, and any other line
- *               without '=' is AOS_EXEC_ENV_FILE_FAILED.
+ *               Otherwise the entries *replace* the environment; they do
+ *               not extend it, and are passed to the child exactly as they
+ *               stand.
  *   extra       ignored.
  *
  * A failure to spawn -- command not found, cwd missing, a redirection
@@ -253,6 +286,7 @@ AOS_API aos_exec_state aos_instruction_execute(aos_instruction *inst,
  * and a header a consumer edited is not it.
  */
 AOS_API size_t aos_inst_argv_max(void);
+AOS_API size_t aos_inst_env_max(void);
 AOS_API size_t aos_inst_record_max_bytes(void);
 
 /* Static, human-readable descriptions. Never NULL, even for a bad value. */

@@ -26,7 +26,7 @@ std::string n_full_lines(std::size_t n)
     return data;
 }
 
-/* 讀取失敗後，inst 必須完全清空：七個欄位皆為空字串，argv 也是空的。 */
+/* 讀取失敗後，inst 必須完全清空：欄位皆為空，argv 與 env 也是空的。 */
 void expect_cleared(const inst_t &inst)
 {
     CHECK(inst.empty());
@@ -36,7 +36,7 @@ void expect_cleared(const inst_t &inst)
     CHECK(inst.stderr_path == "");
     CHECK(inst.exit_path == "");
     CHECK(inst.cwd == "");
-    CHECK(inst.env_path == "");
+    CHECK(inst.env.empty());
     CHECK(inst.extra == "");
 }
 
@@ -134,7 +134,9 @@ std::size_t test_to_string_covers_every_state()
         InstState::ArgumentContainsTab,
         InstState::ArgumentContainsLineBreak,
         InstState::FieldContainsLineBreak,
-        InstState::WriteError
+        InstState::WriteError,
+        InstState::EnvEntryMalformed,
+        InstState::TooManyEnv
     };
     std::size_t cases = 0;
 
