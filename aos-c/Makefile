@@ -18,7 +18,7 @@ TARGET_NAME = aos-c
 TEST_TARGET_NAME = aos-c-tests
 
 # 函式庫本體，兩道公開邊界共用；run.cpp 是程式的驅動迴圈，不屬於任何一道。
-LIB_SOURCES = src/inst.cpp src/exec.cpp src/capi.cpp
+LIB_SOURCES = src/inst.cpp src/inst_format.cpp src/exec.cpp src/capi.cpp
 SOURCES = $(wildcard src/*.cpp)
 OBJECTS = $(patsubst src/%.cpp,$(BUILD_DIR)/%.o,$(SOURCES))
 LIB_OBJECTS = $(patsubst src/%.cpp,$(BUILD_DIR)/%.o,$(LIB_SOURCES))

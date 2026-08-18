@@ -22,7 +22,11 @@ it knows it exists.
 
 `aos/inst.hpp` is the only parser in the project. It moves one record
 between a stream and an `inst_t`, in both directions, and knows nothing
-about processes. `aos/exec.hpp` takes an `inst_t` and knows nothing
+about processes. Its implementation is two files: `inst_format.cpp` is the
+only code that knows a record is eight lines and that tabs separate `argv`
+and `env`, while `inst.cpp` owns the type, its limits and its adapters and
+never looks at a byte of the encoding. The line is drawn where the format
+changes, so a format change touches one file. `aos/exec.hpp` takes an `inst_t` and knows nothing
 about streams. Looping over many records belongs to the caller, which is all
 `aos::run` in `run.cpp` does.
 
