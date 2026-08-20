@@ -12,10 +12,10 @@
  * belongs to the caller.
  *
  * This is the first non-portable component in the project. Everything below
- * inst.hpp is plain C++11; process spawning is not. The platform split is
+ * inst.hpp is plain C++11; process spawning is not. That non-portability is
  * contained entirely in exec.cpp, behind the one function declared here.
- * POSIX is implemented; on any other platform execute() compiles and
- * returns ExecState::PlatformUnsupported rather than pretending.
+ * POSIX is the only platform: there is no fallback and no #ifdef, because a
+ * second implementation that never runs is a claim nobody can check.
  */
 namespace aos {
 
@@ -42,15 +42,14 @@ enum class ExecState {
     /* 子行程起來了，但等待它結束時出錯。 */
     WaitFailed,
     /* 子行程結束了，但結束狀態寫不進 exit_path。 */
-    ExitWriteFailed,
-    PlatformUnsupported
+    ExitWriteFailed
 };
 
 /* How the child ended. Only meaningful when execute() returned Ok. */
 struct ExecResult {
     /*
      * 正常結束時是行程的結束碼；被訊號終止時是 128 + 訊號編號，沿用 shell
-     * 的慣例，讓這個欄位在兩個平台上都只是一個數字。
+     * 的慣例，讓這個欄位永遠只是一個數字，而不是「碼或訊號」二選一。
      */
     int status = 0;
     /* 為 true 代表 status 來自訊號而非 exit()。 */

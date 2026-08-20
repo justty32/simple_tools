@@ -279,20 +279,20 @@ echo→D     ⋯⋯八行完整⋯⋯
 | `AOS_EXEC_SPAWN_FAILED` | `fork` 失敗 —— 連子行程都不存在，沒有碼可以回報 |
 | `AOS_EXEC_WAIT_FAILED` | 子行程起來了，但等它結束時出錯 |
 | `AOS_EXEC_EXIT_WRITE_FAILED` | 程式跑完了，但結束狀態寫不進 exit 檔 |
-| `AOS_EXEC_PLATFORM_UNSUPPORTED` | 這個平台還沒有實作行程建立 |
 
 `SPAWN_FAILED` 和 `WAIT_FAILED` 時 `result.error` 會帶著作業系統回報的 `errno`，
 可以用 `strerror()` 轉成訊息。子行程自己的失敗不走這裡，它走結束碼。
 
 ## 平台
 
-POSIX（Linux、macOS）已經實作，用的是 `fork` / `execvp` / `dup2` / `chdir` /
-`waitpid`。
+**只支援 POSIX**（Linux、macOS），用的是 `fork` / `execvp` / `dup2` / `chdir` /
+`waitpid`。沒有其他平台的分支，也沒有「這個平台不支援」這種狀態：函式庫在別的
+地方根本編不起來，而不是編得起來卻跑不動。
 
-Windows **還沒有**。它需要 `CreateProcess` 搭配 `STARTUPINFO` 做控制代碼重導向，
-而且沒有 `fork`，所以那會是另一套實作而不是這一套的變體。在補上之前，
-`aos_instruction_execute` 在 Windows 上可以編譯，但會直接回傳
-`AOS_EXEC_PLATFORM_UNSUPPORTED` —— 寧可明說不支援，也不要給出會誤導的成功。
+Windows 曾經編得過但執行層直接回報不支援。那條路已經拿掉了 —— 一份永遠不會被
+執行的實作，是沒有人能查證的宣稱；要真的支援 Windows 得另外寫一套
+（`CreateProcess` + `STARTUPINFO` 的控制代碼重導向，而且沒有 `fork`），那不是
+這一套的變體。
 
 平台相關的程式碼全部關在 `src/exec.cpp` 裡面，公開標頭沒有任何平台差異。
 

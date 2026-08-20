@@ -36,7 +36,9 @@ env 那一行放的是環境變數本身（Tab 分隔的 `KEY=VALUE`），不是
 
 ## 編譯
 
-需要 GCC（或任何 C++11 編譯器）和 GNU Make，沒有其他相依。
+需要 GCC（或任何 C++11 編譯器）和 GNU Make，沒有其他相依。**只支援 POSIX**
+（Linux、macOS）—— 執行層是 `fork`/`execvp`，沒有第二套實作，在別的平台上不是
+跑不動，是編不起來。
 
 ```sh
 make debug          # 建 build/debug/aos-c，有除錯符號
@@ -46,18 +48,6 @@ make strict         # 加上 -Werror 全部重來一次，然後跑測試
 make shared         # 建共享函式庫 build/<mode>/libaos.so
 make clean          # 清掉整個 build/
 ```
-
-### Windows
-
-用 MinGW-w64 的話把 `make` 換成 `mingw32-make.exe`。整個專案（含測試）可以編譯、
-連結、執行，`make shared` 會產出 `aos.dll` 加一個匯入函式庫。
-
-**但行程建立目前只有 POSIX 實作。** 讀取、寫入、序列化在 Windows 上都正常，
-`aos_instruction_execute` 則直接回傳 `AOS_EXEC_PLATFORM_UNSUPPORTED` —— 也就是說
-`aos-c` 這個程式在 Windows 上跑不了任何指令。測試套件會跳過執行相關的案例
-（POSIX 上 150 個，Windows 上 118 個）。
-
-靜態連結時記得定義 `AOS_STATIC`，見 [docs/capi.md](docs/capi.md)。
 
 `make strict` 是送出改動前該跑的那一個：它用 `-Wall -Wextra -Wpedantic -Werror`
 重建全部，然後跑完整測試套件。

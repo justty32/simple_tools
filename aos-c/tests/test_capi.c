@@ -767,7 +767,6 @@ static size_t test_exec_state_strings(void)
         AOS_EXEC_SPAWN_FAILED,
         AOS_EXEC_WAIT_FAILED,
         AOS_EXEC_EXIT_WRITE_FAILED,
-        AOS_EXEC_PLATFORM_UNSUPPORTED,
         /* 同樣只存在於 C 介面。 */
         AOS_EXEC_ALLOC_FAILED
     };
@@ -795,8 +794,6 @@ static size_t test_version_string(void)
     CHECK(strlen(version) > 0);
     return 1;
 }
-
-#if defined(__unix__) || defined(__APPLE__)
 
 /*
  * 讀出整個檔案的內容，用來核對 stdout / exit 兩個欄位實際落地的內容。
@@ -920,8 +917,6 @@ static size_t test_execute(void)
     return cases;
 }
 
-#endif  /* defined(__unix__) || defined(__APPLE__) */
-
 size_t run_capi_tests(void)
 {
     size_t count = 0;
@@ -949,9 +944,7 @@ size_t run_capi_tests(void)
     count += test_inst_state_strings();
     count += test_exec_state_strings();
     count += test_version_string();
-#if defined(__unix__) || defined(__APPLE__)
     count += test_execute();
-#endif
 
     return count;
 }

@@ -171,7 +171,7 @@ a compatibility break, not a bug fix.
 | duplicate keys in `env` | passed through verbatim | merging would mean owning a policy for which duplicate wins; the producer already has a map and can decide there |
 | empty `exit_path` | the status is discarded | |
 | non-empty `exit_path` | truncated, then the decimal status and a newline, **whatever happened** | it is the "this one is finished" signal, and a signal that is sometimes absent cannot be waited on |
-| status of a signalled child | `128 + signum` | shell convention, and it keeps the field one number on every platform |
+| status of a signalled child | `128 + signum` | shell convention, and it keeps the field one number rather than a code-or-signal pair |
 | a child that could not be set up (redirection, `chdir`) | status `126` | shell convention |
 | `execvp` failing (no such command) | status `127` | shell convention; see below |
 | `extra` | ignored | |
@@ -229,13 +229,16 @@ instructions arrive on stdin is the instruction stream itself.
 
 ### Portability
 
-This is the only non-portable component. POSIX (`fork`, `execvp`, `dup2`,
-`chdir`, `waitpid`) is implemented. Windows needs `CreateProcess` with
-`STARTUPINFO` handle redirection and has no `fork`, so it is a second
-implementation rather than a variation on this one; until it exists,
-`execute` compiles there and returns `ExecState::PlatformUnsupported` rather
-than pretending. The split is contained entirely in `exec.cpp` — the header
-is platform-neutral, and `inst.hpp` and the tests stay pure C++11.
+This is the only non-portable component, and the project is POSIX-only
+because of it: `fork`, `execvp`, `dup2`, `chdir`, `waitpid`. There is no
+fallback branch and no `#ifdef`. Windows would need `CreateProcess` with
+`STARTUPINFO` handle redirection and has no `fork`, so it would be a second
+implementation rather than a variation on this one — and a second
+implementation that never runs is a claim nobody can check, which is why the
+stub that used to return `ExecState::PlatformUnsupported` is gone rather than
+waiting to be filled in. The non-portability is contained entirely in
+`exec.cpp` and `run.cpp`; the headers are platform-neutral, and `inst.hpp`
+and the format tests stay pure C++11.
 
 `_POSIX_C_SOURCE` is defined at the top of `exec.cpp` because `-std=c++11`
 defines `__STRICT_ANSI__`, which otherwise hides the POSIX declarations.
@@ -317,22 +320,25 @@ promise, does not constrain it.
   immune -- `aos_instruction` is opaque, so fields can be added without
   touching a compiled consumer. That asymmetry is the clearest illustration
   of what the C boundary buys.
-- **Error enums are append-only** on the C side. New states go at the end.
-- **Windows.** Everything but `execute` works there, and the whole suite has
-  been cross-compiled and run under MinGW -- 118 of the 150 cases, the
-  remainder being the POSIX-only execution tests. (`run.cpp` also has a
-  POSIX-only path now: the instruction stream is opened with `O_CLOEXEC`,
-  and the Windows branch still uses `std::ifstream`.) Getting there found two
-  real defects, both of which are the kind that only a second platform
-  exposes: two helpers used solely by the POSIX branch tripped
+- **Error enums are append-only** on the C side. New states go at the end,
+  and a retired number stays retired: `AOS_EXEC_PLATFORM_UNSUPPORTED` was 5,
+  and 5 is now a hole rather than something else's value, so an old consumer
+  that still hands 5 back cannot have it read as a different meaning.
+- **Windows was carried for a while, and then dropped.** Everything but
+  `execute` did work there; the suite was cross-compiled and run under MinGW,
+  118 of the cases passing and the rest being the POSIX-only execution tests.
+  It was worth doing: a second platform found two real defects that one never
+  would have -- two helpers used solely by the POSIX branch tripped
   `-Wunused-function`, which `-Werror` turned into a build failure, and
   `AOS_API` needed a third state, because a statically linked consumer was
   being handed `__declspec(dllimport)` and so emitted `__imp_` references no
-  DLL was there to satisfy. `execute` itself is still unimplemented.
+  DLL was there to satisfy. What it never got was `execute`, and a build that
+  can read and write instructions but cannot run one is not a port. Keeping
+  the branches alive meant maintaining code whose only claim was that it
+  compiled, so they are gone: no `_WIN32` in the sources, one state in
+  `AOS_API`, and no `AOS_STATIC` for a consumer to remember.
 
 ## Suggested order
 
-1. Windows `execute`, if both targets are still required. It is the only
-   piece where the interface is settled and the implementation is missing.
-2. An install target, once someone actually links against the library --
+1. An install target, once someone actually links against the library --
    headers, the soname symlinks, and a pkg-config file.

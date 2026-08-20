@@ -8,20 +8,13 @@
 #include <string>
 #include <vector>
 
-#if defined(__unix__) || defined(__APPLE__)
-#define AOS_EXEC_POSIX 1
 #include <fcntl.h>
 #include <sys/wait.h>
 #include <unistd.h>
 extern char **environ;
-#else
-#define AOS_EXEC_POSIX 0
-#endif
 
 namespace aos {
 namespace {
-
-#if AOS_EXEC_POSIX
 
 /*
  * 把結束狀態寫進 exit_path。父行程在 waitpid 之後才呼叫，因此這裡的失敗
@@ -100,11 +93,7 @@ bool child_redirect(const std::string &path, int target_fd, int flags)
     _exit(kExitExecFailed);
 }
 
-#endif /* AOS_EXEC_POSIX */
-
 }  /* namespace */
-
-#if AOS_EXEC_POSIX
 
 ExecState execute(inst_t &inst, ExecResult &result)
 {
@@ -171,22 +160,6 @@ ExecState execute(inst_t &inst, ExecResult &result)
     return ExecState::Ok;
 }
 
-#else /* !AOS_EXEC_POSIX */
-
-ExecState execute(inst_t &inst, ExecResult &result)
-{
-    /*
-     * Windows 需要 CreateProcess 搭配 STARTUPINFO 的控制代碼重導向，而且
-     * 沒有 fork，所以它是另一個實作而不是這一個的變體。在補上之前，這裡
-     * 明說不支援，而不是給出會誤導的成功。
-     */
-    static_cast<void>(inst);
-    result = ExecResult();
-    return ExecState::PlatformUnsupported;
-}
-
-#endif /* AOS_EXEC_POSIX */
-
 const char *to_string(ExecState state)
 {
     switch (state) {
@@ -200,8 +173,6 @@ const char *to_string(ExecState state)
         return "could not wait for command";
     case ExecState::ExitWriteFailed:
         return "could not write exit status";
-    case ExecState::PlatformUnsupported:
-        return "process spawning is not implemented on this platform";
     }
     return "unknown execution result";
 }

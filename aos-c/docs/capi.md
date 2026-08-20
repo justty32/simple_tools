@@ -75,13 +75,16 @@ argv 和 env 是清單而不是字串，所以不在這裡：它們各自有 cou
 
 ```c
 AOS_EXEC_OK                    = 0    AOS_EXEC_EXIT_WRITE_FAILED    = 4
-AOS_EXEC_INVALID_ARGUMENT      = 1    AOS_EXEC_PLATFORM_UNSUPPORTED = 5
+AOS_EXEC_INVALID_ARGUMENT      = 1    /* 5 已退休 */
 AOS_EXEC_SPAWN_FAILED          = 2    AOS_EXEC_ALLOC_FAILED         = 6
 AOS_EXEC_WAIT_FAILED           = 3
 ```
 
 這裡沒有「開檔失敗」「chdir 失敗」「找不到指令」—— 那些現在都是結束碼（126 或
 127），不是狀態。
+
+5 是空的：那裡曾經是 `AOS_EXEC_PLATFORM_UNSUPPORTED`。專案改成只支援 POSIX 之後
+這個狀態不可能再出現，編號留空不補，免得舊的呼叫端拿到 5 時被當成別的意思。
 
 ### `aos_exec_result`
 
@@ -284,7 +287,8 @@ aos_exec_state aos_instruction_execute(aos_instruction *inst,
 （重導向、`chdir` 失敗），跟 shell 一樣。真正的失敗只剩 `fork`、等待、寫 exit 檔
 這三種。這個分界線和背後的理由寫在 [exec.md](exec.md#什麼算失敗)。
 
-目前只有 POSIX 有實作，其他平台會回傳 `AOS_EXEC_PLATFORM_UNSUPPORTED`。
+這個函式只有 POSIX 實作，而整個函式庫也只在 POSIX 上建置得起來，所以沒有「這個
+平台不支援」這種回傳值。
 
 ## 查詢
 
@@ -425,25 +429,6 @@ gcc -std=c99 my.c -Iinclude -Lbuild/debug -laos \
 
 連結器要用 C 編譯器就好 —— 函式庫自己已經帶著它需要的 C++ 執行期相依，你不需要
 知道那件事。
-
-### Windows：靜態連結要定義 `AOS_STATIC`
-
-Windows 上 `AOS_API` 有三種狀態，因為 `__declspec(dllimport)` 會讓編譯器產生只有
-DLL 能滿足的 `__imp_` 間接引用：
-
-| 你在做什麼 | 要定義的巨集 |
-| --- | --- |
-| 連結 `aos.dll` | 什麼都不用（預設就是 `dllimport`） |
-| 直接連目的檔或靜態函式庫 | **`AOS_STATIC`** |
-| 建置 DLL 本身 | `AOS_BUILDING_LIBRARY` |
-
-```sh
-gcc -std=c99 -DAOS_STATIC my.c libaos.a -o my.exe    # 靜態
-gcc -std=c99 my.c -laos -o my.exe                     # 連 DLL
-```
-
-忘了定義 `AOS_STATIC` 會得到連結期錯誤（找不到 `__imp_aos_*`），不會變成難查的
-執行期問題。POSIX 上這個巨集沒有作用，定義了也無妨。
 
 共享函式庫的 soname 是 `libaos.so.0`，只有在 C ABI 破壞時才會進位。C++ 介面沒有
 做任何承諾，所以它不會影響 soname。

@@ -44,23 +44,11 @@ CXXFLAGS += -O0 -g3
 CFLAGS += -O0 -g3
 endif
 
-ifeq ($(OS),Windows_NT)
-TARGET_NAME := $(TARGET_NAME).exe
-TEST_TARGET_NAME := $(TEST_TARGET_NAME).exe
-RMDIR = cmd /C rmdir /S /Q
-MKDIR = cmd /C mkdir $(subst /,\,$@)
-# Windows 的 DLL 沒有 soname，也不用 symlink；位置無關碼是預設行為，
-# 明寫 -fPIC 只會拿到一則警告。匯入函式庫給連結端用。
-SHARED_NAME = aos.dll
-SHARED_LDFLAGS = -Wl,--out-implib,$(BUILD_DIR)/libaos.dll.a
-PICFLAG =
-else
 RMDIR = rm -rf
 MKDIR = mkdir -p $@
 SHARED_NAME = libaos.so.$(VERSION)
 SHARED_LDFLAGS = -Wl,-soname,libaos.so.$(SOVERSION)
 PICFLAG = -fPIC
-endif
 
 TARGET = $(BUILD_DIR)/$(TARGET_NAME)
 TEST_TARGET = $(BUILD_DIR)/$(TEST_TARGET_NAME)
@@ -93,23 +81,20 @@ $(TEST_TARGET): $(LIB_OBJECTS) $(TEST_OBJECTS)
 # 連結交給 $(CXX)：即使公開邊界是 C，實作仍需要 C++ 執行期。
 $(SHARED_TARGET): $(PIC_OBJECTS)
 	$(CXX) -shared $(SHARED_LDFLAGS) $(LDFLAGS) $(PIC_OBJECTS) -o $@ $(LDLIBS)
-ifneq ($(OS),Windows_NT)
 	ln -sf $(notdir $@) $(BUILD_DIR)/libaos.so.$(SOVERSION)
 	ln -sf $(notdir $@) $(BUILD_DIR)/libaos.so
-endif
 
 $(BUILD_DIR)/%.o: src/%.cpp | $(BUILD_DIR)
-	$(CXX) $(CPPFLAGS) -DAOS_STATIC $(CXXFLAGS) $(DEPFLAGS) -c $< -o $@
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(DEPFLAGS) -c $< -o $@
 
 $(BUILD_DIR)/pic/%.o: src/%.cpp | $(BUILD_DIR)/pic
-	$(CXX) $(CPPFLAGS) -DAOS_BUILDING_LIBRARY $(CXXFLAGS) $(PICFLAG) \
-	    $(DEPFLAGS) -c $< -o $@
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(PICFLAG) $(DEPFLAGS) -c $< -o $@
 
 $(BUILD_DIR)/tests/%.o: tests/%.cpp | $(BUILD_DIR)/tests
-	$(CXX) $(CPPFLAGS) -Itests -DAOS_STATIC $(CXXFLAGS) $(DEPFLAGS) -c $< -o $@
+	$(CXX) $(CPPFLAGS) -Itests $(CXXFLAGS) $(DEPFLAGS) -c $< -o $@
 
 $(BUILD_DIR)/tests/%.o: tests/%.c | $(BUILD_DIR)/tests
-	$(CC) $(CPPFLAGS) -DAOS_STATIC $(CFLAGS) $(DEPFLAGS) -c $< -o $@
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(DEPFLAGS) -c $< -o $@
 
 $(BUILD_DIR):
 	$(MKDIR)
