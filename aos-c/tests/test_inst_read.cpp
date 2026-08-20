@@ -28,8 +28,8 @@ std::string join_tabs(const std::vector<std::string> &argv)
 }
 
 /*
- * 組一筆完整記錄：argv 行加上其餘七行，各自以 eol 結尾。eol 讓同一個
- * 建構器可以同時產生 LF 與 CRLF 兩種輸入。
+ * 組一筆完整記錄：argv 行加上其餘七行欄位，最後補一行固定為空的分隔行，
+ * 各自以 eol 結尾。eol 讓同一個建構器可以同時產生 LF 與 CRLF 兩種輸入。
  */
 std::string build_record(const std::string &argv_line,
                          const std::vector<std::string> &fields,
@@ -40,6 +40,8 @@ std::string build_record(const std::string &argv_line,
     for (const std::string &field : fields) {
         record += field + eol;
     }
+    /* 第 9 行：固定為空的記錄分隔。 */
+    record += eol;
     return record;
 }
 
@@ -346,38 +348,6 @@ std::size_t test_to_c_argv()
     return 1;
 }
 
-std::size_t test_to_c_envp()
-{
-    std::size_t cases = 0;
-
-    {
-        inst_t inst = make_inst({ "prog" });
-
-        inst.env = { "A=1", "B=2" };
-
-        std::vector<char *> envp = to_c_envp(inst);
-
-        CHECK(envp.size() == inst.env.size() + 1);
-        CHECK(envp[envp.size() - 1] == nullptr);
-        for (std::size_t i = 0; i < inst.env.size(); ++i) {
-            CHECK(envp[i] == &inst.env[i][0]);
-        }
-        ++cases;
-    }
-
-    /* 空的 env 攤出來就只有結尾的空指標，仍然是可以直接給 environ 的形狀。 */
-    {
-        inst_t inst = make_inst({ "prog" });
-        std::vector<char *> envp = to_c_envp(inst);
-
-        CHECK(envp.size() == 1);
-        CHECK(envp[0] == nullptr);
-        ++cases;
-    }
-
-    return cases;
-}
-
 }  /* namespace */
 
 std::size_t run_inst_read_tests()
@@ -395,6 +365,5 @@ std::size_t run_inst_read_tests()
     count += test_two_records_reuse_instruction();
     count += test_ordinary_special_characters();
     count += test_to_c_argv();
-    count += test_to_c_envp();
     return count;
 }

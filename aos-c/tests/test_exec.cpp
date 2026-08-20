@@ -312,24 +312,43 @@ std::size_t test_stderr_redirection(const std::string &dir)
     return 1;
 }
 
-std::size_t test_env_replaces_environment(const std::string &dir)
+std::size_t test_env_extends_environment(const std::string &dir)
 {
     inst_t inst = make_inst(
         { "sh", "-c", "echo $MYVAR:$AOS_C_TEST_PARENT_ONLY" });
     ExecResult result;
     const std::string out_path = dir + "/env_out";
 
-    /* 父行程自己設的變數，用來確認換環境是取代而不是延伸。 */
+    /* 父行程自己設的變數，用來確認 env 是擴充而不是整組取代。 */
     setenv("AOS_C_TEST_PARENT_ONLY", "leaked", 1);
 
     inst.env = { "MYVAR=hello" };
     inst.stdout_path = out_path;
 
     CHECK(execute(inst, result) == ExecState::Ok);
-    /* 冒號後面必須是空的：子行程看不到父行程的環境變數。 */
-    CHECK(read_file(out_path) == "hello:\n");
+    /* 擴充：新變數在，父變數也還在。 */
+    CHECK(read_file(out_path) == "hello:leaked\n");
 
     unsetenv("AOS_C_TEST_PARENT_ONLY");
+    return 1;
+}
+
+/* 同名的 env 覆寫繼承而來的值，其餘父環境保留不動。 */
+std::size_t test_env_overrides_inherited(const std::string &dir)
+{
+    inst_t inst = make_inst({ "sh", "-c", "echo $AOS_C_TEST_OVERRIDE" });
+    ExecResult result;
+    const std::string out_path = dir + "/env_override_out";
+
+    setenv("AOS_C_TEST_OVERRIDE", "old", 1);
+
+    inst.env = { "AOS_C_TEST_OVERRIDE=new" };
+    inst.stdout_path = out_path;
+
+    CHECK(execute(inst, result) == ExecState::Ok);
+    CHECK(read_file(out_path) == "new\n");
+
+    unsetenv("AOS_C_TEST_OVERRIDE");
     return 1;
 }
 
@@ -352,8 +371,9 @@ std::size_t test_empty_env_inherits_environment(const std::string &dir)
 }
 
 /*
- * 這一層對 env 不做任何整理：重複的鍵照原樣傳下去，由 libc 自己決定誰贏。
- * 記下這個行為是為了說明它是選擇而不是疏忽 —— 要去重的話，那是產生端的事。
+ * 重複的鍵是確定的「後者贏」：env 是照順序逐筆 setenv overwrite 套用的，
+ * 所以 DUP=first 之後 DUP=second，最後一定是 second。這一層不做去重 ——
+ * 要去重的話，那是產生端的事。
  */
 std::size_t test_env_is_passed_through_verbatim(const std::string &dir)
 {
@@ -365,10 +385,7 @@ std::size_t test_env_is_passed_through_verbatim(const std::string &dir)
     inst.stdout_path = out_path;
 
     CHECK(execute(inst, result) == ExecState::Ok);
-
-    const std::string got = read_file(out_path);
-
-    CHECK(got == "first\n" || got == "second\n");
+    CHECK(read_file(out_path) == "second\n");
     return 1;
 }
 
@@ -431,7 +448,8 @@ std::size_t run_exec_tests()
     count += test_stdin_redirection(dir);
     count += test_stdout_truncation(dir);
     count += test_stderr_redirection(dir);
-    count += test_env_replaces_environment(dir);
+    count += test_env_extends_environment(dir);
+    count += test_env_overrides_inherited(dir);
     count += test_empty_env_inherits_environment(dir);
     count += test_env_is_passed_through_verbatim(dir);
     count += test_empty_argv_is_invalid_argument();

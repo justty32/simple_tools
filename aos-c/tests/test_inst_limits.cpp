@@ -34,6 +34,8 @@ std::string build_record(const std::string &argv_line,
     for (const std::string &field : fields) {
         record += field + "\n";
     }
+    /* 第 9 行：固定為空的記錄分隔。 */
+    record += "\n";
     return record;
 }
 

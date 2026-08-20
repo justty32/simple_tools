@@ -271,9 +271,9 @@ static size_t test_read_error_states(void)
     fclose(f);
     ++cases;
 
-    /* argv 行只有換行字元：其餘七行齊全，但沒有任何引數可用。 */
+    /* argv 行只有換行字元：其餘七行欄位與空分隔行齊全，但沒有任何引數可用。 */
     f = must_tmpfile();
-    fputs("\nl1\nl2\nl3\nl4\nl5\nl6\nl7\n", f);
+    fputs("\nl1\nl2\nl3\nl4\nl5\nl6\nl7\n\n", f);
     rewind(f);
     CHECK(aos_instruction_read(f, inst, aos_inst_record_max_bytes()) ==
           AOS_INST_EMPTY_ARGV);
@@ -320,7 +320,7 @@ static size_t test_record_budget_boundary(void)
      * 元推進緩衝區「之前」，所以剛好等於預算的記錄會成功，少一個位元組的
      * 預算則會在最後一行的第二個字元上被擋下。
      */
-    static const char record[] = "ab\ncd\nef\ngh\nij\nkl\nm=\nop\n";
+    static const char record[] = "ab\ncd\nef\ngh\nij\nkl\nm=\nop\n\n";
     aos_instruction *inst = aos_instruction_new();
     FILE *f;
     size_t cases = 0;
@@ -740,7 +740,9 @@ static size_t test_inst_state_strings(void)
         AOS_INST_ALLOC_FAILED,
         /* 同樣只存在於 C 介面，是 aos_instruction_write_buffer 專用的
          * 狀態。 */
-        AOS_INST_BUFFER_TOO_SMALL
+        AOS_INST_BUFFER_TOO_SMALL,
+        /* 讀取：八行欄位之後那一行不是空的，代表記錄錯位。 */
+        AOS_INST_MISSING_SEPARATOR
     };
     size_t i;
     const char *text;

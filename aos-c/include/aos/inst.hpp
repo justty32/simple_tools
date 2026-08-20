@@ -12,14 +12,17 @@
  * One instruction: a serialized process spawn, and the reader and writer
  * that move it between a stream and memory.
  *
- * An instruction is eight lines, one per field:
- *   argv, stdin, stdout, stderr, exit, cwd, env, extra.
- * The argv and env lines are tab-separated with no quoting or escaping;
- * spaces, quotes and backslashes are ordinary characters, and adjacent tabs
- * preserve empty arguments. Every line, including the eighth, must end with
- * a newline, which is what lets a truncated record be told apart from a
- * complete one whose eighth line happens to be empty. Both LF and CRLF are
- * accepted on input; the writer always emits LF.
+ * An instruction is nine lines: eight field lines, one per field,
+ *   argv, stdin, stdout, stderr, exit, cwd, env, extra,
+ * followed by a ninth line that is always empty and separates one record
+ * from the next. The argv and env lines are tab-separated with no quoting or
+ * escaping; spaces, quotes and backslashes are ordinary characters, and
+ * adjacent tabs preserve empty arguments. Every line, including the eighth
+ * field line and the blank separator, ends with a newline. The separator
+ * makes a misaligned stream detectable: a record missing or gaining a line
+ * pushes a non-empty data line into the separator position, which the reader
+ * rejects rather than silently running the wrong command. Both LF and CRLF
+ * are accepted on input; the writer always emits LF.
  *
  * The env line carries the environment itself, one KEY=VALUE per tab-
  * separated entry, rather than a path to read it from. An empty env line is
@@ -52,12 +55,17 @@ constexpr std::size_t kInstArgvMax = 256;
  */
 constexpr std::size_t kInstEnvMax = 256;
 
-/* 一筆序列化記錄的行數；更動它就是更動格式。 */
+/*
+ * 一筆序列化記錄的欄位行數。一筆記錄是這八行欄位再加一行固定為空的分隔行，
+ * 共九行；這個常數只算欄位行(它驅動 lines[8] 陣列與八次欄位讀取迴圈)。
+ * 更動它就是更動格式。
+ */
 constexpr std::size_t kInstLineCount = 8;
 
 /*
- * 單筆記錄的預設位元組預算，計算八行的內容長度，不含行尾字元。這只是預設
- * 值，不是 API 的上限：任何正值都可以傳給 read_instruction。
+ * 單筆記錄的預設位元組預算，計算八行欄位的內容長度，不含行尾字元，也不含
+ * 本該為空的分隔行。這只是預設值，不是 API 的上限：任何正值都可以傳給
+ * read_instruction。
  */
 constexpr std::size_t kInstRecordMaxBytes = 1024 * 1024;
 
@@ -95,7 +103,14 @@ enum class InstState {
      */
     EnvEntryMalformed,
     /* 讀寫共用：env 行的筆數超過 kInstEnvMax。 */
-    TooManyEnv
+    TooManyEnv,
+    /*
+     * 讀取：八行欄位之後那一行不是空的，代表記錄錯位。它的數值刻意跳到 16，
+     * 對齊 C 介面裡 AOS_INST_MISSING_SEPARATOR —— 14 與 15 在 C 端已被只存在
+     * 於 C 的 ALLOC_FAILED／BUFFER_TOO_SMALL 佔用，兩邊的列舉值必須逐一相等
+     * (見 capi.cpp 的 static_assert)。
+     */
+    MissingSeparator = 16
 };
 
 /*
@@ -115,13 +130,14 @@ struct AOS_API inst_t {
     std::string exit_path;
     std::string cwd;
     /*
-     * 第 7 行：整組環境變數，每個元素是一整串 "KEY=VALUE"。空的清單代表
-     * 繼承呼叫端的環境；非空則是整組替換，不是擴充。
+     * 第 7 行：環境變數清單，每個元素是一整串 "KEY=VALUE"。空的清單代表純
+     * 繼承呼叫端的環境；非空則在繼承的環境上擴充 —— 覆寫同名、新增其餘、
+     * 保留其他，同名以清單裡的後者為準。
      *
-     * 存成扁平的清單而不是 map，是因為這一層對 env 的本分只有「照收、原樣
-     * 傳給子程式」：查詢與修改單一變數屬於產生端，它自己用 map，攤平成幾筆
+     * 存成扁平的清單而不是 map，是因為這一層對 env 的本分只有「照收、逐筆
+     * 套用給子程式」：查詢與修改單一變數屬於產生端，它自己用 map，攤平成幾筆
      * KEY=VALUE 再交過來。這裡因此一行查詢碼都不需要，而清單既貼近格式，也
-     * 貼近 execvp 之前要的 char **。
+     * 貼近逐筆 setenv 時要的形狀。
      */
     std::vector<std::string> env;
     /* 第 8 行對解析器而言是不透明資料，可以是空的。 */
@@ -142,8 +158,9 @@ struct AOS_API inst_t {
  * record can never be mistaken for a whole one and the previous record
  * never survives a failed read.
  *
- * max_record_bytes bounds the eight lines' combined length, excluding line
- * terminators, and must be positive: without it one malformed line would
+ * max_record_bytes bounds the eight field lines' combined length, excluding
+ * line terminators and the blank separator, and must be positive: without it
+ * one malformed line would
  * grow a std::string without bound, and an instruction file is a trust
  * boundary. Exceeding it is InstState::TooLong. The budget is a runtime
  * argument rather than a compile-time constant so that the value a shared
@@ -157,8 +174,9 @@ AOS_API InstState read_instruction(std::istream &in, inst_t &inst,
                            std::size_t max_record_bytes = kInstRecordMaxBytes);
 
 /*
- * Write one instruction to out as eight lines, each ending in LF, so
- * repeated calls append records that read_instruction consumes.
+ * Write one instruction to out as nine lines -- eight field lines plus a
+ * trailing blank separator, each ending in LF -- so repeated calls append
+ * records that read_instruction consumes.
  *
  * The whole record is validated before the first byte is written, so a
  * rejected instruction leaves the stream untouched. A write that fails
@@ -182,16 +200,6 @@ AOS_API const char *to_string(InstState state);
  * that wart is contained, rather than at every call site.
  */
 AOS_API std::vector<char *> to_c_argv(inst_t &inst);
-
-/*
- * Build the null-terminated environment vector environ and execve expect,
- * with the same borrowing and the same lifetime rule as to_c_argv.
- *
- * An empty inst.env yields a vector holding only the terminating null. That
- * is an empty environment, not "inherit": the caller decides which of the
- * two it wants by looking at inst.env before it gets here.
- */
-AOS_API std::vector<char *> to_c_envp(inst_t &inst);
 
 }  /* namespace aos */
 

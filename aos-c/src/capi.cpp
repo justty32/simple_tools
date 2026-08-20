@@ -58,6 +58,7 @@ AOS_CHECK_STATE(aos::InstState::WriteError, AOS_INST_WRITE_ERROR);
 AOS_CHECK_STATE(aos::InstState::EnvEntryMalformed,
                 AOS_INST_ENV_ENTRY_MALFORMED);
 AOS_CHECK_STATE(aos::InstState::TooManyEnv, AOS_INST_TOO_MANY_ENV);
+AOS_CHECK_STATE(aos::InstState::MissingSeparator, AOS_INST_MISSING_SEPARATOR);
 
 AOS_CHECK_STATE(aos::ExecState::Ok, AOS_EXEC_OK);
 AOS_CHECK_STATE(aos::ExecState::InvalidArgument, AOS_EXEC_INVALID_ARGUMENT);
@@ -384,7 +385,7 @@ const char *aos_inst_state_string(aos_inst_state state)
     if (value == AOS_INST_BUFFER_TOO_SMALL) {
         return "output buffer is too small";
     }
-    if (value < AOS_INST_OK || value > AOS_INST_TOO_MANY_ENV) {
+    if (value < AOS_INST_OK || value > AOS_INST_MISSING_SEPARATOR) {
         return "unknown instruction result";
     }
     return aos::to_string(static_cast<aos::InstState>(value));

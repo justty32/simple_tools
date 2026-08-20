@@ -89,7 +89,10 @@ std::size_t test_exact_output_bytes()
 
     CHECK(write_instruction(out, inst) == InstState::Ok);
 
-    /* 逐行核對，確認定位字元分隔 argv、每一行（含第八行）都以 LF 結尾。 */
+    /*
+     * 逐行核對：定位字元分隔 argv、每一行欄位都以 LF 結尾，最後再多一行
+     * 固定為空的分隔行。
+     */
     const std::string expected =
         "a\tb\n"
         "in\n"
@@ -98,7 +101,8 @@ std::size_t test_exact_output_bytes()
         "exit\n"
         "cwd\n"
         "E=v\tF=w\n"
-        "extra\n";
+        "extra\n"
+        "\n";
 
     CHECK(out.str() == expected);
     return 1;
@@ -145,7 +149,8 @@ std::size_t test_empty_env_round_trips()
     std::ostringstream out;
 
     CHECK(write_instruction(out, inst) == InstState::Ok);
-    CHECK(out.str() == "prog\n\n\n\n\n\n\n\n");
+    /* argv + 六行空欄位 + 空 env + 空 extra + 空分隔行 = 九個 LF。 */
+    CHECK(out.str() == "prog\n\n\n\n\n\n\n\n\n");
 
     std::istringstream in(out.str());
     inst_t read_back;

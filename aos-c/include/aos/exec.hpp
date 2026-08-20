@@ -83,11 +83,13 @@ struct ExecResult {
  *               It marks the instruction as finished, not as correct.
  *   cwd         empty inherits the caller's working directory.
  *   env         empty inherits the caller's environment entirely.
- *               Otherwise the entries *replace* the environment; they do
- *               not extend it. The list is passed to the child as it
- *               stands: nothing here reads, merges, sorts or de-duplicates
- *               it, because deciding what the environment should contain
- *               belongs to whoever produced the instruction.
+ *               Otherwise the entries *extend* it: each KEY=VALUE is applied
+ *               with setenv, overriding a matching name, adding an unmatched
+ *               one, and leaving every other inherited variable in place.
+ *               The entries are applied in order, so a later duplicate key
+ *               wins over an earlier one; nothing here otherwise reads,
+ *               merges or sorts them, because deciding what the environment
+ *               should contain belongs to whoever produced the instruction.
  *   extra       ignored.
  *
  * The status, following the shell's conventions:

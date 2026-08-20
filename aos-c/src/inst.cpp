@@ -62,11 +62,6 @@ std::vector<char *> to_c_argv(inst_t &inst)
     return borrow(inst.argv);
 }
 
-std::vector<char *> to_c_envp(inst_t &inst)
-{
-    return borrow(inst.env);
-}
-
 const char *to_string(InstState state)
 {
     switch (state) {
@@ -98,6 +93,8 @@ const char *to_string(InstState state)
         return "environment entry is not KEY=VALUE";
     case InstState::TooManyEnv:
         return "instruction has too many environment entries";
+    case InstState::MissingSeparator:
+        return "record is not terminated by a blank separator line";
     }
     return "unknown instruction result";
 }

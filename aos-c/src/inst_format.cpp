@@ -5,10 +5,10 @@
 #include <ostream>
 
 /*
- * The eight-line encoding, and nothing else: this file is the only place
- * that knows a record is eight lines, that tabs separate argv and env, or
- * that a line ends in LF. inst.cpp owns the type itself and never looks at
- * a byte of it.
+ * The record encoding, and nothing else: this file is the only place that
+ * knows a record is nine lines (eight field lines plus a blank separator),
+ * that tabs separate argv and env, or that a line ends in LF. inst.cpp owns
+ * the type itself and never looks at a byte of it.
  *
  * The split is by subject rather than by size. Everything here answers "how
  * does a record turn into bytes and back", and that question is the one
@@ -252,6 +252,25 @@ InstState read_instruction(std::istream &in, inst_t &inst,
         used += line.size();
     }
 
+    /* 第 9 行：固定為空的記錄分隔。它讓錯位可被偵測 —— 少行/多行會讓非空的
+     * 資料行落在這個位置。它靠位置辨識，所以是空的不會跟空欄位混淆。分隔行的
+     * 位元組不計入 used(位元組預算算的是八行欄位，分隔行本該是空的)。 */
+    std::string separator;
+    switch (read_line(in, separator, max_record_bytes - used)) {
+    case LineState::Ok:
+        if (!separator.empty()) {
+            return fail(InstState::MissingSeparator);
+        }
+        break;
+    case LineState::Eof:        /* 八行讀完卻沒有分隔行 = 記錄被截斷 */
+    case LineState::Incomplete:
+        return fail(InstState::Incomplete);
+    case LineState::TooLong:
+        return fail(InstState::TooLong);
+    case LineState::ReadError:
+        return fail(InstState::ReadError);
+    }
+
     const InstState argv_state = split_argv(argv_line, inst.argv);
     if (argv_state != InstState::Ok) {
         return fail(argv_state);
@@ -287,6 +306,8 @@ InstState write_instruction(std::ostream &out, const inst_t &inst)
     write_tabbed(out, inst.env);
     /* 第 8 行。 */
     out << inst.extra << '\n';
+    /* 第 9 行：固定為空的記錄分隔。 */
+    out << '\n';
 
     /* ostream 的失敗狀態是黏著的，所以最後檢查一次就夠。 */
     return out ? InstState::Ok : InstState::WriteError;

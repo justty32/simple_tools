@@ -13,7 +13,6 @@
 #include <fcntl.h>
 #include <sys/wait.h>
 #include <unistd.h>
-extern char **environ;
 #else
 #define AOS_EXEC_POSIX 0
 #endif
@@ -73,12 +72,11 @@ bool child_redirect(const std::string &path, int target_fd, int flags)
 }
 
 /*
- * 子行程的全部工作：重導向、切目錄、換環境、exec。此函式不會返回。
+ * 子行程的全部工作：重導向、切目錄、擴充環境、exec。此函式不會返回。
  *
  * 失敗時用 _exit() 而不是 exit()，後者會跑掉父行程登記的 atexit 處理常式。
  */
-[[noreturn]] void run_child(inst_t &inst, std::vector<char *> &argv,
-                            std::vector<char *> &envp, bool replace_env)
+[[noreturn]] void run_child(inst_t &inst, std::vector<char *> &argv)
 {
     if (!child_redirect(inst.stdin_path, STDIN_FILENO, O_RDONLY) ||
         !child_redirect(inst.stdout_path, STDOUT_FILENO,
@@ -90,9 +88,16 @@ bool child_redirect(const std::string &path, int target_fd, int flags)
     if (!inst.cwd.empty() && chdir(inst.cwd.c_str()) != 0) {
         _exit(kExitSetupFailed);
     }
-    if (replace_env) {
-        /* execvpe 是 glibc 專有的，改設 environ 才是可攜的做法。 */
-        environ = envp.data();
+
+    /* env 非空就在繼承的環境上逐筆覆寫/新增(setenv 語意)，不是整組替換。
+     * entry 在讀寫時已驗證為合法 KEY=VALUE，所以 '=' 必然存在且不在最前面。
+     * 同名的後者覆寫前者，因為是照順序逐筆 setenv。 */
+    for (const std::string &entry : inst.env) {
+        const std::string::size_type eq = entry.find('=');
+        if (setenv(entry.substr(0, eq).c_str(), entry.c_str() + eq + 1, 1) !=
+            0) {
+            _exit(kExitSetupFailed);   /* 通常是 ENOMEM，歸類為佈置失敗(126) */
+        }
     }
 
     execvp(argv[0], argv.data());
@@ -114,12 +119,6 @@ ExecState execute(inst_t &inst, ExecResult &result)
         return ExecState::InvalidArgument;
     }
 
-    /*
-     * env 是空的就代表繼承，不是「換成一個空的環境」；兩者在 execvp 之前
-     * 只差在要不要動 environ。
-     */
-    const bool replace_env = !inst.env.empty();
-    std::vector<char *> envp = to_c_envp(inst);
     std::vector<char *> argv = to_c_argv(inst);
 
     const pid_t pid = fork();
@@ -133,7 +132,7 @@ ExecState execute(inst_t &inst, ExecResult &result)
         return ExecState::SpawnFailed;
     }
     if (pid == 0) {
-        run_child(inst, argv, envp, replace_env);
+        run_child(inst, argv);
     }
 
     /* 子行程一定要回收，否則會留下殭屍行程。 */

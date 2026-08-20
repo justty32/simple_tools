@@ -20,16 +20,20 @@
  * allocation failure: running out of memory is reported as
  * AOS_INST_ALLOC_FAILED or a NULL return.
  *
- * An instruction is eight lines, one field per line:
- *   argv, stdin, stdout, stderr, exit, cwd, env, extra.
- * The argv and env lines are tab-separated with no quoting or escaping;
- * spaces, quotes and backslashes are ordinary characters, and adjacent tabs
- * preserve empty arguments. The env line carries the environment itself,
- * one KEY=VALUE per entry, and an empty env line is an empty list, which is
- * legal; an empty argv line is not. Every line, including the eighth, must
- * end with a newline, which is what lets a truncated record be told apart
- * from a complete one whose eighth line happens to be empty. Both LF and
- * CRLF are accepted on input; the writer always emits LF.
+ * An instruction is nine lines: eight field lines, one field per line,
+ *   argv, stdin, stdout, stderr, exit, cwd, env, extra,
+ * followed by a ninth line that is always empty and separates one record
+ * from the next. The argv and env lines are tab-separated with no quoting or
+ * escaping; spaces, quotes and backslashes are ordinary characters, and
+ * adjacent tabs preserve empty arguments. The env line carries the
+ * environment itself, one KEY=VALUE per entry, and an empty env line is an
+ * empty list, which is legal; an empty argv line is not. Every line,
+ * including the eighth field line and the blank separator, ends with a
+ * newline. The separator makes a misaligned stream detectable: a record
+ * missing or gaining a line pushes a non-empty data line into the separator
+ * position, which the reader rejects rather than silently running the wrong
+ * command. Both LF and CRLF are accepted on input; the writer always emits
+ * LF.
  */
 
 #ifdef __cplusplus
@@ -74,7 +78,9 @@ typedef enum aos_inst_state {
      */
     AOS_INST_ALLOC_FAILED = 14,
     /* 同樣只存在於 C 介面：aos_instruction_write_buffer 的緩衝區不夠大。 */
-    AOS_INST_BUFFER_TOO_SMALL = 15
+    AOS_INST_BUFFER_TOO_SMALL = 15,
+    /* 讀取：八行欄位之後那一行不是空的，代表記錄錯位。 */
+    AOS_INST_MISSING_SEPARATOR = 16
 } aos_inst_state;
 
 /*
@@ -161,7 +167,9 @@ AOS_API const char *aos_instruction_field(const aos_instruction *inst,
 
 /*
  * The environment, entry by entry. Zero entries means the child inherits
- * this process's environment; any entry at all replaces it wholesale.
+ * this process's environment unchanged; any entries extend it -- each
+ * KEY=VALUE overrides a matching name, adds an unmatched one, and leaves the
+ * rest in place, with a later duplicate winning over an earlier one.
  * aos_instruction_env returns NULL when index is out of range, and borrows
  * the instruction's storage exactly as aos_instruction_arg does.
  */
@@ -204,8 +212,9 @@ AOS_API aos_inst_state aos_instruction_push_env(aos_instruction *inst,
  * record can never be mistaken for a whole one and the previous record
  * never survives a failed read.
  *
- * max_record_bytes bounds the eight lines' combined length as they arrive,
- * excluding the newline that ends each of them, and must be positive:
+ * max_record_bytes bounds the eight field lines' combined length as they
+ * arrive, excluding the newline that ends each of them and the blank
+ * separator, and must be positive:
  * without it one malformed line would allocate without bound, and an
  * instruction file is a trust boundary. Pass aos_inst_record_max_bytes()
  * for the library's default. Exceeding it is AOS_INST_TOO_LONG.
@@ -219,8 +228,9 @@ AOS_API aos_inst_state aos_instruction_read(FILE *stream,
                                             size_t max_record_bytes);
 
 /*
- * Write one instruction as eight lines, each ending in LF, so repeated
- * calls append records that aos_instruction_read consumes. The whole record
+ * Write one instruction as nine lines -- eight field lines plus a trailing
+ * blank separator, each ending in LF -- so repeated calls append records
+ * that aos_instruction_read consumes. The whole record
  * is validated before the first byte is written, so a rejected instruction
  * leaves the stream untouched. A write that fails part-way through may
  * still have emitted a partial record.
@@ -270,9 +280,10 @@ AOS_API aos_inst_state aos_instruction_write_buffer(const aos_instruction *inst,
  *               It marks the instruction as finished, not as correct.
  *   cwd         empty inherits the caller's working directory.
  *   env         empty inherits the caller's environment entirely.
- *               Otherwise the entries *replace* the environment; they do
- *               not extend it, and are passed to the child exactly as they
- *               stand.
+ *               Otherwise the entries *extend* it: each is applied with
+ *               setenv, overriding a matching name, adding an unmatched one,
+ *               and leaving every other inherited variable in place. A later
+ *               duplicate key wins over an earlier one.
  *   extra       ignored.
  *
  * The status, following the shell's conventions:
