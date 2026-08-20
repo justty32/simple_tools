@@ -7,10 +7,11 @@
 
 ## 快速開始
 
-指令檔裡一筆指令佔八行。用 `printf` 產生一筆（`\t` 是 Tab，八行都要有換行）：
+指令檔裡一筆指令佔九行：八行欄位再加一行固定為空的分隔。用 `printf` 產生一筆
+（`\t` 是 Tab，九行都要有換行，最後那個空行就是分隔）：
 
 ```sh
-printf 'echo\thello world\n\nout.txt\n\nstatus.txt\n\n\n\n' > insts
+printf 'echo\thello world\n\nout.txt\n\nstatus.txt\n\n\n\n\n' > insts
 ```
 
 跑它：
@@ -21,18 +22,20 @@ cat out.txt      # hello world
 cat status.txt   # 0
 ```
 
-八行分別是 argv、stdin、stdout、stderr、exit、cwd、env、extra。留空代表照預設來。
-env 那一行放的是環境變數本身（Tab 分隔的 `KEY=VALUE`），不是一個檔案路徑。
+前八行分別是 argv、stdin、stdout、stderr、exit、cwd、env、extra，留空代表照預設
+來；第九行固定為空，是記錄之間的分隔。env 那一行放的是環境變數本身（Tab 分隔的
+`KEY=VALUE`），不是一個檔案路徑。
 完整規格看 [docs/format.md](docs/format.md)，執行時每個欄位的行為看
 [docs/exec.md](docs/exec.md)。
 
 > **注意**：執行一個指令檔等於用你的權限跑任意指令。對指令檔的寫入權限，等同於
 > 任意程式碼執行權限。
 >
-> 而且記錄之間沒有分隔符號，所以**任何一筆多一行或少一行，後面全部錯位**，並且會
-> 產生語法合法、內容卻來自別筆的指令 —— 解析器偵測不到，執行起來就是跑一個你沒
-> 寫過的指令。**請用 `aos_instruction_write` 產生指令檔，不要手寫。**
-> 詳見 [docs/exec.md](docs/exec.md#-錯位是偵測不到的而且會執行你沒寫過的指令)。
+> 記錄之間用一行空白分隔，所以**多一行或少一行會在下一次讀取時被抓到** —— 錯位
+> 會讓非空的資料落在該是空白分隔的位置，解析就停在那裡，而不是默默解出一筆內容
+> 來自別筆的指令。這是相對早期版本的一大改進，但**還是請用 `aos_instruction_write`
+> 產生指令檔**：它整筆驗證完才寫，連錯位的機會都不給。詳見
+> [docs/format.md](docs/format.md#錯位現在測得到了)。
 
 ## 編譯
 
@@ -76,8 +79,8 @@ producer | aos-c   # 邊產生邊執行
 - 程式回傳非零 —— 不影響後面。那是資料，會寫進 exit 欄位指定的檔案
 - 某筆根本跑不起來（找不到指令、cwd 不存在、重導向開不了）—— 一樣不影響後面，
   它是一筆結束碼 127 或 126 的記錄，跟 shell 一樣
-- 記錄格式壞掉 —— **停止整條串流**。記錄之間沒有分隔符號，錯位之後無法重新對齊，
-  硬讀下去會把後面每一筆都解成別筆欄位拼出來的垃圾
+- 記錄格式壞掉（含少行／多行讓空白分隔對不上）—— **停止整條串流**。錯位會被空白
+  分隔行抓到，但抓到之後沒辦法安全地重新對齊，所以就停在那裡
 
 全部成功時完全不輸出，回傳 0。有任何一筆失敗就回傳 1，並在最後印出
 `aos: N of M instructions failed`。細節見 [docs/exec.md](docs/exec.md#多筆指令)，

@@ -56,12 +56,14 @@ struct inst_t {
 Ok  InvalidArgument  Eof  Incomplete  TooLong  ReadError
 EmptyArgv  TooManyArgs
 ArgumentContainsTab  ArgumentContainsLineBreak  FieldContainsLineBreak
-WriteError  EnvEntryMalformed  TooManyEnv
+WriteError  EnvEntryMalformed  TooManyEnv  MissingSeparator
 ```
 
 意思跟 [C API 的對照表](capi.md#aos_inst_state)一樣，但這裡**少兩個**：C 那邊的
 `ALLOC_FAILED` 和 `BUFFER_TOO_SMALL` 在這裡不存在 —— 記憶體不足是 `std::bad_alloc`
-例外，而緩衝區大小的問題交給 `std::ostringstream` 處理掉了。
+例外，而緩衝區大小的問題交給 `std::ostringstream` 處理掉了。`MissingSeparator`
+兩邊都有，代表八行欄位之後那一行不是空的（記錄錯位）；它的數值是 16，跳過那兩個
+C 專屬狀態佔住的 14、15。
 
 ### `aos::ExecState` 與 `aos::ExecResult`
 
@@ -84,7 +86,7 @@ struct ExecResult {
 ```cpp
 constexpr std::size_t kInstArgvMax        = 256;        /* 引數數量上限 */
 constexpr std::size_t kInstEnvMax         = 256;        /* 環境變數數量上限 */
-constexpr std::size_t kInstLineCount      = 8;          /* 一筆記錄的行數 */
+constexpr std::size_t kInstLineCount      = 8;          /* 欄位行數；記錄含分隔共九行 */
 constexpr std::size_t kInstRecordMaxBytes = 1024 * 1024; /* 預設位元組預算 */
 ```
 
@@ -108,7 +110,6 @@ const char *to_string(InstState state);
 const char *to_string(ExecState state);
 
 std::vector<char *> to_c_argv(inst_t &inst);
-std::vector<char *> to_c_envp(inst_t &inst);
 ```
 
 ### `read_instruction`
@@ -124,8 +125,9 @@ std::vector<char *> to_c_envp(inst_t &inst);
 
 ### `write_instruction`
 
-寫出一筆，八行每行都以 LF 結尾。**整筆會在寫出第一個位元組之前全部驗證完**，所以
-不合法的指令不會弄髒輸出。寫到一半 I/O 出錯還是可能留下半筆，這個無法避免。
+寫出一筆，九行（八行欄位加一行空白分隔）每行都以 LF 結尾。**整筆會在寫出第一個
+位元組之前全部驗證完**，所以不合法的指令不會弄髒輸出。寫到一半 I/O 出錯還是可能
+留下半筆，這個無法避免。
 
 ### `execute`
 
@@ -154,11 +156,8 @@ execvp(argv[0], argv.data());
 `const char *const *`。C++ 消不掉這個歷史包袱，能做的只是把它關在一個函式裡，而不
 是讓每個呼叫端各自 `const_cast`。
 
-### `to_c_envp`
-
-同一件事，來源換成 `inst.env`，給的是 `environ` / `execve` 要的形狀。空的 `env`
-攤出來就只有結尾那個 `nullptr` —— 那是「一個空的環境」，不是「繼承」；要不要繼承
-是呼叫端看 `inst.env` 空不空來決定的，`execute` 就是這樣做的。
+env 沒有對應的 `to_c_envp`：`execute` 是在子行程裡逐筆 `setenv` 來擴充繼承的環境，
+不需要先攤成 `char **`，所以那個 helper 已經移除。
 
 ## 常見用法
 
@@ -231,7 +230,7 @@ aos::read_instruction(in, inst);
 std::ofstream out("insts", std::ios::app);
 
 aos::write_instruction(out, first);
-aos::write_instruction(out, second);   /* 接在後面，記錄之間不需要分隔符號 */
+aos::write_instruction(out, second);   /* 接在後面，分隔的空白行由 write 自己補 */
 ```
 
 同一個串流連續呼叫也是接續往後寫，所以「累積一個指令檔」就是開著串流一直寫。
@@ -295,7 +294,7 @@ g++ -std=c++11 my.cpp -Iinclude -Lbuild/debug -laos \
 ```
 
 函式庫用 `-fvisibility=hidden` 建置，所以只有標了 `AOS_API` 的東西看得到 —— 共有
-8 個 C++ 進入點，`read_line`、`split_argv` 這些內部函式一個都不在符號表上。
+7 個 C++ 進入點，`read_line`、`split_argv` 這些內部函式一個都不在符號表上。
 
 Windows 上靜態連結時要定義 `AOS_STATIC`，理由和用法跟
 [C API 那邊](capi.md#windows靜態連結要定義-aos_static)一樣。

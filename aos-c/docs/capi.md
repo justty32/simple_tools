@@ -51,10 +51,13 @@
 | `AOS_INST_TOO_MANY_ENV` | 13 | 環境變數超過上限 |
 | `AOS_INST_ALLOC_FAILED` | 14 | 記憶體不足 |
 | `AOS_INST_BUFFER_TOO_SMALL` | 15 | 給 `write_buffer` 的緩衝區不夠大 |
+| `AOS_INST_MISSING_SEPARATOR` | 16 | 八行欄位之後那一行不是空的，記錄錯位了 |
 
-最後兩個只存在於 C 介面。C++ 那邊記憶體不足是 `std::bad_alloc`，例外不能穿過這道
-邊界，所以在這裡被翻成一個狀態；緩衝區大小的問題則是因為 C++ 有
-`std::ostringstream` 可以用，根本不會遇到。
+`AOS_INST_ALLOC_FAILED` 和 `AOS_INST_BUFFER_TOO_SMALL`（14、15）只存在於 C 介面。
+C++ 那邊記憶體不足是 `std::bad_alloc`，例外不能穿過這道邊界，所以在這裡被翻成一個
+狀態；緩衝區大小的問題則是因為 C++ 有 `std::ostringstream` 可以用，根本不會遇到。
+`AOS_INST_MISSING_SEPARATOR` 的數字之所以跳到 16 而不是接在 13 後面，是因為 14、15
+已經被上面那兩個 C 專屬狀態佔住，而列舉值只增不改。
 
 ### `aos_inst_field`
 
@@ -134,7 +137,8 @@ const char *aos_instruction_env(const aos_instruction *inst, size_t index);
 只有在傳了 `NULL` 指令或未知欄位時才會回 `NULL`。
 
 `env_count` 和 `env` 是 argv 那一組的翻版：0 筆代表子行程繼承你的環境，有任何一筆
-就是整組取代。
+就是在繼承的環境上擴充 —— 同名的覆寫、其餘的新增、沒提到的保留。詳細語意看
+[exec.md](exec.md#env環境變數)。
 
 ### 指標的存活期（重要）
 
@@ -202,7 +206,8 @@ aos_inst_state aos_instruction_write(FILE *stream,
   傳 0 會被當成參數錯誤，不是「不設限」
 - `INCOMPLETE` 和 `TOO_LONG` 是終點不是「等一下再試」：已經讀掉的位元組退不回串流
 
-`write` 寫出一筆，八行每行都以 LF 結尾，所以連續呼叫就會產生一個合法的指令檔。
+`write` 寫出一筆，九行（八行欄位加一行空白分隔）每行都以 LF 結尾，所以連續呼叫就會
+產生一個合法的指令檔。
 **整筆記錄會在寫出第一個位元組之前全部驗證完**，所以一筆不合法的指令不會弄髒你的
 輸出檔。但如果是寫到一半 I/O 出錯，那還是可能留下半筆。
 
@@ -215,7 +220,7 @@ aos_inst_state aos_instruction_write(FILE *stream,
 FILE *f = fopen("insts", "a");     /* "a" 而不是 "w" */
 
 aos_instruction_write(f, first);
-aos_instruction_write(f, second);   /* 接在後面，記錄之間不需要分隔符號 */
+aos_instruction_write(f, second);   /* 接在後面，分隔的空白行由 write 自己補 */
 fclose(f);
 ```
 

@@ -166,7 +166,7 @@ a compatibility break, not a bug fix.
 | existing `stdout_path` / `stderr_path` | truncate (`O_TRUNC`) | matches a shell's `>`; appending cannot be undone by the caller, truncating can be avoided by choosing a fresh path |
 | empty `cwd` | inherit the caller's working directory | |
 | empty `env` | inherit the caller's environment entirely | |
-| non-empty `env` | the entries **replace** the environment | extending is the caller's job to express; replacing is the reproducible option, and it is the one that cannot be built out of the other |
+| non-empty `env` | the entries **extend** the environment: each is applied with `setenv` (overwrite on), so a matching name is replaced, a new one is added, and everything else is inherited unchanged | this is what the tool is asked for; a full replace is no longer expressible here and is left to `env -i` in the command itself. Applying entries in order means a later duplicate key wins |
 | an `env` entry that is not `KEY=VALUE` | `EnvEntryMalformed`, at parse time | better to fail than to guess, and better to fail before a process exists than after |
 | duplicate keys in `env` | passed through verbatim | merging would mean owning a policy for which duplicate wins; the producer already has a map and can decide there |
 | empty `exit_path` | the status is discarded | |
@@ -177,7 +177,7 @@ a compatibility break, not a bug fix.
 | `extra` | ignored | |
 | `fork` failing | a runtime error, and **nothing** is written to `exit_path` | it is the one failure with no child, so there is no status to carry it |
 | several instructions | sequential, and the run continues past every failure it can | later instructions do not depend on earlier ones, so abandoning them turns one failure into many things simply not done |
-| a parse failure mid-file | fatal: the rest of the stream is not read | the format has no record separator, so a "still aligned" cursor is only aligned relative to what was already consumed; resuming would decode later records into garbage, which is worse than stopping |
+| a parse failure mid-file | fatal: the rest of the stream is not read | the blank separator line makes a dropped or added line detectable instead of silent — the shift lands non-blank data where the separator is expected (`MissingSeparator`), or pushes a field into `env` (`EnvEntryMalformed`) — but once alignment is lost the reader cannot safely re-sync, so stopping beats decoding the rest against the wrong field boundaries |
 
 ### Not telling "command not found" from "the command exited 127"
 
@@ -225,7 +225,33 @@ flag does nothing either way.
 The descriptor for stdin needs none of this: it is already fd 0, and it is
 the caller's, not ours to reopen. What it costs is documented rather than
 fixed: a child with no `stdin_path` of its own inherits fd 0, which when the
-instructions arrive on stdin is the instruction stream itself.
+instructions arrive on stdin is the instruction stream itself. A child that
+reads it consumes records meant for aos-c, and because the reader then simply
+sees fewer records and a clean EOF, the run reports success — the loss is
+silent. It only bites once a child forks while the writer is still open, so
+`std::cin`'s read-ahead hides it whenever the whole input is already buffered;
+exec.md spells this out for users.
+
+### Redirection is dup2 to files, not a captured pipe
+
+Each of the three standard descriptors is redirected in the child with
+`open` + `dup2` straight to the path the record names, and the parent never
+reads a byte of the child's output. The obvious alternative — `popen`, or a
+captured pipe the parent drains — was not taken, and the reasons are worth
+recording because a capturing design keeps looking tempting:
+
+- **The three descriptors stay independent.** A record can redirect stdout
+  and leave stderr inherited, or send each to a different file. A single
+  captured pipe cannot express that without merging the streams.
+- **Truncation falls out of `O_TRUNC`**, matching a shell's `>`, with no
+  buffer for the parent to own or size.
+- **No output buffer means no SIGPIPE hazard.** A tool that captures a
+  child's output into a fixed buffer and stops reading once it fills gets the
+  child killed by SIGPIPE on its next write; the usual workaround is to keep
+  draining and discard the overflow. Redirecting to a file sidesteps all of
+  it — the child writes at its own pace and aos-c is not in the loop. The
+  cost is that aos-c cannot see or bound the output itself; choosing the path
+  and reading the file is the consumer's job.
 
 ### Portability
 
@@ -304,7 +330,7 @@ would otherwise be misreported as a clean end of input.
 Everything is built with `-fvisibility=hidden`, so a symbol reaches the
 library's surface only by carrying `AOS_API` from `aos/export.h`. Helpers
 live in anonymous namespaces on top of that. The result is 21 C entry points
-and 10 C++ ones, and nothing else -- `read_line`, `split_argv`, `FileBuf`,
+and 9 C++ ones, and nothing else -- `read_line`, `split_argv`, `FileBuf`,
 `FdBuf` and `run_child` are all invisible from outside.
 
 `make shared` builds `libaos.so.0.1.0` with a soname of `libaos.so.0`. The
