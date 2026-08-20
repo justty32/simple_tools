@@ -325,13 +325,22 @@ into `badbit`, so the reader only sees the bytes stop. The shim checks
 `ferror` afterwards and upgrades the result to `AOS_INST_READ_ERROR`, which
 would otherwise be misreported as a clean end of input.
 
+For callers that cannot produce a `FILE *` at all -- bindings in other
+languages, mostly -- both directions have a memory path instead:
+`write_buffer` serializes into the caller's bytes, and `read_buffer` reads
+one record from a byte range through a read-only `streambuf`, reporting how
+many bytes it consumed so the caller can advance to the next. That path
+needs no `ferror` check (memory does not fail mid-read) and touches no
+`FILE *`, so the whole C API can be driven with nothing but strings and
+numbers -- which is the shape a foreign-function binding wants.
+
 ### Visibility
 
 Everything is built with `-fvisibility=hidden`, so a symbol reaches the
 library's surface only by carrying `AOS_API` from `aos/export.h`. Helpers
-live in anonymous namespaces on top of that. The result is 21 C entry points
+live in anonymous namespaces on top of that. The result is 22 C entry points
 and 9 C++ ones, and nothing else -- `read_line`, `split_argv`, `FileBuf`,
-`FdBuf` and `run_child` are all invisible from outside.
+`MemBuf`, `FdBuf` and `run_child` are all invisible from outside.
 
 `make shared` builds `libaos.so.0.1.0` with a soname of `libaos.so.0`. The
 soname only moves when the C ABI breaks; the C++ interface, having made no

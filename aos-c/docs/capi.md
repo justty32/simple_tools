@@ -197,7 +197,9 @@ aos_inst_state aos_instruction_write(FILE *stream,
                                      const aos_instruction *inst);
 ```
 
-`read` 從串流讀下一筆。用的是 `FILE *`，所以管道、`stdin`、一般檔案都可以。
+`read` 從串流讀下一筆。用的是 `FILE *`，所以管道、`stdin`、一般檔案都可以。造不出
+`FILE *` 的呼叫端（特別是其他語言的綁定）改用下面的
+[`aos_instruction_read_buffer`](#從-bytes-讀回一筆)。
 
 - 回傳 `AOS_INST_EOF` 代表檔案在兩筆之間乾淨結束了
 - **任何失敗（含 `EOF`）都會讓 `inst` 變成空的** —— 不會有讀了一半的記錄留在裡面，
@@ -272,6 +274,48 @@ free(buf);
 - 驗證失敗（引數含 Tab、沒有引數之類）會回傳對應的狀態，而且 `*needed` 留在 0
 - `needed` 可以傳 `NULL`，如果你已經知道大小
 - 結果有 NUL 結尾只是為了方便；記錄本身不可能含有 NUL，所以直接用長度也一樣安全
+
+## 從 bytes 讀回一筆
+
+`aos_instruction_read` 收的是 `FILE *`，這對別的語言的綁定不友善 —— 它們造不出一個
+乾淨的 `FILE *`。要從記憶體裡的一段位元組讀，用這個 FILE-free 的版本：
+
+```c
+aos_inst_state aos_instruction_read_buffer(const char *buffer, size_t size,
+                                           aos_instruction *inst,
+                                           size_t max_record_bytes,
+                                           size_t *consumed);
+```
+
+語意跟 `aos_instruction_read` 一模一樣（同樣的狀態、同樣的九行格式、同樣的預算），
+只差來源是 `buffer[0..size)` 而不是串流。多出來的 `consumed` 回報這一筆吃掉幾個
+位元組，讓你往前推進讀下一筆：
+
+```c
+const char *p = data;
+size_t left = data_len;
+size_t used;
+aos_inst_state state;
+
+while ((state = aos_instruction_read_buffer(p, left, inst,
+                                            aos_inst_record_max_bytes(),
+                                            &used)) == AOS_INST_OK) {
+    /* 用這一筆…注意字串指標下一次呼叫就失效，要留就先複製 */
+    p += used;
+    left -= used;
+}
+/* state 正常會停在 AOS_INST_EOF；其餘就是解析失敗 */
+```
+
+規則：
+
+- `consumed` 可以傳 `NULL`（不需要 loop 的時候）
+- `buffer` 或 `inst` 傳 `NULL` 是 `AOS_INST_INVALID_ARGUMENT`
+- `size` 為 0（buffer 非 `NULL`）是乾淨的 `AOS_INST_EOF`，不是錯誤
+- 任何失敗（含 `EOF`）都會讓 `inst` 變空，跟 `read` 一樣
+
+有了它，整套 C API 可以完全不碰 `FILE *`：`read_buffer` 讀、`write_buffer` 寫，
+參數和回傳值全是字串與數值 —— 這正是好綁定的形狀。
 
 ## 執行
 

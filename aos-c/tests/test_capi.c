@@ -595,6 +595,162 @@ static size_t test_write_buffer_round_trip_through_read(void)
 }
 
 /*
+ * read_buffer 是 read 的 FILE-free 版：用 write_buffer 產一筆位元組，直接
+ * 從記憶體讀回來，逐項比對，並確認吃掉的位元組數等於 write_buffer 回報的
+ * needed —— 一筆記錄不多不少剛好一整段。
+ */
+static size_t test_read_buffer_round_trip(void)
+{
+    aos_instruction *inst = make_sample_instruction();
+    aos_instruction *back = aos_instruction_new();
+    size_t needed = 0;
+    size_t consumed = 999;
+    char *buffer;
+    size_t i;
+
+    CHECK(back != NULL);
+    CHECK(aos_instruction_write_buffer(inst, NULL, 0, &needed) ==
+          AOS_INST_BUFFER_TOO_SMALL);
+    buffer = (char *)malloc(needed + 1);
+    CHECK(buffer != NULL);
+    CHECK(aos_instruction_write_buffer(inst, buffer, needed + 1, &needed) ==
+          AOS_INST_OK);
+
+    CHECK(aos_instruction_read_buffer(buffer, needed, back,
+                                      aos_inst_record_max_bytes(),
+                                      &consumed) == AOS_INST_OK);
+    /* 吃掉的位元組數必須恰好等於這筆記錄的長度。 */
+    CHECK(consumed == needed);
+
+    CHECK(aos_instruction_argc(back) == aos_instruction_argc(inst));
+    for (i = 0; i < aos_instruction_argc(inst); ++i) {
+        CHECK(strcmp(aos_instruction_arg(back, i),
+                     aos_instruction_arg(inst, i)) == 0);
+    }
+    CHECK(aos_instruction_env_count(back) == aos_instruction_env_count(inst));
+    for (i = 0; i < aos_instruction_env_count(inst); ++i) {
+        CHECK(strcmp(aos_instruction_env(back, i),
+                     aos_instruction_env(inst, i)) == 0);
+    }
+    for (i = 0; i < FIELD_COUNT; ++i) {
+        CHECK(strcmp(aos_instruction_field(back, kAllFields[i]),
+                     aos_instruction_field(inst, kAllFields[i])) == 0);
+    }
+
+    free(buffer);
+    aos_instruction_free(inst);
+    aos_instruction_free(back);
+    return 1;
+}
+
+/*
+ * 一段 buffer 兩筆記錄：讀第一筆拿到 consumed，往前推進 buffer 與 size 再
+ * 讀第二筆，最後一次讀到 EOF。這是「用 consumed loop 出整段」的正主。
+ */
+static size_t test_read_buffer_two_records(void)
+{
+    static const char record[] =
+        "one\n\n\n\n\n/first\n\n\n\n"
+        "two\tb\n\n\n\n\n/second\n\n\n\n";
+    const char *cursor = record;
+    size_t remaining = sizeof(record) - 1;   /* 不含結尾 NUL。 */
+    aos_instruction *inst = aos_instruction_new();
+    size_t consumed = 0;
+
+    CHECK(inst != NULL);
+
+    CHECK(aos_instruction_read_buffer(cursor, remaining, inst,
+                                      aos_inst_record_max_bytes(),
+                                      &consumed) == AOS_INST_OK);
+    CHECK(consumed > 0);
+    CHECK(aos_instruction_argc(inst) == 1);
+    CHECK(strcmp(aos_instruction_arg(inst, 0), "one") == 0);
+    CHECK(strcmp(aos_instruction_field(inst, AOS_FIELD_CWD), "/first") == 0);
+    cursor += consumed;
+    remaining -= consumed;
+
+    CHECK(aos_instruction_read_buffer(cursor, remaining, inst,
+                                      aos_inst_record_max_bytes(),
+                                      &consumed) == AOS_INST_OK);
+    CHECK(consumed > 0);
+    CHECK(aos_instruction_argc(inst) == 2);
+    CHECK(strcmp(aos_instruction_arg(inst, 0), "two") == 0);
+    CHECK(strcmp(aos_instruction_arg(inst, 1), "b") == 0);
+    CHECK(strcmp(aos_instruction_field(inst, AOS_FIELD_CWD), "/second") == 0);
+    cursor += consumed;
+    remaining -= consumed;
+
+    /* 兩筆吃完，剩下的空範圍是乾淨的 EOF，consumed 歸零。 */
+    consumed = 999;
+    CHECK(aos_instruction_read_buffer(cursor, remaining, inst,
+                                      aos_inst_record_max_bytes(),
+                                      &consumed) == AOS_INST_EOF);
+    CHECK(consumed == 0);
+    CHECK(aos_instruction_argc(inst) == 0);
+
+    aos_instruction_free(inst);
+    return 1;
+}
+
+/*
+ * read_buffer 的邊界與錯誤：空 buffer（size==0，buffer 非 NULL）是乾淨 EOF；
+ * NULL buffer 或 NULL inst 是 INVALID_ARGUMENT；第九行非空是 MISSING_SEPARATOR；
+ * consumed 傳 NULL 不能當機。
+ */
+static size_t test_read_buffer_edges(void)
+{
+    static const char empty[] = "";
+    static const char misaligned[] =
+        "prog\n\n\n\n\n\n\n\nNOT_EMPTY\n";
+    aos_instruction *inst = aos_instruction_new();
+    size_t consumed;
+    size_t cases = 0;
+
+    CHECK(inst != NULL);
+
+    /* 空輸入 = 乾淨結束：EOF、consumed==0，不是錯誤。 */
+    consumed = 999;
+    CHECK(aos_instruction_read_buffer(empty, 0, inst,
+                                      aos_inst_record_max_bytes(),
+                                      &consumed) == AOS_INST_EOF);
+    CHECK(consumed == 0);
+    CHECK(aos_instruction_argc(inst) == 0);
+    ++cases;
+
+    /* NULL buffer 與 NULL inst 都是 INVALID_ARGUMENT，且 consumed 被清空。 */
+    consumed = 999;
+    CHECK(aos_instruction_read_buffer(NULL, 10, inst,
+                                      aos_inst_record_max_bytes(),
+                                      &consumed) == AOS_INST_INVALID_ARGUMENT);
+    CHECK(consumed == 0);
+    ++cases;
+
+    consumed = 999;
+    CHECK(aos_instruction_read_buffer(empty, 0, NULL,
+                                      aos_inst_record_max_bytes(),
+                                      &consumed) == AOS_INST_INVALID_ARGUMENT);
+    CHECK(consumed == 0);
+    ++cases;
+
+    /* 第九行非空：記錄錯位，讀取端擋下而不是跑錯指令。 */
+    consumed = 999;
+    CHECK(aos_instruction_read_buffer(misaligned, sizeof(misaligned) - 1, inst,
+                                      aos_inst_record_max_bytes(),
+                                      &consumed) == AOS_INST_MISSING_SEPARATOR);
+    CHECK(aos_instruction_argc(inst) == 0);
+    ++cases;
+
+    /* consumed 傳 NULL 是合法用法：功能照常，不能當機。 */
+    CHECK(aos_instruction_read_buffer(empty, 0, inst,
+                                      aos_inst_record_max_bytes(),
+                                      NULL) == AOS_INST_EOF);
+    ++cases;
+
+    aos_instruction_free(inst);
+    return cases;
+}
+
+/*
  * 沒有專用的附加函式：write 本身就是往串流目前的位置寫，重複呼叫兩次自
  * 然就是附加兩筆記錄。這是文件裡寫明的用法，這裡把它真正測過一遍。
  */
@@ -945,6 +1101,9 @@ size_t run_capi_tests(void)
     count += test_write_buffer_validation_failures();
     count += test_write_buffer_null_handling();
     count += test_write_buffer_round_trip_through_read();
+    count += test_read_buffer_round_trip();
+    count += test_read_buffer_two_records();
+    count += test_read_buffer_edges();
     count += test_append_two_records_via_write();
     count += test_env_write_validation();
     count += test_argv_and_record_limits();

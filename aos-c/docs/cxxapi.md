@@ -278,6 +278,7 @@ aos::write_instruction(out, inst);
 | 讀取 | `read_instruction(istream&, ...)` | `aos_instruction_read(FILE *, ...)` |
 | 寫入 | `write_instruction(ostream&, ...)` | `aos_instruction_write(FILE *, ...)` |
 | 變成 bytes | `std::ostringstream` | `aos_instruction_write_buffer` |
+| 從 bytes 讀 | `std::istringstream` | `aos_instruction_read_buffer` |
 | 執行 | `execute(inst_t&, ExecResult&)` | `aos_instruction_execute` |
 | 取用引數 | `inst.argv[i]` | `aos_instruction_arg(inst, i)` |
 | 設定欄位 | `inst.cwd = "/tmp"` | `aos_instruction_set_field(...)` |

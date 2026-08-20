@@ -114,6 +114,23 @@ private:
     char ch_;
 };
 
+/*
+ * 唯讀地把一段記憶體接成 streambuf。全部內容一開始就在 get 區，不需要
+ * underflow；consumed() 回報已經讀過幾個位元組，給 read_buffer 前進用。
+ */
+class MemBuf : public std::streambuf {
+public:
+    MemBuf(const char *data, std::size_t size)
+    {
+        char *p = const_cast<char *>(data);   /* streambuf 的 get 區要 char* */
+        setg(p, p, p + size);
+    }
+    std::size_t consumed() const
+    {
+        return static_cast<std::size_t>(gptr() - eback());
+    }
+};
+
 /* 單一字串欄位的查表；未知欄位回傳 nullptr。 */
 const std::string *field_of(const aos::inst_t &inst, aos_inst_field field)
 {
@@ -272,6 +289,32 @@ aos_inst_state aos_instruction_read(FILE *stream, aos_instruction *inst,
          */
         if (state != aos::InstState::Ok && std::ferror(stream)) {
             return AOS_INST_READ_ERROR;
+        }
+        return static_cast<aos_inst_state>(static_cast<int>(state));
+    } catch (...) {
+        return AOS_INST_ALLOC_FAILED;
+    }
+}
+
+aos_inst_state aos_instruction_read_buffer(const char *buffer, size_t size,
+                                           aos_instruction *inst,
+                                           size_t max_record_bytes,
+                                           size_t *consumed)
+{
+    if (consumed != nullptr) {
+        *consumed = 0;
+    }
+    if (buffer == nullptr || inst == nullptr) {
+        return AOS_INST_INVALID_ARGUMENT;
+    }
+    try {
+        MemBuf buf(buffer, size);
+        std::istream in(&buf);
+        const aos::InstState state =
+            aos::read_instruction(in, inst->inst, max_record_bytes);
+
+        if (consumed != nullptr) {
+            *consumed = buf.consumed();
         }
         return static_cast<aos_inst_state>(static_cast<int>(state));
     } catch (...) {

@@ -228,6 +228,21 @@ AOS_API aos_inst_state aos_instruction_read(FILE *stream,
                                             size_t max_record_bytes);
 
 /*
+ * 從記憶體裡的一段位元組讀下一筆,是 aos_instruction_read 的 FILE-free 版本,
+ * 好讓不方便造出 FILE* 的呼叫端(尤其是其他語言的綁定)也能讀。
+ *
+ * 從 buffer[0] 開始讀一筆,把實際吃掉的位元組數寫進 *consumed —— 呼叫端據此
+ * 前進讀下一筆。回傳值與 aos_instruction_read 完全一樣(含 AOS_INST_EOF)。
+ *
+ * consumed 可以傳 NULL。任何失敗(含 EOF)都會讓 inst 變成空的,規則同 read。
+ */
+AOS_API aos_inst_state aos_instruction_read_buffer(const char *buffer,
+                                                   size_t size,
+                                                   aos_instruction *inst,
+                                                   size_t max_record_bytes,
+                                                   size_t *consumed);
+
+/*
  * Write one instruction as nine lines -- eight field lines plus a trailing
  * blank separator, each ending in LF -- so repeated calls append records
  * that aos_instruction_read consumes. The whole record
