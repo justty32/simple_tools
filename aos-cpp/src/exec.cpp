@@ -2,6 +2,8 @@
 
 #include <aos/exec.hpp>
 
+#include "spawn_prep.hpp"
+
 #include <cerrno>
 #include <cstdint>
 #include <cstdio>
@@ -64,12 +66,12 @@ bool write_exit_status(const std::string &path, int status) {
     return wrote && closed;
 }
 
-bool child_redirect(const std::string &path, int target_fd, int flags) {
-    if (path.empty()) {
+bool child_redirect(const char *path, int target_fd, int flags) {
+    if (path == nullptr) {
         return true;
     }
 
-    const int fd = open_retry(path.c_str(), flags, 0666);
+    const int fd = open_retry(path, flags, 0666);
     if (fd < 0) {
         return false;
     }
@@ -83,25 +85,33 @@ bool child_redirect(const std::string &path, int target_fd, int flags) {
     return true;
 }
 
-[[noreturn]] void run_child(inst_t &inst, std::vector<char *> &argv) {
-    if (!child_redirect(inst.stdin_path, STDIN_FILENO, O_RDONLY) ||
-        !child_redirect(inst.stdout_path, STDOUT_FILENO,
+struct ChildPlan {
+    const char *stdin_path;
+    const char *stdout_path;
+    const char *stderr_path;
+    const char *cwd;
+    const char *executable;
+    char *const *argv;
+    char *const *envp;
+    int failure_status;
+};
+
+[[noreturn]] void run_child(const ChildPlan &plan) {
+    if (!child_redirect(plan.stdin_path, STDIN_FILENO, O_RDONLY) ||
+        !child_redirect(plan.stdout_path, STDOUT_FILENO,
                         O_WRONLY | O_CREAT | O_TRUNC) ||
-        !child_redirect(inst.stderr_path, STDERR_FILENO,
+        !child_redirect(plan.stderr_path, STDERR_FILENO,
                         O_WRONLY | O_CREAT | O_TRUNC)) {
         _exit(kExitSetupFailed);
     }
-    if (!inst.cwd.empty() && chdir(inst.cwd.c_str()) != 0) {
+    if (plan.cwd != nullptr && chdir(plan.cwd) != 0) {
         _exit(kExitSetupFailed);
     }
-
-    for (const auto &entry : inst.env) {
-        if (setenv(entry.first.c_str(), entry.second.c_str(), 1) != 0) {
-            _exit(kExitSetupFailed);
-        }
+    if (plan.failure_status != 0) {
+        _exit(plan.failure_status);
     }
 
-    execvp(argv[0], argv.data());
+    execve(plan.executable, plan.argv, plan.envp);
     _exit(kExitExecFailed);
 }
 
@@ -190,6 +200,18 @@ ExecState execute(inst_t &inst, ExecResult &result) {
     }
     argv.push_back(nullptr);
 
+    detail::SpawnPrep prep;
+    detail::prepare_spawn(inst, prep);
+    const auto path_or_null = [](const std::string &path) {
+        return path.empty() ? nullptr : path.c_str();
+    };
+    const ChildPlan child_plan{
+        path_or_null(inst.stdin_path), path_or_null(inst.stdout_path),
+        path_or_null(inst.stderr_path), path_or_null(inst.cwd),
+        prep.executable.c_str(), argv.data(), prep.envp.data(),
+        prep.failure_status,
+    };
+
     const pid_t pid = fork();
     if (pid < 0) {
         result.error = errno;
@@ -199,7 +221,7 @@ ExecState execute(inst_t &inst, ExecResult &result) {
         if (setpgid(0, 0) != 0) {
             _exit(kExitSetupFailed);
         }
-        run_child(inst, argv);
+        run_child(child_plan);
     }
 
     if (setpgid(pid, pid) != 0 && errno != EACCES) {

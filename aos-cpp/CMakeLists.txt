@@ -21,6 +21,7 @@ find_package(Catch2 CONFIG REQUIRED)
 set(AOS_OBJECT_SOURCES
     src/inst.cpp
     src/format.cpp
+    src/spawn_prep.cpp
     src/exec.cpp
     src/capi.cpp
 )

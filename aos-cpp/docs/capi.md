@@ -54,10 +54,13 @@ length to `size`, and does not modify the buffer.
 termination, `timed_out` reports a timeout initiated by the library, and `error`
 contains `errno` for applicable library failures.
 
-Do not call `aos_instruction_execute()` from a multithreaded process. It uses
-`fork()`, and before `exec` the child calls `setenv()` and `execvp()`. Neither is
-on POSIX's async-signal-safe list, so locks held by another thread at the time of
-the fork can deadlock the child.
+`aos_instruction_execute()` is safe to call from a multithreaded process. All
+allocation needed to merge the inherited environment, apply overrides, build
+`envp`, and search `PATH` is completed in the parent before `fork()`. Before
+`execve()`, the child uses only async-signal-safe POSIX operations for process
+group setup, redirection, closing descriptors, changing directory, and exiting
+on failure, so it cannot deadlock on an allocator lock inherited from another
+thread.
 
 Separate instruction handles may be constructed and edited independently, but
 the strings returned by getters must only be used while their handle is not
