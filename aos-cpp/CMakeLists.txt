@@ -22,8 +22,11 @@ set(AOS_OBJECT_SOURCES
     src/inst.cpp
     src/format.cpp
     src/spawn_prep.cpp
+    src/wait.cpp
     src/exec.cpp
     src/capi.cpp
+    src/capi_instruction.cpp
+    src/capi_io.cpp
 )
 if(AOS_OBJECT_SOURCES)
     add_library(aos_objects OBJECT ${AOS_OBJECT_SOURCES})
@@ -50,7 +53,9 @@ add_executable(aos_tests
     tests/test_format_write.cpp
     tests/test_format_limits.cpp
     tests/test_format_malformed.cpp
-    tests/test_exec.cpp
+    tests/test_exec_streams.cpp
+    tests/test_exec_path.cpp
+    tests/test_exec_status.cpp
     tests/test_timeout.cpp
     tests/test_run.cpp
     src/run.cpp

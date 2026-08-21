@@ -3,17 +3,16 @@
 #include <aos/exec.hpp>
 
 #include "spawn_prep.hpp"
+#include "wait.hpp"
 
 #include <cerrno>
 #include <cstdint>
 #include <cstdio>
-#include <limits>
 #include <string>
 #include <vector>
 
 #include <fcntl.h>
 #include <signal.h>
-#include <time.h>
 #include <sys/wait.h>
 #include <unistd.h>
 
@@ -23,7 +22,6 @@ namespace {
 constexpr int kExitSetupFailed = 126;
 constexpr int kExitExecFailed = 127;
 constexpr std::uint64_t kTimeoutGraceMs = 2000;
-constexpr std::uint64_t kMaxPollMs = 50;
 
 int open_retry(const char *path, int flags, mode_t mode = 0) {
     int fd;
@@ -115,75 +113,6 @@ struct ChildPlan {
     _exit(kExitExecFailed);
 }
 
-pid_t wait_retry(pid_t pid, int *status, int options) {
-    pid_t waited;
-    do {
-        waited = waitpid(pid, status, options);
-    } while (waited < 0 && errno == EINTR);
-    return waited;
-}
-
-bool monotonic_now(timespec &value) {
-    return clock_gettime(CLOCK_MONOTONIC, &value) == 0;
-}
-
-std::uint64_t elapsed_ms(const timespec &start, const timespec &end) {
-    std::uint64_t seconds = static_cast<std::uint64_t>(end.tv_sec - start.tv_sec);
-    long nanoseconds = end.tv_nsec - start.tv_nsec;
-    if (nanoseconds < 0) {
-        --seconds;
-        nanoseconds += 1000000000L;
-    }
-    if (seconds > std::numeric_limits<std::uint64_t>::max() / 1000) {
-        return std::numeric_limits<std::uint64_t>::max();
-    }
-    return seconds * 1000 + static_cast<std::uint64_t>(nanoseconds / 1000000L);
-}
-
-void sleep_ms(std::uint64_t milliseconds) {
-    timespec request{
-        static_cast<time_t>(milliseconds / 1000),
-        static_cast<long>((milliseconds % 1000) * 1000000),
-    };
-    timespec remaining{};
-    while (nanosleep(&request, &remaining) < 0 && errno == EINTR) {
-        request = remaining;
-    }
-}
-
-bool wait_until(pid_t pid, std::uint64_t limit_ms, int &raw_status,
-                int &error) {
-    timespec start{};
-    if (!monotonic_now(start)) {
-        error = errno;
-        return false;
-    }
-
-    std::uint64_t poll_ms = 1;
-    for (;;) {
-        const pid_t waited = wait_retry(pid, &raw_status, WNOHANG);
-        if (waited == pid) {
-            return true;
-        }
-        if (waited < 0) {
-            error = errno;
-            return false;
-        }
-
-        timespec now{};
-        if (!monotonic_now(now)) {
-            error = errno;
-            return false;
-        }
-        const std::uint64_t elapsed = elapsed_ms(start, now);
-        if (elapsed >= limit_ms) {
-            return false;
-        }
-        sleep_ms(poll_ms < limit_ms - elapsed ? poll_ms : limit_ms - elapsed);
-        poll_ms = poll_ms < kMaxPollMs / 2 ? poll_ms * 2 : kMaxPollMs;
-    }
-}
-
 }  // namespace
 
 ExecState execute(inst_t &inst, ExecResult &result) {
@@ -228,7 +157,7 @@ ExecState execute(inst_t &inst, ExecResult &result) {
         const int saved_error = errno;
         kill(pid, SIGKILL);
         int ignored_status = 0;
-        wait_retry(pid, &ignored_status, 0);
+        detail::wait_retry(pid, &ignored_status, 0);
         result.error = saved_error;
         return ExecState::SpawnFailed;
     }
@@ -236,10 +165,10 @@ ExecState execute(inst_t &inst, ExecResult &result) {
     int raw_status = 0;
     pid_t waited = 0;
     if (inst.timeout_ms == 0) {
-        waited = wait_retry(pid, &raw_status, 0);
+        waited = detail::wait_retry(pid, &raw_status, 0);
     } else {
         int wait_error = 0;
-        if (wait_until(pid, inst.timeout_ms, raw_status, wait_error)) {
+        if (detail::wait_until(pid, inst.timeout_ms, raw_status, wait_error)) {
             waited = pid;
         } else if (wait_error != 0) {
             result.error = wait_error;
@@ -247,7 +176,7 @@ ExecState execute(inst_t &inst, ExecResult &result) {
         } else {
             result.timed_out = true;
             kill(-pid, SIGTERM);
-            if (wait_until(pid, kTimeoutGraceMs, raw_status, wait_error)) {
+            if (detail::wait_until(pid, kTimeoutGraceMs, raw_status, wait_error)) {
                 waited = pid;
                 /*
                  * 領頭的子行程死了，不代表整個群組死了：忽略 SIGTERM 的孫行程
@@ -261,7 +190,7 @@ ExecState execute(inst_t &inst, ExecResult &result) {
                 return ExecState::WaitFailed;
             } else {
                 kill(-pid, SIGKILL);
-                waited = wait_retry(pid, &raw_status, 0);
+                waited = detail::wait_retry(pid, &raw_status, 0);
             }
         }
     }
