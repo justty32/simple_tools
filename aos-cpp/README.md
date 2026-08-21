@@ -13,7 +13,8 @@ cmake --build --preset default
 ctest --preset default --output-on-failure
 ```
 
-The executable is `build/aos-cpp` with the default preset.
+The executable is `build/aos-cpp` with the default preset. The same build
+produces `build/libaos.so` for the C and C++ library APIs.
 
 ## Usage
 
@@ -31,5 +32,8 @@ For example, `jobs.jsonl` can capture output and the child status:
 ```
 
 Running `aos-cpp jobs.jsonl` writes `hello from aos-cpp` to `hello.txt` and
-`0` to `hello.status`. See [the format](docs/format.md), [execution semantics](docs/exec.md),
-and [architecture](docs/architecture.md) for details.
+`0` to `hello.status`.
+
+See [the record format](docs/format.md), [execution semantics](docs/exec.md),
+[the C++ API](docs/cxxapi.md), [the C API](docs/capi.md), and
+[the architecture](docs/architecture.md) for details.
