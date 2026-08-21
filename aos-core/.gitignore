@@ -1,0 +1,10 @@
+bin/
+bin-analyze/
+bin-mod/
+bin-strict/
+build/
+build-analyze/
+build-mod/
+build-strict/
+compile_commands.json
+.cache/
