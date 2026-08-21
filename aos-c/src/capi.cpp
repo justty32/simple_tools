@@ -65,8 +65,6 @@ AOS_CHECK_STATE(aos::ExecState::InvalidArgument, AOS_EXEC_INVALID_ARGUMENT);
 AOS_CHECK_STATE(aos::ExecState::SpawnFailed, AOS_EXEC_SPAWN_FAILED);
 AOS_CHECK_STATE(aos::ExecState::WaitFailed, AOS_EXEC_WAIT_FAILED);
 AOS_CHECK_STATE(aos::ExecState::ExitWriteFailed, AOS_EXEC_EXIT_WRITE_FAILED);
-AOS_CHECK_STATE(aos::ExecState::PlatformUnsupported,
-                AOS_EXEC_PLATFORM_UNSUPPORTED);
 
 #undef AOS_CHECK_STATE
 
@@ -441,7 +439,7 @@ const char *aos_exec_state_string(aos_exec_state state)
     if (value == AOS_EXEC_ALLOC_FAILED) {
         return "out of memory";
     }
-    if (value < AOS_EXEC_OK || value > AOS_EXEC_PLATFORM_UNSUPPORTED) {
+    if (value < AOS_EXEC_OK || value > AOS_EXEC_EXIT_WRITE_FAILED) {
         return "unknown execution result";
     }
     return aos::to_string(static_cast<aos::ExecState>(value));

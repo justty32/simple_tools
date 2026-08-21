@@ -157,8 +157,10 @@
 
 1. ~~走串流前，把 insts 的讀取 fd 改成帶 `O_CLOEXEC`（結論五）。~~ 已完成
    （commit 0fc27e2，見 [SPEC_stream_1](SPEC_stream_1.md)）。
-2. 清掉 Windows 分支、讓專案明說只支援 POSIX（已另行交辦）。仍未做：`run.cpp`
-   與 `exec.cpp` 都還留著非 POSIX 的分支。
+2. ~~清掉 Windows 分支、讓專案明說只支援 POSIX。~~ 已完成：`exec.cpp` 與
+   `run.cpp` 的 `#if` 守衛和 `#else` 分支、`ExecState::PlatformUnsupported`
+   （C ABI 的 5 號留空退休）、`export.h` 的 dllexport／dllimport 三態與隨之
+   而來的 `AOS_STATIC`、Makefile 的 `Windows_NT` 區塊，全部拿掉。
 3. ~~視需要簡化 `ExecState`（例如合併三個 `OpenStd*Failed`）~~ 已完成，但走的
    是另一條路：那三個狀態連同 `ChdirFailed` 一起消失，變成子行程的結束碼 126
    （commit 70bf3a3，見 [SPEC_exec_1](SPEC_exec_1.md)）。砍掉未使用的 `extra`

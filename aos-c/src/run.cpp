@@ -9,24 +9,16 @@
 
 #include <cerrno>
 #include <cstring>
-#include <fstream>
 #include <iostream>
 #include <istream>
 #include <streambuf>
 #include <string>
 
-#if defined(__unix__) || defined(__APPLE__)
-#define AOS_RUN_POSIX 1
 #include <fcntl.h>
 #include <unistd.h>
-#else
-#define AOS_RUN_POSIX 0
-#endif
 
 namespace aos {
 namespace {
-
-#if AOS_RUN_POSIX
 
 /*
  * 把一個 fd 接成 istream 的來源。
@@ -113,8 +105,6 @@ int open_insts(const char *path)
     return fd;
 }
 
-#endif /* AOS_RUN_POSIX */
-
 /* 錯誤訊息都附上記錄序號，因為串流讀取沒有其他方式指出是哪一筆出事。 */
 void report(std::size_t index, const char *what, const char *detail)
 {
@@ -192,7 +182,6 @@ int run(int argc, char *argv[])
         return run_stream(std::cin);
     }
 
-#if AOS_RUN_POSIX
     const int fd = open_insts(argv[1]);
 
     if (fd < 0) {
@@ -212,19 +201,6 @@ int run(int argc, char *argv[])
         return 1;
     }
     return status;
-#else
-    /*
-     * 非 POSIX 平台沒有上面那兩個旗標可以設，也沒有 FIFO 要應付，就用一般
-     * 的檔案串流。
-     */
-    std::ifstream file(argv[1]);
-
-    if (!file) {
-        std::cerr << "aos: could not open " << argv[1] << '\n';
-        return 1;
-    }
-    return run_stream(file);
-#endif
 }
 
 }  /* namespace aos */

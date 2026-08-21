@@ -1,5 +1,6 @@
 {
     "recommendations": [
-        "ms-vscode.cpptools"
+        "kylinideteam.kylin-clangd",
+        "kylinideteam.cppdebug"
     ]
 }

@@ -111,7 +111,11 @@ typedef enum aos_exec_state {
     AOS_EXEC_SPAWN_FAILED = 2,
     AOS_EXEC_WAIT_FAILED = 3,
     AOS_EXEC_EXIT_WRITE_FAILED = 4,
-    AOS_EXEC_PLATFORM_UNSUPPORTED = 5,
+    /*
+     * 5 是退休的編號，曾經是 AOS_EXEC_PLATFORM_UNSUPPORTED。專案已經只支援
+     * POSIX，這個狀態不可能再出現；空著不補是刻意的，免得舊的呼叫端拿到 5
+     * 時被當成別的意思。
+     */
     AOS_EXEC_ALLOC_FAILED = 6
 } aos_exec_state;
 
@@ -313,8 +317,7 @@ AOS_API aos_inst_state aos_instruction_write_buffer(const aos_instruction *inst,
  * those codes, exactly as in a shell.
  *
  * result may be NULL if only the state is wanted. Process spawning is
- * implemented for POSIX; elsewhere this returns
- * AOS_EXEC_PLATFORM_UNSUPPORTED rather than pretending.
+ * POSIX-only; the library does not build on any other platform.
  */
 AOS_API aos_exec_state aos_instruction_execute(aos_instruction *inst,
                                                aos_exec_result *result);

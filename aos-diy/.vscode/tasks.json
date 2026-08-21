@@ -2,16 +2,34 @@
     "version": "2.0.0",
     "tasks": [
         {
-            "label": "make debug",
+            "label": "make debug src",
             "type": "shell",
             "command": "make",
             "args": [
                 "debug"
             ],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
             "group": {
                 "kind": "build",
                 "isDefault": true
             },
+            "problemMatcher": [
+                "$gcc"
+            ]
+        },
+        {
+            "label": "make debug test",
+            "type": "shell",
+            "command": "make",
+            "args": [
+                "debug-test"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "group": "test",
             "problemMatcher": [
                 "$gcc"
             ]
@@ -23,6 +41,9 @@
             "args": [
                 "test"
             ],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
             "group": "test",
             "problemMatcher": [
                 "$gcc"

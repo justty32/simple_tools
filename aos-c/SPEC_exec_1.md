@@ -3,6 +3,10 @@
 狀態:**已實作**(commit 70bf3a3)。與 [SPEC_env_1](SPEC_env_1.md) 一起構成
 inst_t → 執行的重整。126/127 照建議分開。
 
+> 後續修訂:這份提到保留 `PlatformUnsupported`,那已經不成立 —— 專案改成只支援
+> POSIX,非 POSIX 分支連同這個狀態一起拿掉了(C ABI 的 5 號留空)。其餘結論不受
+> 影響。
+
 ## 定案的核心決定
 
 採「模型 A」:aos-c 啟動子行程、等它結束、把一個 exit code 寫進 exit_path,

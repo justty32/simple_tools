@@ -4,8 +4,6 @@
 
 #include "test_common.hpp"
 
-#if defined(__unix__) || defined(__APPLE__)
-
 #include "aos/exec.hpp"
 
 #include <cstdio>
@@ -405,8 +403,7 @@ std::size_t test_to_string_covers_every_state()
         ExecState::InvalidArgument,
         ExecState::SpawnFailed,
         ExecState::WaitFailed,
-        ExecState::ExitWriteFailed,
-        ExecState::PlatformUnsupported
+        ExecState::ExitWriteFailed
     };
     std::size_t cases = 0;
 
@@ -429,11 +426,8 @@ std::size_t test_to_string_covers_every_state()
 
 }  /* namespace */
 
-#endif  /* defined(__unix__) || defined(__APPLE__) */
-
 std::size_t run_exec_tests()
 {
-#if defined(__unix__) || defined(__APPLE__)
     const std::string dir = make_temp_dir();
     std::size_t count = 0;
 
@@ -457,9 +451,4 @@ std::size_t run_exec_tests()
 
     remove_temp_dir(dir);
     return count;
-#else
-    /* 這一層目前只有 POSIX 實作；其他平台上 execute() 只會回報
-     * PlatformUnsupported，沒有行程可測，所以不執行任何案例。 */
-    return 0;
-#endif
 }
