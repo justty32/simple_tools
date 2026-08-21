@@ -1,71 +1,70 @@
-# Record format
+# 記錄格式
 
-`aos-cpp` reads JSON Lines: each non-empty physical line is one JSON object.
-Writers emit one compact object followed by LF. Readers accept LF or CRLF, and
-also accept a final record without a line ending. A zero-length line is skipped;
-after removing the CR from CRLF, that line is empty too. A whitespace-only line
-is not empty and is parsed (and normally rejected) as a record.
+`aos-cpp` 讀取 JSON Lines：每一個非空的實體行(physical line)就是一個 JSON 物件。
+寫入端輸出一個緊湊物件，後面接一個 LF。讀取端接受 LF 或 CRLF，也接受
+最後一筆沒有行尾結束符的記錄。長度為零的行會被略過；
+從 CRLF 移除 CR 之後，那一行也是空的。只含空白字元的行
+不算空行，會被當成一筆記錄解析（通常也會被拒絕）。
 
-The input is not one JSON array. JSON Lines makes records independently
-generatable and keeps a physical line number for diagnostics without requiring
-an outer document to be rewritten. More importantly, `aos-cpp` still reads to
-EOF and validates the complete batch before execution, so this convenient wire
-format does not weaken batch validation.
+輸入不是單一個 JSON 陣列。JSON Lines 讓每筆記錄可以獨立產生，
+並保留實體行號供診斷之用，而不需要為此改寫一份外層文件。
+更重要的是，`aos-cpp` 仍然會讀到 EOF，並在執行前驗證整個批次(batch)，
+因此這個方便的傳輸格式並不會削弱批次驗證。
 
-## Schema
+## 綱要(schema)
 
-| Key | JSON type | Required | Default | Meaning |
+| 鍵 | JSON 型別 | 必填 | 預設 | 意義 |
 | --- | --- | --- | --- | --- |
-| `argv` | array of strings | yes | none | Command followed by its arguments. The array and `argv[0]` must be non-empty. |
-| `stdin` | string | no | `""` | File opened read-only as standard input; empty inherits the caller's stdin. |
-| `stdout` | string | no | `""` | File created if needed and truncated as standard output; empty inherits stdout. |
-| `stderr` | string | no | `""` | File created if needed and truncated as standard error; empty inherits stderr. |
-| `exit` | string | no | `""` | File created/truncated after the child finishes and given decimal status plus LF; empty discards it. |
-| `cwd` | string | no | `""` | Child working directory; empty inherits the caller's directory. A relative value starts from the caller's directory. |
-| `env` | object, string values | no | `{}` | Overrides or adds variables on top of the inherited environment; unmentioned variables remain. |
-| `timeout_ms` | unsigned integer | no | `0` | Runtime limit in milliseconds; zero waits without a deadline. |
+| `argv` | array of strings | yes | none | 指令及其引數。此陣列與 `argv[0]` 都不得為空。 |
+| `stdin` | string | no | `""` | 以唯讀方式開啟、作為標準輸入的檔案；為空時繼承呼叫端的 stdin。 |
+| `stdout` | string | no | `""` | 作為標準輸出的檔案，必要時建立並截斷(清空)；為空時繼承 stdout。 |
+| `stderr` | string | no | `""` | 作為標準錯誤的檔案，必要時建立並截斷(清空)；為空時繼承 stderr。 |
+| `exit` | string | no | `""` | 子行程結束後建立/截斷(清空)的檔案，寫入十進位狀態值加一個 LF；為空時捨棄。 |
+| `cwd` | string | no | `""` | 子行程的工作目錄；為空時繼承呼叫端的目錄。相對路徑值從呼叫端的目錄起算。 |
+| `env` | object, string values | no | `{}` | 在繼承的環境之上覆寫或新增變數；未提及的變數維持不變。 |
+| `timeout_ms` | unsigned integer | no | `0` | 執行時間上限（毫秒）；為零時無期限等待。 |
 
-Environment keys must be non-empty and cannot contain `=`. JSON object keys are
-unique in the in-memory instruction; repeated source keys are handled by the
-JSON parser rather than providing an ordered override mechanism.
+環境（變數）的 key 必須非空，且不得含有 `=`。JSON 物件的 key 在記憶體中的
+指令裡是唯一的；來源中重複的 key 由 JSON 解析器處理，而非提供一套有序的
+覆寫機制。
 
-This complete record runs `sh` under `/tmp`, supplies an environment variable,
-redirects all three standard streams, records the status, and imposes a
-five-second limit:
+以下這筆完整記錄會在 `/tmp` 底下執行 `sh`、提供一個環境變數、
+重導向全部三個標準串流、記錄狀態，並施加
+五秒的上限：
 
 ```json
 {"argv":["sh","-c","read line; printf '%s: %s\\n' \"$LABEL\" \"$line\"; printf 'diagnostic\\n' >&2"],"stdin":"/tmp/aos-input.txt","stdout":"/tmp/aos-output.txt","stderr":"/tmp/aos-error.txt","exit":"/tmp/aos-status.txt","cwd":"/tmp","env":{"LABEL":"worker"},"timeout_ms":5000}
 ```
 
-The referenced `/tmp/aos-input.txt` must already exist. On success this example
-writes the other three `/tmp/aos-*` files named in the record.
+被引用的 `/tmp/aos-input.txt` 必須事先存在。成功時，本範例會
+寫出記錄中指定的另外三個 `/tmp/aos-*` 檔案。
 
-## Validation states and limits
+## 驗證狀態與上限
 
-| Condition | `InstState` / C state |
+| 條件 | `InstState` / C 狀態 |
 | --- | --- |
-| Null input pointer | `InvalidArgument` / `AOS_INST_INVALID_ARGUMENT` |
-| Invalid JSON, including an empty single-record buffer | `JsonSyntax` / `AOS_INST_JSON_SYNTAX` |
-| Top-level value is not an object | `NotAnObject` / `AOS_INST_NOT_AN_OBJECT` |
-| Key outside the schema | `UnknownKey` / `AOS_INST_UNKNOWN_KEY` |
-| Wrong field type, non-string argument, or non-string environment value | `FieldTypeMismatch` / `AOS_INST_FIELD_TYPE_MISMATCH` |
-| Missing/empty `argv`, or empty `argv[0]` | `EmptyArgv` / `AOS_INST_EMPTY_ARGV` |
-| More than 256 arguments | `TooManyArgs` / `AOS_INST_TOO_MANY_ARGS` |
-| More than 256 environment entries | `TooManyEnv` / `AOS_INST_TOO_MANY_ENV` |
-| Empty environment key or a key containing `=` | `EnvKeyInvalid` / `AOS_INST_ENV_KEY_INVALID` |
-| More than 3 nested object/array levels while parsing | `DepthExceeded` / `AOS_INST_DEPTH_EXCEEDED` |
-| One physical record exceeds `max_record_bytes` (default 1 MiB) | `RecordTooLong` / `AOS_INST_RECORD_TOO_LONG` |
-| Entire supplied buffer exceeds `max_total_bytes` (default 64 MiB) | `TotalTooLong` / `AOS_INST_TOTAL_TOO_LONG` |
+| 輸入指標為 null | `InvalidArgument` / `AOS_INST_INVALID_ARGUMENT` |
+| JSON 無效，包含單筆記錄的空緩衝區 | `JsonSyntax` / `AOS_INST_JSON_SYNTAX` |
+| 頂層值不是物件 | `NotAnObject` / `AOS_INST_NOT_AN_OBJECT` |
+| key 不在綱要(schema)內 | `UnknownKey` / `AOS_INST_UNKNOWN_KEY` |
+| 欄位型別錯誤、引數非字串，或環境（變數）值非字串 | `FieldTypeMismatch` / `AOS_INST_FIELD_TYPE_MISMATCH` |
+| `argv` 缺少/為空，或 `argv[0]` 為空 | `EmptyArgv` / `AOS_INST_EMPTY_ARGV` |
+| 引數超過 256 個 | `TooManyArgs` / `AOS_INST_TOO_MANY_ARGS` |
+| 環境（變數）項目超過 256 個 | `TooManyEnv` / `AOS_INST_TOO_MANY_ENV` |
+| 環境（變數）key 為空，或 key 含有 `=` | `EnvKeyInvalid` / `AOS_INST_ENV_KEY_INVALID` |
+| 解析時物件/陣列巢狀超過 3 層 | `DepthExceeded` / `AOS_INST_DEPTH_EXCEEDED` |
+| 單筆實體記錄超過 `max_record_bytes`（預設 1 MiB） | `RecordTooLong` / `AOS_INST_RECORD_TOO_LONG` |
+| 整個傳入的緩衝區超過 `max_total_bytes`（預設 64 MiB） | `TotalTooLong` / `AOS_INST_TOTAL_TOO_LONG` |
 
-The depth check occurs during parsing, before a deeply nested document can be
-fully built. The C++ API can replace the byte limits with `ReadOptions`; the CLI
-and C API use the defaults. For a batch error, the CLI prints its physical,
-one-based line number and returns 1. No record in that batch executes.
+深度檢查發生在解析過程中，在深度巢狀的文件被完整建構起來之前就會攔下。
+C++ API 可以用 `ReadOptions` 取代這些位元組上限；CLI
+與 C API 則使用預設值。發生批次錯誤時，CLI 會印出以 1 為起始的
+實體行號並回傳 1。該批次中不會有任何記錄被執行。
 
-Unknown keys are deliberately rejected, not ignored. Otherwise an older binary
-could silently run a record containing a newer safety field such as
-`timeout_ms` with no timeout at all. Rejection also turns a typo such as
-`"stdou"` into an explicit failure instead of silently losing redirection.
+未知的 key 是刻意拒絕的，而不是忽略。否則較舊的執行檔
+可能會默默執行一筆含有較新安全欄位（例如
+`timeout_ms`）的記錄，卻完全沒有 timeout。拒絕也能把像
+`"stdou"` 這樣的拼寫錯誤變成明確的失敗，而不是默默失去重導向。
 
-`write_one` validates the whole instruction before appending anything. It emits
-only non-default optional fields, compact JSON, and one final LF.
+`write_one` 會先驗證整個指令，才會附加任何內容。它只輸出
+非預設的選用欄位、緊湊的 JSON，以及最後一個 LF。

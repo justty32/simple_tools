@@ -1,89 +1,37 @@
-# Execution semantics
+# 執行語意
 
-Records run sequentially in input order. Each field maps directly to child
-process setup:
+記錄依照輸入順序循序執行。每個欄位都直接對應到子行程的設定：
 
-- `argv` becomes the null-terminated argument vector passed to `execve`.
-- Non-empty `stdin` is opened read-only and duplicated onto fd 0.
-- Non-empty `stdout` and `stderr` are created with mode `0666` (subject to the
-  caller's umask), truncated, and duplicated onto fd 1 or 2.
-- Non-empty `cwd` is applied with `chdir` after redirection and before `execve`.
-- `env` is merged over the inherited environment: named entries replace or add,
-  while every unmentioned entry remains. The resulting `envp` goes to `execve`.
-- Nonzero `timeout_ms` enables the deadline described below.
-- Non-empty `exit` is created/truncated by the parent after waiting and receives
-  the reported decimal status followed by LF.
+- `argv` 會成為以 null 結尾的引數向量，傳給 `execve`。
+- 非空的 `stdin` 會以唯讀開啟，並複製到 fd 0。
+- 非空的 `stdout` 與 `stderr` 會以 `0666` 模式建立（受呼叫者的 umask 影響）、截斷，並複製到 fd 1 或 2。
+- 非空的 `cwd` 會在重導向之後、`execve` 之前，用 `chdir` 套用。
+- `env` 會疊加在繼承來的環境變數之上：具名的項目會取代或新增，其餘沒提到的項目則全部保留。得到的 `envp` 會交給 `execve`。
+- 非零的 `timeout_ms` 會啟用下面所述的期限。
+- 非空的 `exit` 會由父行程在等待完成後建立／截斷，並寫入回報的十進位狀態，接著補上一個 LF。
 
-Empty path fields inherit the corresponding process setting. There is no shell
-interpretation: arguments are not split, expanded, or treated as redirection
-syntax. Use `argv: ["sh", "-c", "..."]` only when shell behavior is intended.
-Redirection files are opened before the child applies `cwd`, and the parent
-writes `exit` without changing directory. Relative paths in those four fields
-therefore start from the caller's directory, not from `cwd`.
+空字串的路徑欄位會繼承對應的行程設定。這裡沒有任何 shell 解讀：引數不會被切分、展開，也不會被當成重導向語法。只有在確實需要 shell 行為時，才使用 `argv: ["sh", "-c", "..."]`。重導向檔案是在子行程套用 `cwd` 之前開啟的，而父行程寫入 `exit` 時也不會切換目錄。因此這四個欄位裡的相對路徑，是從呼叫者的目錄起算，而非從 `cwd` 起算。
 
-## PATH lookup
+## PATH 查找
 
-Lookup is prepared in the parent; the implementation does not call `execvp`.
-The merged environment is used, so a record's `env.PATH` affects its command.
-When `PATH` is unset, `_CS_PATH` supplies the system default; if that query
-fails, `/bin:/usr/bin` is used. An empty PATH component means the child's
-effective current directory. Relative PATH components are also resolved from
-that directory, including a requested `cwd`.
+查找是在父行程裡準備的；實作並不呼叫 `execvp`。查找會使用疊加後的環境，因此一筆記錄的 `env.PATH` 會影響它自己的命令。當 `PATH` 未設定時，改由 `_CS_PATH` 提供系統預設值；若該查詢失敗，則使用 `/bin:/usr/bin`。空的 PATH 元件代表子行程的有效當前目錄。相對的 PATH 元件同樣是從那個目錄解析，包含所要求的 `cwd`。
 
-Candidates are tried in PATH order. A candidate must be a regular executable
-file. Permission-denied or otherwise present-but-not-executable candidates are
-remembered, but lookup continues in later components. If nothing executable is
-found, a remembered access failure produces status 126; no candidate produces
-127. If `argv[0]` contains `/`, it is passed through without searching. A
-relative value is consequently resolved by `execve` after the child changes to
-`cwd`.
+候選項目會依 PATH 順序逐一嘗試。候選項目必須是一般的執行檔。權限被拒、或存在但不可執行的候選項目會被記住，但查找會繼續往後面的元件進行。如果找不到任何可執行的項目，先前記住的存取失敗會產生狀態 126；若完全沒有候選項目則產生 127。若 `argv[0]` 含有 `/`，則直接原樣傳遞，不進行查找。因此，相對值會在子行程切換到 `cwd` 之後，由 `execve` 來解析。
 
-## Status and failures
+## 狀態與失敗
 
-A normally exiting child reports its own status unchanged. A child terminated
-by signal `N` reports `128 + N` and sets `signalled`. Setup failure—including
-process-group setup, redirection, or `chdir`—exits 126. Failure to locate the
-command, or a final `execve` failure, exits 127. Because 126 and 127 are ordinary
-8-bit exit values, they cannot be distinguished from a program that genuinely
-exits with the same value.
+正常結束的子行程會原樣回報自己的狀態。被訊號 `N` 終止的子行程會回報 `128 + N`，並設定 `signalled`。設定階段的失敗——包含行程群組設定、重導向或 `chdir`——會以 126 結束。找不到命令，或最後的 `execve` 失敗，會以 127 結束。由於 126 與 127 是一般的 8 位元結束值，因此無法和一個真的以相同值結束的程式區分開來。
 
-A nonzero child status, signal termination, PATH miss, setup status, or timeout
-is a completed execution, not an `ExecState` failure. It does not stop later
-records, and the CLI remains successful if every record reaches a status and
-every requested status file is written.
+非零的子行程狀態、訊號終止、PATH 找不到、設定階段狀態，或逾時，都是一次已完成的執行，而不是 `ExecState` 失敗。它不會中止後續的記錄，而且只要每筆記錄都走到一個狀態、每個所要求的狀態檔都有被寫出，CLI 仍然算成功。
 
-Library failures are different: invalid empty `argv`, failure to fork or set up
-the parent side of the process group, failure while waiting, and failure to
-write `exit` return a non-`Ok` `ExecState`. The CLI reports these, continues with
-later records, and finally returns 1. `ExecResult.error` carries `errno` where
-the failing operation supplies one.
+函式庫層級的失敗則不同：無效的空 `argv`、fork 失敗或父行程這一側的行程群組設定失敗、等待過程中的失敗，以及寫入 `exit` 失敗，都會回傳非 `Ok` 的 `ExecState`。CLI 會回報這些失敗、繼續處理後續的記錄，並在最後回傳 1。當失敗的操作有提供 `errno` 時，`ExecResult.error` 會帶著它。
 
-## Timeouts and process groups
+## 逾時與行程群組
 
-With `timeout_ms == 0`, the parent blocks in `waitpid`. A positive value uses a
-monotonic clock and polling that grows from 1 ms to at most 50 ms. At the
-deadline the parent marks `timed_out`, sends `SIGTERM` to the entire child
-process group, and grants 2000 ms for orderly shutdown. If the direct child is
-still alive it sends `SIGKILL` to that group and waits synchronously.
+當 `timeout_ms == 0` 時，父行程會在 `waitpid` 中阻塞。正值會使用單調時鐘（monotonic clock）與輪詢，輪詢間隔會從 1 ms 逐步成長到最多 50 ms。到期限時，父行程會標記 `timed_out`、對整個子行程的行程群組送出 `SIGTERM`，並給予 2000 ms 讓它有秩序地關閉。如果直接的子行程仍然存活，就對該群組送出 `SIGKILL` 並同步等待。
 
-The group target matters: descendants that remain in the command's group
-receive the same signal as the direct child. Once the direct child has been
-reaped the parent sends `SIGKILL` to the group in either case, because the
-direct child dying does not mean the group is empty -- a grandchild that ignores
-`SIGTERM` would otherwise outlive the deadline, and reaching descendants is the
-whole reason the group is there. `SIGKILL` cannot be caught, and an already
-empty group makes the call a harmless `ESRCH`. Nothing is signalled when the
-command finishes on its own: leaving background children behind is the
-instruction's business, not a timeout. The usual reported statuses are 143 for `SIGTERM` and 137 for
-`SIGKILL`; `timed_out` distinguishes a library-initiated deadline from the same
-signal sent elsewhere.
+群組這個目標很重要：仍留在該命令群組裡的後裔，會收到和直接子行程相同的訊號。一旦直接子行程被回收後，父行程無論如何都會對該群組送出 `SIGKILL`，因為直接子行程死掉並不代表群組已經空了——一個忽略 `SIGTERM` 的孫行程否則就會活過期限，而能觸及後裔正是這個群組存在的全部理由。`SIGKILL` 無法被攔截，而對一個已經是空的群組送訊號，只會讓這個呼叫變成無害的 `ESRCH`。當命令自行結束時，什麼訊號都不會送出：留下背景子行程是那筆指令自己的事，不是逾時要管的事。一般回報的狀態，`SIGTERM` 是 143、`SIGKILL` 是 137；`timed_out` 用來區分一個由函式庫發起的期限，和在別處送出的同一個訊號。
 
-## Security
+## 安全性
 
-An instruction file is executable authority. It can name arbitrary programs,
-arguments, input files, output files, working directories, and environment
-values, all using the caller's credentials. Running an untrusted instruction
-file is equivalent to running arbitrary commands with your permissions. Anyone
-who can modify a file that `aos-cpp` will consume effectively has arbitrary code
-execution as that caller; protect its write permissions and its generation
-path accordingly.
+一個指令檔就是可執行的權柄。它可以指名任意的程式、引數、輸入檔、輸出檔、工作目錄與環境變數值，而且全都使用呼叫者的憑證。執行一個不受信任的指令檔，等同於以你的權限執行任意命令。任何能修改 `aos-cpp` 將會讀取的檔案的人，實際上就擁有以該呼叫者身分執行任意程式碼的能力；請據此保護該檔的寫入權限與它的產生路徑。

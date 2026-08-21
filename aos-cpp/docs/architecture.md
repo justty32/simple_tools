@@ -1,57 +1,50 @@
-# Architecture
+# 架構
 
-The implementation has four deliberately narrow layers:
+這份實作刻意切成四個範圍狹窄的分層：
 
-- `inst` owns `inst_t`, its public states, fixed structural limits, and clearing
-  and state-string helpers. It knows neither bytes/JSON nor processes.
-- `format` is the only layer that knows the JSON Lines schema. It converts byte
-  buffers to validated instructions and instructions back to compact records;
-  it knows nothing about `fork`, paths as operating-system resources, or CLI I/O.
-- `exec` accepts one already-built `inst_t`. It owns environment and PATH
-  preparation, `fork`/`execve`, redirection, process groups, waiting, timeouts,
-  status-file output, and execution states; it never parses JSON or reads an
-  instruction source.
-- `run` owns POSIX input, CLI diagnostics, whole-batch parsing, and the
-  sequential execution loop. `main` only delegates to it.
+- `inst` 擁有 `inst_t`、它的公開狀態、固定的結構性上限，以及清除與狀態字串
+  的輔助函式。它既不懂位元組／JSON，也不懂行程。
+- `format` 是唯一懂得 JSON Lines schema 的分層。它把位元組緩衝區轉換成經過
+  驗證的指令，也把指令轉回精簡的記錄；它完全不懂 `fork`、不懂路徑作為作業系統
+  資源這件事，也不懂 CLI I/O。
+- `exec` 接收一個已經建好的 `inst_t`。它負責環境變數與 PATH 的準備、
+  `fork`/`execve`、重導向、行程群組、等待、逾時、狀態檔輸出，以及執行狀態；
+  它從不剖析 JSON，也不讀取指令來源。
+- `run` 負責 POSIX 輸入、CLI 診斷、整批剖析，以及循序執行迴圈。`main` 只把工作
+  委派給它。
 
-`format` and `exec` are siblings and do not depend on each other; both depend on
-`inst`. The shared library contains `inst`, `format`, `exec`, spawn preparation,
-and the C ABI. The executable adds `run` and `main`.
+`format` 和 `exec` 是兄弟關係，彼此不相依；兩者都相依於 `inst`。共享函式庫
+包含 `inst`、`format`、`exec`、spawn 準備，以及 C ABI。執行檔則額外加上 `run`
+與 `main`。
 
-## Why the whole input is read first
+## 為什麼要先把整份輸入讀完
 
-The runner reads to EOF into one bounded buffer, then parses and validates every
-record before starting the first command. The resulting guarantee is batch
-atomicity for format errors: one malformed fifth record means records one
-through four have not run. A streaming reader cannot offer that guarantee,
-because the earlier commands' side effects are irreversible by the time the
-fifth record is discovered. Reading stdin first also prevents a child that inherits
-stdin from consuming bytes belonging to the instruction stream.
+runner 會一路讀到 EOF，全部進到一個有界緩衝區裡，接著在啟動第一個命令之前，
+先剖析並驗證每一筆記錄。由此得到的保證是格式錯誤的批次原子性：只要第五筆記錄
+格式不正確，就代表第一到第四筆記錄都不會執行。串流式的讀取器無法提供這種保證，
+因為等到發現第五筆記錄有問題時，先前那些命令的副作用早已無法回復。先把 stdin
+讀完，也能避免繼承 stdin 的子行程去消耗掉本該屬於指令串流的位元組。
 
-This choice has real costs. FIFO and pipeline input is not incrementally
-executed: the first record waits until the producer closes its output, so a
-long-lived producer cannot continuously feed this runner. Memory is bounded by
-the entire input rather than by the longest record. The default 64 MiB total
-limit is therefore a required resource boundary, not a cosmetic validation;
-the separate 1 MiB record limit still rejects a single pathological line.
+這個選擇有實際的代價。FIFO 與管線輸入無法逐步執行：第一筆記錄要一直等到生產端
+關閉其輸出為止，所以長時間存活的生產端沒辦法持續地餵資料給這個 runner。記憶體
+用量的上界是整份輸入，而不是最長的那一筆記錄。因此預設的 64 MiB 總量上限是一道
+必要的資源邊界，而不是裝飾性的驗證；另外那道獨立的 1 MiB 單筆記錄上限，仍然會
+拒絕單一一行的病態輸入。
 
-Finite producers remain useful as batches. The JSON Lines representation makes
-records independently writable, but does not imply streaming execution.
+有限的生產端仍然很適合當成批次來用。JSON Lines 的表示法讓記錄可以各自獨立寫出，
+但這並不代表就是串流式執行。
 
-## Work on each side of `fork`
+## `fork` 兩側各自要做的工作
 
-In a multithreaded process, another thread may hold an allocator or library lock
-at the instant `fork` duplicates the process. Only the calling thread survives
-in the child, so a post-fork call that tries to acquire such a lock can deadlock
-forever. POSIX therefore permits the child to call only async-signal-safe
-operations until `exec` replaces the process image.
+在多執行緒的行程裡，就在 `fork` 複製行程的那一瞬間，可能有另一個執行緒正握著
+配置器或函式庫的鎖。子行程裡只有呼叫端那個執行緒會存活下來，所以 fork 之後若
+有呼叫試圖去取得那種鎖，就可能永遠死結。因此 POSIX 規定，在 `exec` 換掉行程
+映像之前，子行程只能呼叫 async-signal-safe 的操作。
 
-All allocation and complex preparation is performed in the parent before
-`fork`: the implementation validates environment keys, merges the inherited
-environment, materializes strings and `envp`, builds `argv`, obtains the
-effective working directory, and resolves PATH candidates. The child receives
-only stable pointers and calls `setpgid`, `open`, `dup2`, `close`, `chdir`,
-`execve`, and `_exit`. These are async-signal-safe POSIX operations; no C++
-allocation, `setenv`, string manipulation, or `execvp` occurs there. The parent
-also calls `setpgid` to close the parent/child scheduling race before timeout
-signals target the group.
+所有的記憶體配置與複雜的準備工作，都在 `fork` 之前於父行程裡完成：實作會驗證
+環境變數的 key、把繼承來的環境合併進來、把字串與 `envp` 實體化、建好 `argv`、
+取得有效的工作目錄，並解析 PATH 候選項。子行程只收到穩定的指標，然後呼叫
+`setpgid`、`open`、`dup2`、`close`、`chdir`、`execve` 與 `_exit`。這些都是
+async-signal-safe 的 POSIX 操作；那裡不會發生任何 C++ 記憶體配置、`setenv`、
+字串操作或 `execvp`。父行程也會呼叫 `setpgid`，好在逾時訊號鎖定整個群組之前，
+先關掉父／子行程之間的排程競速。
