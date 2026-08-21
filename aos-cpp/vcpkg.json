@@ -1,0 +1,8 @@
+{
+  "name": "aos-cpp",
+  "version-string": "0.0.0",
+  "dependencies": [
+    "nlohmann-json",
+    "catch2"
+  ]
+}
