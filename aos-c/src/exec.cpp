@@ -8,15 +8,10 @@
 #include <string>
 #include <vector>
 
-#if defined(__unix__) || defined(__APPLE__)
-#define AOS_EXEC_POSIX 1
 #include <fcntl.h>
 #include <sys/wait.h>
 #include <unistd.h>
 extern char **environ;
-#else
-#define AOS_EXEC_POSIX 0
-#endif
 
 namespace aos {
 namespace {
