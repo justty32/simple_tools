@@ -106,6 +106,24 @@ TEST_CASE("timeout kills grandchildren") {
     CHECK(access(marker.c_str(), F_OK) != 0);
 }
 
+/*
+ * 上一條測試的孫行程死於 SIGTERM，所以它抓不到「領頭者死了就收工、不再掃群組」
+ * 這個錯誤。這一條讓孫行程忽略 SIGTERM：只有真的補上 SIGKILL 才殺得掉它。
+ */
+TEST_CASE("timeout kills a grandchild that ignores SIGTERM") {
+    TempDir dir;
+    const std::string marker = dir.path + "/survived";
+    aos::inst_t inst = shell_command(
+        "(trap '' TERM; sleep 1; touch " + marker + ") & sleep 300");
+    inst.timeout_ms = 100;
+    aos::ExecResult result;
+
+    REQUIRE(aos::execute(inst, result) == aos::ExecState::Ok);
+    REQUIRE(result.timed_out);
+    sleep_for_ms(1400);
+    CHECK(access(marker.c_str(), F_OK) != 0);
+}
+
 TEST_CASE("timeout format reads writes and rejects invalid values") {
     aos::inst_t inst;
     const std::string valid =

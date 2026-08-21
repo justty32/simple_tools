@@ -249,6 +249,13 @@ ExecState execute(inst_t &inst, ExecResult &result) {
             kill(-pid, SIGTERM);
             if (wait_until(pid, kTimeoutGraceMs, raw_status, wait_error)) {
                 waited = pid;
+                /*
+                 * 領頭的子行程死了，不代表整個群組死了：忽略 SIGTERM 的孫行程
+                 * 會活下來，而殺得掉孫行程正是這裡用行程群組的全部理由。收掉
+                 * 領頭者之後補一發 SIGKILL 掃過剩下的成員 —— SIGKILL 擋不掉。
+                 * 群組已經空了的話 kill 會回 ESRCH，那正是我們要的「無事發生」。
+                 */
+                kill(-pid, SIGKILL);
             } else if (wait_error != 0) {
                 result.error = wait_error;
                 return ExecState::WaitFailed;
