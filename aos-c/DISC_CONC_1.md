@@ -57,8 +57,8 @@
 - `e` = 自帶環境變數陣列。
 
 本專案用 `execvp` = 陣列參數 + PATH 搜尋，正好對上需求。環境變數本來最想
-用 `execvpe`（v+p+e），但它是 glibc 專屬、不可攜，所以改成 exec 前直接設
-`environ`（見 `exec.cpp` 的註解）。
+用 `execvpe`（v+p+e），但它是 glibc 專屬、不可攜，所以子行程改成在 exec 前對
+`inst.env` 的每一筆呼叫 `setenv`，在繼承的環境上覆寫同名、新增其餘。
 
 ## 結論二：效能與生命週期（以目前規模估）
 
@@ -171,5 +171,7 @@
 - **結論一的「用 CLOEXEC 管道分辨指令不存在」**：管道已經拿掉，現在跟 shell 一樣
   不分辨（`SPEC_exec_1`）。但結論一的主結論不受影響 —— 不改用 `system()` 的理由
   是 argv 陣列、重導向／cwd／env 的插手時機，那三點都還成立。
+- **「補充：exec 家族」提到的環境變數處理方式**：當時是 exec 前整組替換 `environ`，
+  現在改成子行程逐筆 `setenv`（`SPEC_env_2`），語意也從「取代」變成「擴充」。
 - **結論四提到「`std::ifstream` 開 FIFO 會阻塞到有寫入端」**：現在自己 `open()`
   並加上 `O_NONBLOCK`，開檔不再阻塞（`SPEC_stream_1`）。

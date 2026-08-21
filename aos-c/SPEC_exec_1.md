@@ -33,11 +33,11 @@ inst_t → 執行的重整。126/127 照建議分開。
 
 ## exec 流程(拿掉管道後)
 
-1. 父行程:驗 argv(空 → `InvalidArgument`);把 `inst.env` 攤成 `char**`。
+1. 父行程:驗 argv(空 → `InvalidArgument`)。
 2. `fork()`。fork 本身失敗 → `SpawnFailed`(父行程端,沒有子行程可以變成
    exit code,只能這樣回報)。
-3. 子行程:重導向(open+dup2)→ chdir → 設 environ → execvp。任一步失敗就
-   `_exit(126/127)`,不返回。
+3. 子行程:重導向(open+dup2)→ chdir → 對 `inst.env` 的每一筆呼叫 `setenv`，在
+   繼承的環境上覆寫同名、新增其餘 → execvp。任一步失敗就 `_exit(126/127)`,不返回。
 4. 父行程:`waitpid` 回收(仍需要:循序執行、收殭屍、取 status)。解讀:
    訊號 → 128+sig、正常 → exit code。
 5. exit_path 有設 → 寫「碼 + 換行」;寫不進去 → `ExitWriteFailed`。

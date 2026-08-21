@@ -488,8 +488,10 @@ gcc -std=c99 my.c -Iinclude -Lbuild/debug -laos \
 
 - **不同的 `aos_instruction` 在不同執行緒同時用，是安全的。**
 - **同一個 `aos_instruction` 在多個執行緒同時用，不安全** —— 自己加鎖。
-- `aos_instruction_execute` 會 `fork`。子行程在 `exec` 之前只呼叫非同步訊號安全的
-  函式，所以在多執行緒程式裡也可以用。
+- `aos_instruction_execute` 會 `fork`。**不要從多執行緒的行程呼叫它。**
+  子行程在 `exec` 之前會呼叫 `setenv` 與 `execvp`，兩者都不在 POSIX 的非同步訊號
+  安全清單裡（都可能配置記憶體）。在多執行緒行程裡 `fork`，若別的執行緒正握著
+  malloc 的鎖，子行程會死鎖。單執行緒的呼叫端不受影響。
 - 三個 `_string` 函式回傳的是靜態字串，任何時候呼叫都安全。
 
 ## ABI 穩定性：什麼會變，什麼不會
