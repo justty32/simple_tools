@@ -18,4 +18,7 @@ AOS_API InstState read_one(const char *data, std::size_t size,
 
 AOS_API InstState write_one(const inst_t &inst, std::string &out);
 
+AOS_API InstState write_all(const std::vector<inst_t> &insts, std::string &out,
+                            std::size_t *error_record);
+
 }  // namespace aos

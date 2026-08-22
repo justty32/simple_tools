@@ -42,6 +42,12 @@
 `write_one(inst, out)` 會驗證 `inst`，序列化成緊湊的 JSON 並在最後補上一個 LF，
 再把它附加到 `out`。驗證失敗時它不會附加任何東西。維持預設值的選用欄位會被省略。
 
+`write_all(insts, out, error_record)` 是 `read_all` 的反向操作：它把整個批次
+序列化成一個緊湊的 JSON 陣列，最後補上一個 LF，再附加到 `out`。空的 vector 會
+得到 `[]`，也就是 `read_all` 接受的那個合法空批次。它**先驗證每一筆，才寫出
+第一個位元組**——任何一筆無效就完全不動 `out`，並透過選用的 `error_record` 回報
+以一為基底的記錄序號（成功時為零）。輸出可以直接餵回 `read_all`。
+
 `execute(inst, result)` 會重設 `result`、驗證 `argv` 非空、準備並執行一個子行程、
 等待、視情況寫出它的狀態檔，最後回傳一個 `ExecState`。子行程狀態非零時仍然回傳
 `ExecState::Ok`。這個非 const 的指令為 `argv` 提供穩定、可變的字元儲存空間；

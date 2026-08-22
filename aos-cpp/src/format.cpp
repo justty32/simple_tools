@@ -40,6 +40,19 @@ bool known_key(std::string_view key) {
     return false;
 }
 
+nlohmann::ordered_json encode(const inst_t &inst) {
+    nlohmann::ordered_json value;
+    value["argv"] = inst.argv;
+    if (!inst.stdin_path.empty()) value["stdin"] = inst.stdin_path;
+    if (!inst.stdout_path.empty()) value["stdout"] = inst.stdout_path;
+    if (!inst.stderr_path.empty()) value["stderr"] = inst.stderr_path;
+    if (!inst.exit_path.empty()) value["exit"] = inst.exit_path;
+    if (!inst.cwd.empty()) value["cwd"] = inst.cwd;
+    if (!inst.env.empty()) value["env"] = inst.env;
+    if (inst.timeout_ms != 0) value["timeout_ms"] = inst.timeout_ms;
+    return value;
+}
+
 InstState decode(const json &value, inst_t &inst) {
     if (!value.is_object()) {
         return InstState::NotAnObject;
@@ -174,19 +187,34 @@ InstState write_one(const inst_t &inst, std::string &out) {
         return state;
     }
 
-    nlohmann::ordered_json value;
-    value["argv"] = inst.argv;
-    if (!inst.stdin_path.empty()) value["stdin"] = inst.stdin_path;
-    if (!inst.stdout_path.empty()) value["stdout"] = inst.stdout_path;
-    if (!inst.stderr_path.empty()) value["stderr"] = inst.stderr_path;
-    if (!inst.exit_path.empty()) value["exit"] = inst.exit_path;
-    if (!inst.cwd.empty()) value["cwd"] = inst.cwd;
-    if (!inst.env.empty()) value["env"] = inst.env;
-    if (inst.timeout_ms != 0) value["timeout_ms"] = inst.timeout_ms;
-
-    std::string record = value.dump();
+    std::string record = encode(inst).dump();
     record.push_back('\n');
     out.append(record);
+    return InstState::Ok;
+}
+
+InstState write_all(const std::vector<inst_t> &insts, std::string &out,
+                    std::size_t *error_record) {
+    if (error_record != nullptr) {
+        *error_record = 0;
+    }
+    for (std::size_t index = 0; index < insts.size(); ++index) {
+        const InstState state = validate(insts[index]);
+        if (state != InstState::Ok) {
+            if (error_record != nullptr) {
+                *error_record = index + 1;
+            }
+            return state;
+        }
+    }
+
+    nlohmann::ordered_json document = nlohmann::ordered_json::array();
+    for (const auto &inst : insts) {
+        document.push_back(encode(inst));
+    }
+    std::string batch = document.dump();
+    batch.push_back('\n');
+    out.append(batch);
     return InstState::Ok;
 }
 

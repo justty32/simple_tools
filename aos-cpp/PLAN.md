@@ -304,10 +304,23 @@ AOS_API InstState read_one(const char *data, std::size_t size,
 // 整筆驗證通過才會寫入任何位元組。
 AOS_API InstState write_one(const inst_t &inst, std::string &out);
 
+// 序列化整個批次成一個 JSON 陣列，附加到 out 尾端（含結尾的 '\n'）。
+// 每一筆都驗證通過才會寫入任何位元組；失敗時透過 error_record（1-based）
+// 指出是哪一筆。空 vector 輸出 `[]`。
+AOS_API InstState write_all(const std::vector<inst_t> &insts, std::string &out,
+                            std::size_t *error_record);
+
 }
 ```
 
 `read_all` 是主要入口（呼應 §3.2 的原子性）。`read_one` 給 C ABI 和測試用。
+`write_all` 是 `read_all` 的反向操作，兩者互為 round-trip；`write_one` 對
+`read_one` 同理。原子性在寫出端也成立：**先驗證完整個批次，才寫第一個位元組**
+（陷阱 #13 對單筆的要求，對批次一樣適用——否則會留下一個沒有結尾 `]` 的半份
+文件）。
+
+C ABI 沒有對應的批次讀寫，那是刻意的：它的 opaque handle 一次只管一筆，
+批次版本得傳 handle 陣列，而那個介面目前沒有人需要。
 
 ### 6.2 C ABI（`aos.h`）
 
