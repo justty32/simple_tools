@@ -12,8 +12,8 @@
 預設為零）。`clear()` 會把所有成員還原成預設值。
 
 `InstState` 用來回報格式／驗證的結果：`Ok`、`InvalidArgument`、
-`JsonSyntax`、`NotAnObject`、`UnknownKey`、`FieldTypeMismatch`、`EmptyArgv`、
-`TooManyArgs`、`TooManyEnv`、`EnvKeyInvalid`，以及 `DepthExceeded`。
+`JsonSyntax`、`NotAnObject`、`UnknownKey`、`FieldTypeMismatch`、`EmptyArgv`，
+以及 `EnvKeyInvalid`。
 
 `ExecState` 包含 `Ok`、
 `InvalidArgument`、`SpawnFailed`、`WaitFailed`，以及 `ExitWriteFailed`。
@@ -33,9 +33,11 @@
 `read_one(data, size, out)` 會從這段位元組範圍中，正好解析一個 JSON 值。
 它會在檢查或解析之前先清空 `out`。它不接受批次陣列；空緩衝區同樣是語法錯誤。
 
-兩者都**不設輸入位元組上限**。整份輸入都會進到記憶體，所以記憶體用量由輸入大小
-決定，並由呼叫端的環境（`ulimit`／cgroup）設界；配置失敗會以 C++ 例外的形式
-往外傳播，而不是變成一個 `InstState`。
+兩者都**不設任何上限**：位元組數、`argv` 元素數、`env` 條目數、JSON 巢狀深度都
+沒有上界。整份輸入都會進到記憶體，所以記憶體用量由輸入大小決定，並由呼叫端的
+環境（`ulimit`／cgroup）設界；配置失敗會以 C++ 例外的形式往外傳播，而不是變成
+一個 `InstState`。深層巢狀的輸入會讓解析器遞迴爆堆疊而崩潰——請只餵可信來源的
+指令檔。
 
 `write_one(inst, out)` 會驗證 `inst`，序列化成緊湊的 JSON 並在最後補上一個 LF，
 再把它附加到 `out`。驗證失敗時它不會附加任何東西。維持預設值的選用欄位會被省略。
@@ -46,8 +48,7 @@
 呼叫者在執行期間不得變動它。
 
 `to_string(InstState)` 與 `to_string(ExecState)` 會回傳指向靜態、以 NUL 結尾的診斷字串的指標，
-且為 `noexcept`。`max_args()`、`max_env()` 與 `max_json_depth()` 會回傳編譯時的上限
-（目前是 256、256 與 3），同樣為 `noexcept`。
+且為 `noexcept`。
 
 解析、序列化與執行準備都會用到會配置記憶體的 C++ 容器。配置失敗以及其他未預期的
 C++ 例外並不會被這個介面轉譯，而可能往外傳播到呼叫者。上述的輸出保證只適用於回傳的

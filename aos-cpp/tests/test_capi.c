@@ -20,9 +20,6 @@ int main(void) {
 
     assert(instruction != NULL);
     assert(strcmp(aos_version_string(), "0.1.0") == 0);
-    assert(aos_inst_argv_max() == 256);
-    assert(aos_inst_env_max() == 256);
-    assert(aos_inst_json_depth_max() == 3);
 
     assert(aos_instruction_read_buffer(record, sizeof(record) - 1,
                                        instruction) == AOS_INST_OK);

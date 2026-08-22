@@ -55,7 +55,6 @@ AOS_API aos_inst_state aos_instruction_push_arg(
     aos_instruction *instruction, const char *value) {
     try {
         if (instruction == nullptr || value == nullptr) return AOS_INST_INVALID_ARGUMENT;
-        if (instruction->value.argv.size() >= aos::kMaxArgs) return AOS_INST_TOO_MANY_ARGS;
         instruction->value.argv.emplace_back(value);
         return AOS_INST_OK;
     } catch (...) { return AOS_INST_ALLOC_FAILED; }
@@ -122,10 +121,6 @@ AOS_API aos_inst_state aos_instruction_set_env(
             return AOS_INST_INVALID_ARGUMENT;
         if (key[0] == '\0' || std::strchr(key, '=') != nullptr)
             return AOS_INST_ENV_KEY_INVALID;
-        auto it = instruction->value.env.find(key);
-        if (it == instruction->value.env.end() &&
-            instruction->value.env.size() >= aos::kMaxEnv)
-            return AOS_INST_TOO_MANY_ENV;
         instruction->value.env[key] = value;
         return AOS_INST_OK;
     } catch (...) { return AOS_INST_ALLOC_FAILED; }

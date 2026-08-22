@@ -11,29 +11,13 @@ namespace {
 
 using json = nlohmann::json;
 
-struct depth_exceeded {};
-
 json parse_json(const char *data, std::size_t size) {
-    const auto callback = [](int depth, json::parse_event_t event, json &) {
-        if ((event == json::parse_event_t::object_start ||
-             event == json::parse_event_t::array_start) &&
-            depth >= static_cast<int>(kMaxJsonDepth)) {
-            throw depth_exceeded{};
-        }
-        return true;
-    };
-    return json::parse(data, data + size, callback, true, false);
+    return json::parse(data, data + size);
 }
 
 InstState validate(const inst_t &inst) {
     if (inst.argv.empty() || inst.argv.front().empty()) {
         return InstState::EmptyArgv;
-    }
-    if (inst.argv.size() > kMaxArgs) {
-        return InstState::TooManyArgs;
-    }
-    if (inst.env.size() > kMaxEnv) {
-        return InstState::TooManyEnv;
     }
     for (const auto &entry : inst.env) {
         if (entry.first.empty() || entry.first.find('=') != std::string::npos) {
@@ -73,9 +57,6 @@ InstState decode(const json &value, inst_t &inst) {
     if (!argv_it->is_array()) {
         return InstState::FieldTypeMismatch;
     }
-    if (argv_it->size() > kMaxArgs) {
-        return InstState::TooManyArgs;
-    }
     for (const auto &arg : *argv_it) {
         if (!arg.is_string()) {
             return InstState::FieldTypeMismatch;
@@ -102,9 +83,6 @@ InstState decode(const json &value, inst_t &inst) {
     if (env_it != value.end()) {
         if (!env_it->is_object()) {
             return InstState::FieldTypeMismatch;
-        }
-        if (env_it->size() > kMaxEnv) {
-            return InstState::TooManyEnv;
         }
         for (auto it = env_it->begin(); it != env_it->end(); ++it) {
             if (!it.value().is_string()) {
@@ -143,8 +121,6 @@ InstState read_one(const char *data, std::size_t size, inst_t &out) {
             out = std::move(parsed);
         }
         return state;
-    } catch (const depth_exceeded &) {
-        return InstState::DepthExceeded;
     } catch (const json::parse_error &) {
         return InstState::JsonSyntax;
     }
@@ -187,8 +163,6 @@ InstState read_all(const char *data, std::size_t size,
             *error_record = 0;
         }
         return InstState::Ok;
-    } catch (const depth_exceeded &) {
-        return InstState::DepthExceeded;
     } catch (const json::parse_error &) {
         return InstState::JsonSyntax;
     }

@@ -2,17 +2,12 @@
 
 #include <aos/export.h>
 
-#include <cstddef>
 #include <cstdint>
 #include <map>
 #include <string>
 #include <vector>
 
 namespace aos {
-
-constexpr std::size_t kMaxArgs = 256;
-constexpr std::size_t kMaxEnv = 256;
-constexpr std::size_t kMaxJsonDepth = 3;
 
 enum class InstState {
     Ok,
@@ -22,10 +17,7 @@ enum class InstState {
     UnknownKey,
     FieldTypeMismatch,
     EmptyArgv,
-    TooManyArgs,
-    TooManyEnv,
     EnvKeyInvalid,
-    DepthExceeded,
 };
 
 struct inst_t {
@@ -42,8 +34,5 @@ struct inst_t {
 };
 
 AOS_API const char *to_string(InstState state) noexcept;
-AOS_API std::size_t max_args() noexcept;
-AOS_API std::size_t max_env() noexcept;
-AOS_API std::size_t max_json_depth() noexcept;
 
 }  // namespace aos

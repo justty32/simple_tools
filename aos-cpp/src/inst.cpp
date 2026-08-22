@@ -22,16 +22,9 @@ const char *to_string(InstState state) noexcept {
     case InstState::UnknownKey: return "UnknownKey";
     case InstState::FieldTypeMismatch: return "FieldTypeMismatch";
     case InstState::EmptyArgv: return "EmptyArgv";
-    case InstState::TooManyArgs: return "TooManyArgs";
-    case InstState::TooManyEnv: return "TooManyEnv";
     case InstState::EnvKeyInvalid: return "EnvKeyInvalid";
-    case InstState::DepthExceeded: return "DepthExceeded";
     }
     return "Unknown";
 }
-
-std::size_t max_args() noexcept { return kMaxArgs; }
-std::size_t max_env() noexcept { return kMaxEnv; }
-std::size_t max_json_depth() noexcept { return kMaxJsonDepth; }
 
 }  // namespace aos

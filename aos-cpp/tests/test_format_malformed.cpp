@@ -26,9 +26,9 @@ TEST_CASE("unknown schema keys are rejected") {
           aos::InstState::UnknownKey);
 }
 
-TEST_CASE("adversarially deep JSON is rejected during parsing") {
+TEST_CASE("nested env values are rejected as type mismatches") {
     CHECK(parse(R"({"argv":["x"],"env":{"A":{"B":{"C":[]}}}})") ==
-          aos::InstState::DepthExceeded);
+          aos::InstState::FieldTypeMismatch);
 }
 
 TEST_CASE("field type mismatches are rejected") {

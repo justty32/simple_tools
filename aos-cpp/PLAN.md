@@ -116,27 +116,31 @@
 九行格式的關鍵勝利），只是新檔案需要新 reader——而它會**大聲**告訴你，不會默默
 做錯事。
 
-### 2.4 限制（trust boundary）
+### 2.4 沒有限制（以及這代表指令來源必須可信）
 
-指令檔等同可執行程式碼，要當不可信輸入處理。
+**一條上限都不留。** 原本規劃過五條，全部移除：
 
-| 限制 | 值 | 為什麼 |
-|---|---|---|
-| JSON 巢狀深度上限 | **3**，硬性 | schema 最深就是 物件→陣列→字串。**不設就是遞迴爆堆疊 = DoS** |
-| `argv` 元素數上限 | 256 | 沿用 aos-c |
-| `env` 條目數上限 | 256 | 沿用 aos-c |
+| 原本的限制 | 原本的值 |
+|---|---|
+| 單筆物件位元組上限 | 1 MiB |
+| 整份輸入位元組上限 | 64 MiB |
+| JSON 巢狀深度上限 | 3 |
+| `argv` 元素數上限 | 256 |
+| `env` 條目數上限 | 256 |
 
-深度限制**必須在解析過程中生效**，不能解析完再檢查——那時堆疊已經爆了。
-用 `nlohmann::json::parse` 的 parser callback（它會給你 `depth`）或 `sax_parse`。
+理由：每一個數字都是猜的，而它們各自要保護的資源都已經有更好、更真實的邊界。
+記憶體看 `ulimit`／cgroup；`argv` 的總長度看核心的 `ARG_MAX`，那是 `execve`
+自己會用 `E2BIG` 告訴你的事。函式庫不該用一個硬編碼的常數，代替呼叫端決定
+「你的批次太大了」。
 
-**位元組上限已經全部移除**（原本有「單筆 1 MiB」與「整份 64 MiB」兩條）。
-理由：這兩個數字都是猜的，而它們保護的東西——記憶體——本來就有更好的邊界。
-指令檔的合理大小由部署方決定，該由 `ulimit`／cgroup 去設，不該由函式庫用一個
-常數替呼叫端決定「你的批次太大了」。上面那三條結構性限制留著，因為它們擋的是
-別的東西：深度擋遞迴爆堆疊，`argv`／`env` 的條目數擋單筆病態物件。
+**代價，寫清楚，不要假裝沒有：**
 
-代價寫清楚：讀取端現在完全無界，一個無界的生產端可以讓 runner 一直配置記憶體
-下去（見 §3.2）。配置失敗以例外／`AOS_INST_ALLOC_FAILED` 呈現，不是驗證狀態。
+1. 讀取端完全無界。無界的生產端可以讓 runner 一直配置記憶體下去（見 §3.2）。
+   配置失敗以例外／`AOS_INST_ALLOC_FAILED` 呈現，不是驗證狀態。
+2. **深度無界代表深層巢狀輸入會遞迴爆堆疊——SIGSEGV，不是錯誤狀態。**
+   這一條是本節標題那個「必須可信」的全部理由。原本的規劃把指令檔當不可信輸入
+   處理；現在不是了。指令檔等同可執行程式碼，而現在它也必須被當成可執行程式碼
+   一樣看待來源：**只餵你信任的東西**。不可信的輸入請在餵進來之前自己先過濾。
 
 ---
 
@@ -260,7 +264,6 @@ aos-cpp/
 ├── tests/
 │   ├── test_format_read.cpp
 │   ├── test_format_write.cpp
-│   ├── test_format_limits.cpp     # 深度、大小、argv/env 數量、未知鍵
 │   ├── test_format_malformed.cpp  # 對抗性輸入
 │   ├── test_exec.cpp
 │   ├── test_timeout.cpp
@@ -331,7 +334,7 @@ AOS_API InstState write_one(const inst_t &inst, std::string &out);
 | M | 內容 | 完成的判準 |
 |---|---|---|
 | **M0** | repo 骨架：CMakeLists、CMakePresets、vcpkg.json、.gitignore、Windows 的 FATAL_ERROR、一個會過的空測試 | `cmake --preset default && cmake --build --preset default && ctest --preset default` 在 WSL 上綠 |
-| **M1** | `inst_t` + `format`（讀／寫／限制／未知鍵） | 格式測試全綠，含 §2.4 每一條限制 |
+| **M1** | `inst_t` + `format`（讀／寫／未知鍵） | 格式測試全綠 |
 | **M2** | `exec`：從 aos-c 移植 fork/redirect/chdir/setenv/execvp、126/127、`128+n`。**先不做逾時** | `test_exec.cpp` 綠 |
 | **M3** | 逾時 + 行程群組（§4） | `test_timeout.cpp` 綠，含「孫行程也被殺掉」這一條 |
 | **M4** | `run` + `main` + CLI + docs | 端到端可用：`aos-cpp file.json` 真的會跑 |
@@ -384,7 +387,9 @@ M1 和 M2 沒有相依關係，可以並行。
    在 shared library 裡不可見。解法：用 `add_library(aos_objects OBJECT ...)`，
    測試連 object library，`aos` 連同一組 objects。不要為了測試而把內部符號 export。
 3. **C++ 例外不可以穿過 `extern "C"`。** 每個 C ABI 函式都要包 `try/catch(...)`。
-4. **深度限制要在解析中生效**，不是解析後檢查（那時堆疊已經爆了）。
+4. ~~**深度限制要在解析中生效**，不是解析後檢查（那時堆疊已經爆了）。~~
+   **已作廢**——深度限制整條移除了（§2.4）。堆疊還是會爆，只是現在這被接受成
+   「指令來源必須可信」的一部分，不再是要防的東西。
 5. **子行程用 `_exit()`，不是 `exit()`。** 後者會跑父行程登記的 `atexit`。
 6. **`setpgid` 要在父子兩邊都呼叫**（§4.2），否則有競爭。
 7. **`EINTR` 要重試**：`waitpid`、`read`、`open` 都要包 `do/while (… && errno == EINTR)`。

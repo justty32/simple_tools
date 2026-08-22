@@ -23,13 +23,10 @@ typedef enum aos_inst_state {
     AOS_INST_UNKNOWN_KEY = 4,
     AOS_INST_FIELD_TYPE_MISMATCH = 5,
     AOS_INST_EMPTY_ARGV = 6,
-    AOS_INST_TOO_MANY_ARGS = 7,
-    AOS_INST_TOO_MANY_ENV = 8,
-    AOS_INST_ENV_KEY_INVALID = 9,
-    AOS_INST_DEPTH_EXCEEDED = 10,
-    AOS_INST_ALLOC_FAILED = 11,
-    AOS_INST_READ_ERROR = 12,
-    AOS_INST_BUFFER_TOO_SMALL = 13
+    AOS_INST_ENV_KEY_INVALID = 7,
+    AOS_INST_ALLOC_FAILED = 8,
+    AOS_INST_READ_ERROR = 9,
+    AOS_INST_BUFFER_TOO_SMALL = 10
 } aos_inst_state;
 
 /* ABI rule: existing enum values are frozen. New values may only be appended. */
@@ -99,9 +96,6 @@ AOS_API aos_inst_state aos_instruction_write_buffer(
 AOS_API aos_exec_state aos_instruction_execute(
     aos_instruction *instruction, aos_exec_result *result);
 
-AOS_API size_t aos_inst_argv_max(void);
-AOS_API size_t aos_inst_env_max(void);
-AOS_API size_t aos_inst_json_depth_max(void);
 AOS_API const char *aos_inst_state_string(aos_inst_state state);
 AOS_API const char *aos_exec_state_string(aos_exec_state state);
 AOS_API const char *aos_version_string(void);

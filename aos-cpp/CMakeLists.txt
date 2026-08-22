@@ -51,7 +51,6 @@ enable_testing()
 add_executable(aos_tests
     tests/test_format_read.cpp
     tests/test_format_write.cpp
-    tests/test_format_limits.cpp
     tests/test_format_malformed.cpp
     tests/test_exec_streams.cpp
     tests/test_exec_path.cpp

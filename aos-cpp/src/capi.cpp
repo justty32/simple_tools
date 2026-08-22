@@ -13,12 +13,8 @@ static_assert(static_cast<int>(aos::InstState::UnknownKey) == AOS_INST_UNKNOWN_K
 static_assert(static_cast<int>(aos::InstState::FieldTypeMismatch) ==
               AOS_INST_FIELD_TYPE_MISMATCH);
 static_assert(static_cast<int>(aos::InstState::EmptyArgv) == AOS_INST_EMPTY_ARGV);
-static_assert(static_cast<int>(aos::InstState::TooManyArgs) == AOS_INST_TOO_MANY_ARGS);
-static_assert(static_cast<int>(aos::InstState::TooManyEnv) == AOS_INST_TOO_MANY_ENV);
 static_assert(static_cast<int>(aos::InstState::EnvKeyInvalid) ==
               AOS_INST_ENV_KEY_INVALID);
-static_assert(static_cast<int>(aos::InstState::DepthExceeded) ==
-              AOS_INST_DEPTH_EXCEEDED);
 
 static_assert(static_cast<int>(aos::ExecState::Ok) == AOS_EXEC_OK);
 static_assert(static_cast<int>(aos::ExecState::InvalidArgument) ==
@@ -31,19 +27,9 @@ static_assert(static_cast<int>(aos::ExecState::ExitWriteFailed) ==
 
 extern "C" {
 
-AOS_API size_t aos_inst_argv_max(void) {
-    try { return aos::max_args(); } catch (...) { return 0; }
-}
-AOS_API size_t aos_inst_env_max(void) {
-    try { return aos::max_env(); } catch (...) { return 0; }
-}
-AOS_API size_t aos_inst_json_depth_max(void) {
-    try { return aos::max_json_depth(); } catch (...) { return 0; }
-}
-
 AOS_API const char *aos_inst_state_string(aos_inst_state state) {
     try {
-        if (state >= AOS_INST_OK && state <= AOS_INST_DEPTH_EXCEEDED)
+        if (state >= AOS_INST_OK && state <= AOS_INST_ENV_KEY_INVALID)
             return aos::to_string(static_cast<aos::InstState>(state));
         switch (state) {
         case AOS_INST_ALLOC_FAILED: return "AllocationFailed";

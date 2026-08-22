@@ -37,7 +37,7 @@
 被引用的 `/tmp/aos-input.txt` 必須事先存在。成功時，本範例會
 寫出記錄中指定的另外三個 `/tmp/aos-*` 檔案。
 
-## 驗證狀態與上限
+## 驗證狀態
 
 | 條件 | `InstState` / C 狀態 |
 | --- | --- |
@@ -47,16 +47,20 @@
 | key 不在綱要(schema)內 | `UnknownKey` / `AOS_INST_UNKNOWN_KEY` |
 | 欄位型別錯誤、引數非字串，或環境（變數）值非字串 | `FieldTypeMismatch` / `AOS_INST_FIELD_TYPE_MISMATCH` |
 | `argv` 缺少/為空，或 `argv[0]` 為空 | `EmptyArgv` / `AOS_INST_EMPTY_ARGV` |
-| 引數超過 256 個 | `TooManyArgs` / `AOS_INST_TOO_MANY_ARGS` |
-| 環境（變數）項目超過 256 個 | `TooManyEnv` / `AOS_INST_TOO_MANY_ENV` |
 | 環境（變數）key 為空，或 key 含有 `=` | `EnvKeyInvalid` / `AOS_INST_ENV_KEY_INVALID` |
-| 解析時物件/陣列巢狀超過 3 層 | `DepthExceeded` / `AOS_INST_DEPTH_EXCEEDED` |
 
-**輸入大小沒有上限。** 單筆記錄與整份文件都不設位元組上界，讀取端一路讀到
-EOF。上界由呼叫端的環境負責（記憶體、`ulimit`、cgroup），不由這個格式負責。
-唯一仍然硬性存在的結構性上限是巢狀深度 3、`argv` 256 個、`env` 256 條。
+**沒有任何上限。** 位元組數（單筆與整份）、`argv` 元素數、`env` 條目數、JSON
+巢狀深度，全部不設上界。上表就是全部的拒絕條件；除此之外只要是合法 JSON 且
+符合綱要，就會被接受。
 
-深度檢查發生在解析過程中，在深度巢狀的文件被完整建構起來之前就會攔下。
+這是刻意的：每一條上限都是一個猜出來的常數，而它們保護的資源本來就有更好的
+邊界（記憶體看 `ulimit`／cgroup，`argv` 長度看核心的 `ARG_MAX`，那是 `execve`
+自己會回報的東西）。
+
+代價要講明白：**深度沒有上限，代表深層巢狀的輸入會讓解析器遞迴爆堆疊。** 那是
+行程崩潰（SIGSEGV），不是一個錯誤狀態。指令檔等同可執行程式碼，本來就只該來自
+你信任的來源；不要拿這個 runner 直接讀不可信的輸入。
+
 陣列元素驗證失敗時，CLI 會印出以 1 為起始的
 record 序號並回傳 1；整份文件的 JSON 語法錯誤則只報告來源。該批次中不會有
 任何記錄被執行。
