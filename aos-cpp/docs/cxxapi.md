@@ -13,11 +13,9 @@
 
 `InstState` 用來回報格式／驗證的結果：`Ok`、`InvalidArgument`、
 `JsonSyntax`、`NotAnObject`、`UnknownKey`、`FieldTypeMismatch`、`EmptyArgv`、
-`TooManyArgs`、`TooManyEnv`、`EnvKeyInvalid`、`DepthExceeded`、
-`RecordTooLong`，以及 `TotalTooLong`。
+`TooManyArgs`、`TooManyEnv`、`EnvKeyInvalid`，以及 `DepthExceeded`。
 
-`ReadOptions` 提供 `max_record_bytes`（預設 1 MiB）與
-`max_total_bytes`（預設 64 MiB）。`ExecState` 包含 `Ok`、
+`ExecState` 包含 `Ok`、
 `InvalidArgument`、`SpawnFailed`、`WaitFailed`，以及 `ExitWriteFailed`。
 `ExecResult` 包含回報的 `status`、`signalled`、`timed_out`，以及一個
 `error`，在相關的 API 失敗時帶著 `errno`。子行程狀態與 API 錯誤兩者的差別，
@@ -25,15 +23,19 @@
 
 ## 函式
 
-`read_all(data, size, out, error_line, options)` 會解析一整份 JSON Lines
-緩衝區。它會先清空 `out`，只有在每一行非空的內容都有效時，才發佈記錄。
-發生記錄錯誤時，選用的 `error_line` 會收到該行實體的、以一為基底的行號；
-它一開始被初始化為零，而對於無效指標或整份緩衝區的大小失敗，則維持為零。
-空輸入會成功，並得到一個空的向量。
+`read_all(data, size, out, error_record)` 會解析一整份 JSON 文件。
+頂層物件會產生一筆指令；頂層陣列會產生零到多筆指令。它會先清空 `out`，只有在
+整份文件與每個物件都有效時，才發佈記錄。發生物件驗證錯誤時，選用的
+`error_record` 會收到以一為基底的記錄序號；它一開始被初始化為零，成功、JSON
+語法錯誤或無效指標時都維持為零。空輸入是語法錯誤；空陣列
+則成功並得到一個空的向量。
 
-`read_one(line, size, out, options)` 會從這段位元組範圍中，正好解析一個 JSON 值。
-它會在檢查或解析之前先清空 `out`，並同時套用兩個設定好的位元組上限。
-它不會略過空的緩衝區，也不會移除 CR/LF；那些是 `read_all` 的批次分幀行為。
+`read_one(data, size, out)` 會從這段位元組範圍中，正好解析一個 JSON 值。
+它會在檢查或解析之前先清空 `out`。它不接受批次陣列；空緩衝區同樣是語法錯誤。
+
+兩者都**不設輸入位元組上限**。整份輸入都會進到記憶體，所以記憶體用量由輸入大小
+決定，並由呼叫端的環境（`ulimit`／cgroup）設界；配置失敗會以 C++ 例外的形式
+往外傳播，而不是變成一個 `InstState`。
 
 `write_one(inst, out)` 會驗證 `inst`，序列化成緊湊的 JSON 並在最後補上一個 LF，
 再把它附加到 `out`。驗證失敗時它不會附加任何東西。維持預設值的選用欄位會被省略。
@@ -63,10 +65,10 @@ C++ 例外並不會被這個介面轉譯，而可能往外傳播到呼叫者。�
 
 int main() {
     const char input[] =
-        "{\"argv\":[\"printf\",\"hello\\n\"],\"exit\":\"status.txt\"}\n";
+        "[{\"argv\":[\"printf\",\"hello\\n\"],\"exit\":\"status.txt\"}]";
     std::vector<aos::inst_t> jobs;
-    std::size_t line = 0;
-    if (aos::read_all(input, std::strlen(input), jobs, &line) !=
+    std::size_t record = 0;
+    if (aos::read_all(input, std::strlen(input), jobs, &record) !=
         aos::InstState::Ok) return 1;
 
     for (auto &job : jobs) {
@@ -94,8 +96,8 @@ c++ -std=c++17 example.cpp -Iinclude -Lbuild -Wl,-rpath,"$PWD/build" -laos
 或借用來的應用程式狀態，並沒有任何內部的同步機制：不要並行地變動同一批物件，
 也不要在一筆指令執行的過程中去改它。
 
-C++ API 與 C API 揭露的是同一套指令、格式、執行結果與上限。若想要直接存取容器、
-可設定的 `ReadOptions`，以及具原子性的多記錄 `read_all`，就選 C++。若想要以 opaque
+C++ API 與 C API 揭露的是同一套指令、格式、執行結果與上限。若想要直接存取容器，
+以及具原子性的多記錄 `read_all`，就選 C++。若想要以 opaque
 handle 管理所有權、明確的配置失敗狀態、給 C 或其他 FFI 語言使用，或需要一個穩定的
 二進位邊界，就選 C API。
 

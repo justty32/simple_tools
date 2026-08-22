@@ -49,7 +49,6 @@ AOS_API aos_inst_state aos_instruction_read_fd(int fd, aos_instruction *instruct
         if (instruction == nullptr || fd < 0) return AOS_INST_INVALID_ARGUMENT;
         instruction->value.clear();
         if (!set_cloexec(fd)) return AOS_INST_READ_ERROR;
-        aos::ReadOptions options;
         std::string input;
         std::array<char, 8192> chunk{};
         for (;;) {
@@ -58,12 +57,10 @@ AOS_API aos_inst_state aos_instruction_read_fd(int fd, aos_instruction *instruct
             while (count < 0 && errno == EINTR);
             if (count < 0) return AOS_INST_READ_ERROR;
             if (count == 0) break;
-            if (input.size() > options.max_total_bytes - static_cast<size_t>(count))
-                return AOS_INST_TOTAL_TOO_LONG;
             input.append(chunk.data(), static_cast<size_t>(count));
         }
         return inst_state(aos::read_one(input.data(), input.size(),
-                                        instruction->value, options));
+                                        instruction->value));
     } catch (...) { return AOS_INST_ALLOC_FAILED; }
 }
 

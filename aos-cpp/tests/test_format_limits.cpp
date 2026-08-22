@@ -5,25 +5,6 @@
 #include <string>
 #include <vector>
 
-TEST_CASE("record byte limit is enforced") {
-    const std::string input = R"({"argv":["echo"]})";
-    aos::ReadOptions opts;
-    opts.max_record_bytes = input.size() - 1;
-    aos::inst_t out;
-    CHECK(aos::read_one(input.data(), input.size(), out, opts) ==
-          aos::InstState::RecordTooLong);
-}
-
-TEST_CASE("total byte limit is enforced before parsing") {
-    const std::string input = "{\"argv\":[\"echo\"]}\n";
-    aos::ReadOptions opts;
-    opts.max_total_bytes = input.size() - 1;
-    std::vector<aos::inst_t> out;
-    CHECK(aos::read_all(input.data(), input.size(), out, nullptr, opts) ==
-          aos::InstState::TotalTooLong);
-    CHECK(out.empty());
-}
-
 TEST_CASE("JSON depth is stopped during parsing") {
     const std::string input =
         R"({"argv":["echo"],"env":{"A":{"B":[]}}})";

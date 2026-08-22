@@ -1,7 +1,8 @@
 # aos-cpp
 
-`aos-cpp` is a POSIX command runner written in C++17. It reads JSON Lines,
-validates the complete batch, then executes each command in order.
+`aos-cpp` is a POSIX command runner written in C++17. It reads one JSON
+instruction object or an array of instruction objects, validates the complete
+document, then executes each command in order.
 
 ## Build
 
@@ -21,17 +22,20 @@ produces `build/libaos.so` for the C and C++ library APIs.
 Pass one instruction file, or omit it to read standard input:
 
 ```sh
-aos-cpp jobs.jsonl
+aos-cpp jobs.json
 printf '%s\n' '{"argv":["echo","hello"]}' | aos-cpp
 ```
 
-For example, `jobs.jsonl` can capture output and the child status:
+For example, `jobs.json` can run a batch and capture output and child status:
 
 ```json
-{"argv":["sh","-c","printf 'hello from aos-cpp\\n'"],"stdout":"hello.txt","exit":"hello.status"}
+[
+  {"argv":["sh","-c","printf 'hello from aos-cpp\\n'"],"stdout":"hello.txt","exit":"hello.status"},
+  {"argv":["printf","done\\n"]}
+]
 ```
 
-Running `aos-cpp jobs.jsonl` writes `hello from aos-cpp` to `hello.txt` and
+Running `aos-cpp jobs.json` writes `hello from aos-cpp` to `hello.txt` and
 `0` to `hello.status`.
 
 See [the record format](docs/format.md), [execution semantics](docs/exec.md),

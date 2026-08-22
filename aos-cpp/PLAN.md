@@ -14,7 +14,7 @@
 
 | | aos-c | aos-cpp |
 |---|---|---|
-| 格式 | 九行文字（八欄位 + 空白分隔行） | **JSON Lines**（一行一個 JSON 物件） |
+| 格式 | 九行文字（八欄位 + 空白分隔行） | **JSON 文件**（單一物件或物件陣列） |
 | I/O | `std::istream` + 三個 streambuf 轉接器 | **POSIX syscall + buffer**，不用 iostream |
 | 建置 | 手寫 Makefile，無外部相依 | **vcpkg + CMake**，可以用函式庫 |
 
@@ -56,21 +56,27 @@
 
 ## 2. 記錄格式（最重要的一節）
 
-### 2.1 框架：JSON Lines
+### 2.1 框架：JSON object 或 JSON array
 
-一行一筆記錄，每行是一個完整的 JSON 物件，以 `\n` 結尾。
+單筆輸入是一個完整的 JSON 物件：
 
-```
+```json
 {"argv":["echo","hello"]}
-{"argv":["sh","-c","sleep 30"],"timeout_ms":5000}
-{"argv":["cat"],"stdin":"/etc/hostname","stdout":"/tmp/out","exit":"/tmp/rc"}
 ```
 
-- **不要**用 JSON 陣列包住整份檔案。JSON Lines 讓記錄邊界自我界定，
-  `}` + `\n` 就是分隔——九行格式那個「第 9 行空白分隔」的機制自然被取代。
-- 空行**跳過**，不算一筆記錄（方便產生端排版）。
-- 寫入端一律輸出 LF。讀取端接受 CRLF（去掉結尾的 CR）。
-- 寫入端**不得**輸出縮排或換行美化（那會破壞一行一筆）。
+多筆輸入是一個由指令物件組成的 JSON 陣列：
+
+```json
+[
+  {"argv":["sh","-c","sleep 30"],"timeout_ms":5000},
+  {"argv":["cat"],"stdin":"/etc/hostname","stdout":"/tmp/out","exit":"/tmp/rc"}
+]
+```
+
+- 頂層只能是物件或陣列；陣列的每個元素都必須是指令物件。
+- 空陣列是合法的空批次，空檔案不是合法 JSON。
+- 一般 JSON 空白與縮排都可使用。
+- 不接受 JSON Lines；多筆頂層物件必須包進同一個陣列。
 
 ### 2.2 Schema
 
@@ -116,14 +122,21 @@
 
 | 限制 | 值 | 為什麼 |
 |---|---|---|
-| 單行（單筆記錄）位元組上限 | 預設 1 MiB，可由呼叫端指定 | 擋畸形輸入吃光記憶體 |
-| 整份輸入位元組上限 | 預設 64 MiB，可由呼叫端指定 | 因為現在是整份讀進來（見 §3.2） |
 | JSON 巢狀深度上限 | **3**，硬性 | schema 最深就是 物件→陣列→字串。**不設就是遞迴爆堆疊 = DoS** |
 | `argv` 元素數上限 | 256 | 沿用 aos-c |
 | `env` 條目數上限 | 256 | 沿用 aos-c |
 
 深度限制**必須在解析過程中生效**，不能解析完再檢查——那時堆疊已經爆了。
 用 `nlohmann::json::parse` 的 parser callback（它會給你 `depth`）或 `sax_parse`。
+
+**位元組上限已經全部移除**（原本有「單筆 1 MiB」與「整份 64 MiB」兩條）。
+理由：這兩個數字都是猜的，而它們保護的東西——記憶體——本來就有更好的邊界。
+指令檔的合理大小由部署方決定，該由 `ulimit`／cgroup 去設，不該由函式庫用一個
+常數替呼叫端決定「你的批次太大了」。上面那三條結構性限制留著，因為它們擋的是
+別的東西：深度擋遞迴爆堆疊，`argv`／`env` 的條目數擋單筆病態物件。
+
+代價寫清楚：讀取端現在完全無界，一個無界的生產端可以讓 runner 一直配置記憶體
+下去（見 §3.2）。配置失敗以例外／`AOS_INST_ALLOC_FAILED` 呈現，不是驗證狀態。
 
 ---
 
@@ -166,8 +179,8 @@ buffer，全部解析並驗證完，才開始執行第一筆**。
 - **失去 FIFO 上的增量執行**。生產端還在寫第 2 筆時，第 1 筆不會先跑。
   「開→寫一批→關」的批次生產端不受影響；長命的 `producer | aos-cpp` 管線會變成
   「等上游做完才一次跑完」。
-- 記憶體上界從「最長的一筆」變成「整份輸入」，所以 §2.4 那個整份上限是**必要的**，
-  不是裝飾。
+- 記憶體上界從「最長的一筆」變成「整份輸入」，而且**這個上界不由本專案設限**
+  （見 §2.4）。要設界是部署方的事。
 
 ### 3.3 I/O 一律走 POSIX syscall
 
@@ -274,21 +287,15 @@ aos-c 當初兩個檔超標的真正原因是重複區塊與一個 160 行的函
 ```cpp
 namespace aos {
 
-struct ReadOptions {
-    std::size_t max_record_bytes = 1u << 20;   // 1 MiB
-    std::size_t max_total_bytes  = 64u << 20;  // 64 MiB
-};
-
 // 解析整份輸入。任何一筆失敗 -> 回傳失敗，out 保持清空，
-// 並透過 error_line（1-based）指出是哪一行。
+// 並透過 error_record（1-based）指出是哪一筆。
 AOS_API InstState read_all(const char *data, std::size_t size,
                            std::vector<inst_t> &out,
-                           std::size_t *error_line,
-                           const ReadOptions &opts = {});
+                           std::size_t *error_record);
 
-// 解析一筆。line 是不含結尾換行的一行。
-AOS_API InstState read_one(const char *line, std::size_t size,
-                           inst_t &out, const ReadOptions &opts = {});
+// 解析單一指令物件，不接受批次陣列。
+AOS_API InstState read_one(const char *data, std::size_t size,
+                           inst_t &out);
 
 // 序列化一筆，附加到 out 尾端（含結尾的 '\n'）。
 // 整筆驗證通過才會寫入任何位元組。
@@ -327,7 +334,7 @@ AOS_API InstState write_one(const inst_t &inst, std::string &out);
 | **M1** | `inst_t` + `format`（讀／寫／限制／未知鍵） | 格式測試全綠，含 §2.4 每一條限制 |
 | **M2** | `exec`：從 aos-c 移植 fork/redirect/chdir/setenv/execvp、126/127、`128+n`。**先不做逾時** | `test_exec.cpp` 綠 |
 | **M3** | 逾時 + 行程群組（§4） | `test_timeout.cpp` 綠，含「孫行程也被殺掉」這一條 |
-| **M4** | `run` + `main` + CLI + docs | 端到端可用：`aos-cpp file.jsonl` 真的會跑 |
+| **M4** | `run` + `main` + CLI + docs | 端到端可用：`aos-cpp file.json` 真的會跑 |
 | **M5** | C ABI + shared library（soname、版本、`test_capi.c`） | `test_capi.c` 用 C 編譯器建置並通過 |
 | **M6** | *（選作）* 非同步訊號安全的子行程，見 §8 | —— |
 
@@ -391,7 +398,8 @@ M1 和 M2 沒有相依關係，可以並行。
     那個縫裡做，`system()` 沒有那個縫。
 12. **`env` 的鍵要檢查**：不得為空、不得含 `=`。值可以是任何字串（JSON 會處理跳脫）。
 13. **`write_one` 必須整筆驗證通過才寫第一個位元組**，否則會留下半筆記錄。
-14. **錯誤訊息要帶行號**（1-based）。JSON Lines 的行號是免費的，別浪費。
+14. **物件驗證錯誤要帶記錄序號**（1-based）。整份 JSON 的語法錯誤不一定能可靠
+    對應到某個陣列元素，這種情況只報告來源。
 
 ---
 

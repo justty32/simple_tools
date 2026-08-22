@@ -19,10 +19,6 @@ static_assert(static_cast<int>(aos::InstState::EnvKeyInvalid) ==
               AOS_INST_ENV_KEY_INVALID);
 static_assert(static_cast<int>(aos::InstState::DepthExceeded) ==
               AOS_INST_DEPTH_EXCEEDED);
-static_assert(static_cast<int>(aos::InstState::RecordTooLong) ==
-              AOS_INST_RECORD_TOO_LONG);
-static_assert(static_cast<int>(aos::InstState::TotalTooLong) ==
-              AOS_INST_TOTAL_TOO_LONG);
 
 static_assert(static_cast<int>(aos::ExecState::Ok) == AOS_EXEC_OK);
 static_assert(static_cast<int>(aos::ExecState::InvalidArgument) ==
@@ -44,16 +40,10 @@ AOS_API size_t aos_inst_env_max(void) {
 AOS_API size_t aos_inst_json_depth_max(void) {
     try { return aos::max_json_depth(); } catch (...) { return 0; }
 }
-AOS_API size_t aos_inst_record_max_bytes(void) {
-    try { return aos::ReadOptions{}.max_record_bytes; } catch (...) { return 0; }
-}
-AOS_API size_t aos_inst_total_max_bytes(void) {
-    try { return aos::ReadOptions{}.max_total_bytes; } catch (...) { return 0; }
-}
 
 AOS_API const char *aos_inst_state_string(aos_inst_state state) {
     try {
-        if (state >= AOS_INST_OK && state <= AOS_INST_TOTAL_TOO_LONG)
+        if (state >= AOS_INST_OK && state <= AOS_INST_DEPTH_EXCEEDED)
             return aos::to_string(static_cast<aos::InstState>(state));
         switch (state) {
         case AOS_INST_ALLOC_FAILED: return "AllocationFailed";

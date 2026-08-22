@@ -26,8 +26,6 @@ enum class InstState {
     TooManyEnv,
     EnvKeyInvalid,
     DepthExceeded,
-    RecordTooLong,
-    TotalTooLong,
 };
 
 struct inst_t {

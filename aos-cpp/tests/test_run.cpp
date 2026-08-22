@@ -64,11 +64,10 @@ int run_file(std::string &path) {
 TEST_CASE("run validates the whole file before executing any record") {
     TempDir dir;
     const std::string marker = dir.path + "/marker";
-    std::string input = dir.path + "/input.jsonl";
+    std::string input = dir.path + "/input.json";
     write_file(input,
-               "{\"argv\":[\"/bin/sh\",\"-c\",\"printf ran > " + marker +
-                   "\"]}\n"
-                   "{\"argv\":[]}\n");
+               "[{\"argv\":[\"/bin/sh\",\"-c\",\"printf ran > " + marker +
+                   "\"]},{\"argv\":[]}]");
 
     CHECK(run_file(input) == 1);
     CHECK(access(marker.c_str(), F_OK) != 0);
@@ -77,14 +76,13 @@ TEST_CASE("run validates the whole file before executing any record") {
 TEST_CASE("run executes multiple records sequentially") {
     TempDir dir;
     const std::string output = dir.path + "/order";
-    std::string input = dir.path + "/input.jsonl";
+    std::string input = dir.path + "/input.json";
     write_file(input,
-               "{\"argv\":[\"/bin/sh\",\"-c\",\"printf first > " + output +
-                   "\"]}\n"
-                   "{\"argv\":[\"/bin/sh\",\"-c\",\"exit 7\"]}\n"
+               "[{\"argv\":[\"/bin/sh\",\"-c\",\"printf first > " + output +
+                   "\"]},{\"argv\":[\"/bin/sh\",\"-c\",\"exit 7\"]},"
                    "{\"argv\":[\"/bin/sh\",\"-c\",\"test $(cat " + output +
                    ") = first && printf second >> " + output +
-                   "\"]}\n");
+                   "\"]}]");
 
     CHECK(run_file(input) == 0);
     CHECK(read_file(output) == "firstsecond");

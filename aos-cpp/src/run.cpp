@@ -8,6 +8,8 @@
 #include <cerrno>
 #include <cstdio>
 #include <cstring>
+#include <new>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -25,8 +27,7 @@ int open_input(const char *path) {
     return fd;
 }
 
-bool read_input(int fd, std::size_t limit, std::string &buffer, int &error,
-                bool &too_long) {
+bool read_input(int fd, std::string &buffer, int &error) {
     char chunk[64 * 1024];
     for (;;) {
         ssize_t count;
@@ -43,10 +44,6 @@ bool read_input(int fd, std::size_t limit, std::string &buffer, int &error,
         }
 
         const auto size = static_cast<std::size_t>(count);
-        if (size > limit - buffer.size()) {
-            too_long = true;
-            return false;
-        }
         buffer.append(chunk, size);
     }
 }
@@ -74,25 +71,29 @@ int run(int argc, char *argv[]) {
         }
     }
 
-    const ReadOptions options;
     std::string buffer;
     int read_error = 0;
-    bool too_long = false;
-    const bool read_ok =
-        read_input(fd, options.max_total_bytes, buffer, read_error, too_long);
+    bool read_ok = false;
+    bool out_of_memory = false;
+    try {
+        read_ok = read_input(fd, buffer, read_error);
+    } catch (const std::bad_alloc &) {
+        out_of_memory = true;
+    } catch (const std::length_error &) {
+        out_of_memory = true;
+    }
 
     int close_error = 0;
     if (from_file && close(fd) != 0) {
         close_error = errno;
     }
+    if (out_of_memory) {
+        std::fprintf(stderr, "aos-cpp: cannot read %s: out of memory\n", source);
+        return 1;
+    }
     if (!read_ok) {
-        if (too_long) {
-            std::fprintf(stderr, "aos-cpp: %s exceeds the input size limit\n",
-                         source);
-        } else {
-            std::fprintf(stderr, "aos-cpp: cannot read %s: %s\n", source,
-                         std::strerror(read_error));
-        }
+        std::fprintf(stderr, "aos-cpp: cannot read %s: %s\n", source,
+                     std::strerror(read_error));
         return 1;
     }
     if (close_error != 0) {
@@ -102,14 +103,19 @@ int run(int argc, char *argv[]) {
     }
 
     std::vector<inst_t> instructions;
-    std::size_t error_line = 0;
+    std::size_t error_record = 0;
     const char empty = '\0';
     const char *data = buffer.empty() ? &empty : buffer.data();
     const InstState parse_state =
-        read_all(data, buffer.size(), instructions, &error_line, options);
+        read_all(data, buffer.size(), instructions, &error_record);
     if (parse_state != InstState::Ok) {
-        std::fprintf(stderr, "aos-cpp: %s:%zu: %s\n", source, error_line,
-                     to_string(parse_state));
+        if (error_record != 0) {
+            std::fprintf(stderr, "aos-cpp: %s: record %zu: %s\n", source,
+                         error_record, to_string(parse_state));
+        } else {
+            std::fprintf(stderr, "aos-cpp: %s: %s\n", source,
+                         to_string(parse_state));
+        }
         return 1;
     }
 

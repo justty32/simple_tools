@@ -21,31 +21,83 @@ TEST_CASE("read_one parses every instruction field") {
     CHECK(inst.timeout_ms == 5000);
 }
 
-TEST_CASE("read_all skips blank lines while retaining physical line numbers") {
-    const std::string input =
-        "{\"argv\":[\"first\"]}\r\n\r\n{\"argv\":[\"second\"]}\n";
+TEST_CASE("read_all accepts a single instruction object") {
+    const std::string input = R"({"argv":["only"]})";
     std::vector<aos::inst_t> out;
-    std::size_t error_line = 99;
+    std::size_t error_record = 99;
 
-    REQUIRE(aos::read_all(input.data(), input.size(), out, &error_line) ==
+    REQUIRE(aos::read_all(input.data(), input.size(), out, &error_record) ==
+            aos::InstState::Ok);
+    REQUIRE(out.size() == 1);
+    CHECK(out[0].argv == std::vector<std::string>{"only"});
+    CHECK(error_record == 0);
+}
+
+TEST_CASE("read_all accepts a formatted array of instruction objects") {
+    const std::string input =
+        "[\n  {\"argv\":[\"first\"]},\n  {\"argv\":[\"second\"]}\n]\n";
+    std::vector<aos::inst_t> out;
+    std::size_t error_record = 99;
+
+    REQUIRE(aos::read_all(input.data(), input.size(), out, &error_record) ==
             aos::InstState::Ok);
     REQUIRE(out.size() == 2);
     CHECK(out[0].argv == std::vector<std::string>{"first"});
     CHECK(out[1].argv == std::vector<std::string>{"second"});
-    CHECK(error_line == 0);
+    CHECK(error_record == 0);
     CHECK(out[0].stdin_path.empty());
     CHECK(out[0].env.empty());
     CHECK(out[0].timeout_ms == 0);
 }
 
-TEST_CASE("read_all is atomic and reports a one-based line number") {
-    const std::string input =
-        "{\"argv\":[\"first\"]}\n\n{\"argv\":[]}\n";
+TEST_CASE("read_all accepts an empty array and rejects an empty document") {
+    const std::string empty_array = "[]";
     std::vector<aos::inst_t> out(1);
-    std::size_t error_line = 0;
+    std::size_t error_record = 99;
 
-    CHECK(aos::read_all(input.data(), input.size(), out, &error_line) ==
+    REQUIRE(aos::read_all(empty_array.data(), empty_array.size(), out,
+                          &error_record) == aos::InstState::Ok);
+    CHECK(out.empty());
+    CHECK(error_record == 0);
+
+    const char empty = '\0';
+    CHECK(aos::read_all(&empty, 0, out, &error_record) ==
+          aos::InstState::JsonSyntax);
+    CHECK(out.empty());
+    CHECK(error_record == 0);
+}
+
+TEST_CASE("read_all is atomic and reports a one-based record number") {
+    const std::string input =
+        "[{\"argv\":[\"first\"]},{\"argv\":[]}]";
+    std::vector<aos::inst_t> out(1);
+    std::size_t error_record = 0;
+
+    CHECK(aos::read_all(input.data(), input.size(), out, &error_record) ==
           aos::InstState::EmptyArgv);
     CHECK(out.empty());
-    CHECK(error_line == 3);
+    CHECK(error_record == 2);
+}
+
+TEST_CASE("read_all rejects JSON Lines with multiple top-level values") {
+    const std::string input =
+        "{\"argv\":[\"first\"]}\n{\"argv\":[\"second\"]}\n";
+    std::vector<aos::inst_t> out;
+    std::size_t error_record = 99;
+
+    CHECK(aos::read_all(input.data(), input.size(), out, &error_record) ==
+          aos::InstState::JsonSyntax);
+    CHECK(out.empty());
+    CHECK(error_record == 0);
+}
+
+TEST_CASE("read_all reports a non-object array element") {
+    const std::string input = R"([{"argv":["first"]},null])";
+    std::vector<aos::inst_t> out;
+    std::size_t error_record = 0;
+
+    CHECK(aos::read_all(input.data(), input.size(), out, &error_record) ==
+          aos::InstState::NotAnObject);
+    CHECK(out.empty());
+    CHECK(error_record == 2);
 }

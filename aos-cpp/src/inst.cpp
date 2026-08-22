@@ -26,8 +26,6 @@ const char *to_string(InstState state) noexcept {
     case InstState::TooManyEnv: return "TooManyEnv";
     case InstState::EnvKeyInvalid: return "EnvKeyInvalid";
     case InstState::DepthExceeded: return "DepthExceeded";
-    case InstState::RecordTooLong: return "RecordTooLong";
-    case InstState::TotalTooLong: return "TotalTooLong";
     }
     return "Unknown";
 }

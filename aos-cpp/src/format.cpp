@@ -13,6 +13,18 @@ using json = nlohmann::json;
 
 struct depth_exceeded {};
 
+json parse_json(const char *data, std::size_t size) {
+    const auto callback = [](int depth, json::parse_event_t event, json &) {
+        if ((event == json::parse_event_t::object_start ||
+             event == json::parse_event_t::array_start) &&
+            depth >= static_cast<int>(kMaxJsonDepth)) {
+            throw depth_exceeded{};
+        }
+        return true;
+    };
+    return json::parse(data, data + size, callback, true, false);
+}
+
 InstState validate(const inst_t &inst) {
     if (inst.argv.empty() || inst.argv.front().empty()) {
         return InstState::EmptyArgv;
@@ -117,29 +129,14 @@ InstState decode(const json &value, inst_t &inst) {
 
 }  // namespace
 
-InstState read_one(const char *line, std::size_t size, inst_t &out,
-                   const ReadOptions &opts) {
+InstState read_one(const char *data, std::size_t size, inst_t &out) {
     out.clear();
-    if (line == nullptr) {
+    if (data == nullptr) {
         return InstState::InvalidArgument;
-    }
-    if (size > opts.max_total_bytes) {
-        return InstState::TotalTooLong;
-    }
-    if (size > opts.max_record_bytes) {
-        return InstState::RecordTooLong;
     }
 
     try {
-        const auto callback = [](int depth, json::parse_event_t event, json &) {
-            if ((event == json::parse_event_t::object_start ||
-                 event == json::parse_event_t::array_start) &&
-                depth >= static_cast<int>(kMaxJsonDepth)) {
-                throw depth_exceeded{};
-            }
-            return true;
-        };
-        const json value = json::parse(line, line + size, callback, true, false);
+        const json value = parse_json(data, size);
         inst_t parsed;
         const InstState state = decode(value, parsed);
         if (state == InstState::Ok) {
@@ -154,47 +151,47 @@ InstState read_one(const char *line, std::size_t size, inst_t &out,
 }
 
 InstState read_all(const char *data, std::size_t size,
-                   std::vector<inst_t> &out, std::size_t *error_line,
-                   const ReadOptions &opts) {
+                   std::vector<inst_t> &out, std::size_t *error_record) {
     out.clear();
-    if (error_line != nullptr) {
-        *error_line = 0;
+    if (error_record != nullptr) {
+        *error_record = 0;
     }
     if (data == nullptr) {
         return InstState::InvalidArgument;
     }
-    if (size > opts.max_total_bytes) {
-        return InstState::TotalTooLong;
-    }
 
-    std::vector<inst_t> parsed;
-    std::size_t begin = 0;
-    std::size_t line_number = 1;
-    while (begin < size) {
-        std::size_t end = begin;
-        while (end < size && data[end] != '\n') {
-            ++end;
+    try {
+        const json document = parse_json(data, size);
+        const bool single = document.is_object();
+        if (!single && !document.is_array()) {
+            return InstState::NotAnObject;
         }
-        std::size_t line_size = end - begin;
-        if (line_size != 0 && data[begin + line_size - 1] == '\r') {
-            --line_size;
-        }
-        if (line_size != 0) {
+
+        const std::size_t count = single ? 1 : document.size();
+        std::vector<inst_t> parsed;
+        parsed.reserve(count);
+        for (std::size_t index = 0; index < count; ++index) {
+            const json &value = single ? document : document[index];
+            if (error_record != nullptr) {
+                *error_record = index + 1;
+            }
             inst_t inst;
-            const InstState state = read_one(data + begin, line_size, inst, opts);
+            const InstState state = decode(value, inst);
             if (state != InstState::Ok) {
-                if (error_line != nullptr) {
-                    *error_line = line_number;
-                }
                 return state;
             }
             parsed.push_back(std::move(inst));
         }
-        begin = end == size ? size : end + 1;
-        ++line_number;
+        out.swap(parsed);
+        if (error_record != nullptr) {
+            *error_record = 0;
+        }
+        return InstState::Ok;
+    } catch (const depth_exceeded &) {
+        return InstState::DepthExceeded;
+    } catch (const json::parse_error &) {
+        return InstState::JsonSyntax;
     }
-    out.swap(parsed);
-    return InstState::Ok;
 }
 
 InstState write_one(const inst_t &inst, std::string &out) {

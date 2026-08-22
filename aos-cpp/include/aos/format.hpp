@@ -9,18 +9,12 @@
 
 namespace aos {
 
-struct ReadOptions {
-    std::size_t max_record_bytes = 1u << 20;
-    std::size_t max_total_bytes  = 64u << 20;
-};
-
 AOS_API InstState read_all(const char *data, std::size_t size,
                            std::vector<inst_t> &out,
-                           std::size_t *error_line,
-                           const ReadOptions &opts = {});
+                           std::size_t *error_record);
 
-AOS_API InstState read_one(const char *line, std::size_t size,
-                           inst_t &out, const ReadOptions &opts = {});
+AOS_API InstState read_one(const char *data, std::size_t size,
+                           inst_t &out);
 
 AOS_API InstState write_one(const inst_t &inst, std::string &out);
 
