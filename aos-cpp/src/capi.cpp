@@ -29,23 +29,37 @@ extern "C" {
 
 AOS_API const char *aos_inst_state_string(aos_inst_state state) {
     try {
-        if (state >= AOS_INST_OK && state <= AOS_INST_ENV_KEY_INVALID)
-            return aos::to_string(static_cast<aos::InstState>(state));
         switch (state) {
+        case AOS_INST_OK:
+        case AOS_INST_INVALID_ARGUMENT:
+        case AOS_INST_JSON_SYNTAX:
+        case AOS_INST_NOT_AN_OBJECT:
+        case AOS_INST_UNKNOWN_KEY:
+        case AOS_INST_FIELD_TYPE_MISMATCH:
+        case AOS_INST_EMPTY_ARGV:
+        case AOS_INST_ENV_KEY_INVALID:
+            return aos::to_string(static_cast<aos::InstState>(state));
         case AOS_INST_ALLOC_FAILED: return "AllocationFailed";
         case AOS_INST_READ_ERROR: return "ReadError";
+        case AOS_INST_WRITE_ERROR: return "WriteError";
         case AOS_INST_BUFFER_TOO_SMALL: return "BufferTooSmall";
-        default: return "Unknown";
         }
+        return "Unknown";
     } catch (...) { return nullptr; }
 }
 
 AOS_API const char *aos_exec_state_string(aos_exec_state state) {
     try {
-        if (state >= AOS_EXEC_OK && state <= AOS_EXEC_EXIT_WRITE_FAILED)
+        switch (state) {
+        case AOS_EXEC_OK:
+        case AOS_EXEC_INVALID_ARGUMENT:
+        case AOS_EXEC_SPAWN_FAILED:
+        case AOS_EXEC_WAIT_FAILED:
+        case AOS_EXEC_EXIT_WRITE_FAILED:
             return aos::to_string(static_cast<aos::ExecState>(state));
-        return state == AOS_EXEC_ALLOC_FAILED ? "allocation failed" :
-                                                "unknown execution result";
+        case AOS_EXEC_ALLOC_FAILED: return "AllocationFailed";
+        }
+        return "Unknown";
     } catch (...) { return nullptr; }
 }
 

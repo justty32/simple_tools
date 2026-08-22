@@ -16,9 +16,6 @@ extern char **environ;
 namespace aos::detail {
 namespace {
 
-constexpr int kExitSetupFailed = 126;
-constexpr int kExitExecFailed = 127;
-
 std::string current_directory() {
     std::vector<char> buffer(256);
     for (;;) {

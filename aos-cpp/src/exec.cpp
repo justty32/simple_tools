@@ -19,8 +19,6 @@
 namespace aos {
 namespace {
 
-constexpr int kExitSetupFailed = 126;
-constexpr int kExitExecFailed = 127;
 constexpr std::uint64_t kTimeoutGraceMs = 2000;
 
 int open_retry(const char *path, int flags, mode_t mode = 0) {
@@ -31,7 +29,7 @@ int open_retry(const char *path, int flags, mode_t mode = 0) {
     return fd;
 }
 
-bool write_all(int fd, const char *data, std::size_t size) {
+bool write_fully(int fd, const char *data, std::size_t size) {
     while (size != 0) {
         ssize_t written;
         do {
@@ -59,7 +57,7 @@ bool write_exit_status(const std::string &path, int status) {
         return false;
     }
 
-    const bool wrote = write_all(fd, buffer, static_cast<std::size_t>(length));
+    const bool wrote = write_fully(fd, buffer, static_cast<std::size_t>(length));
     const bool closed = close(fd) == 0;
     return wrote && closed;
 }
@@ -100,17 +98,17 @@ struct ChildPlan {
                         O_WRONLY | O_CREAT | O_TRUNC) ||
         !child_redirect(plan.stderr_path, STDERR_FILENO,
                         O_WRONLY | O_CREAT | O_TRUNC)) {
-        _exit(kExitSetupFailed);
+        _exit(detail::kExitSetupFailed);
     }
     if (plan.cwd != nullptr && chdir(plan.cwd) != 0) {
-        _exit(kExitSetupFailed);
+        _exit(detail::kExitSetupFailed);
     }
     if (plan.failure_status != 0) {
         _exit(plan.failure_status);
     }
 
     execve(plan.executable, plan.argv, plan.envp);
-    _exit(kExitExecFailed);
+    _exit(detail::kExitExecFailed);
 }
 
 }  // namespace
@@ -148,7 +146,7 @@ ExecState execute(inst_t &inst, ExecResult &result) {
     }
     if (pid == 0) {
         if (setpgid(0, 0) != 0) {
-            _exit(kExitSetupFailed);
+            _exit(detail::kExitSetupFailed);
         }
         run_child(child_plan);
     }
@@ -220,17 +218,17 @@ ExecState execute(inst_t &inst, ExecResult &result) {
 const char *to_string(ExecState state) noexcept {
     switch (state) {
     case ExecState::Ok:
-        return "ok";
+        return "Ok";
     case ExecState::InvalidArgument:
-        return "invalid argument";
+        return "InvalidArgument";
     case ExecState::SpawnFailed:
-        return "could not fork";
+        return "SpawnFailed";
     case ExecState::WaitFailed:
-        return "could not wait for command";
+        return "WaitFailed";
     case ExecState::ExitWriteFailed:
-        return "could not write exit status";
+        return "ExitWriteFailed";
     }
-    return "unknown execution result";
+    return "Unknown";
 }
 
 }  // namespace aos

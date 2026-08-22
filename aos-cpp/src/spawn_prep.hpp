@@ -7,6 +7,9 @@
 
 namespace aos::detail {
 
+constexpr int kExitSetupFailed = 126;
+constexpr int kExitExecFailed = 127;
+
 struct SpawnPrep {
     std::vector<std::string> environment;
     std::vector<char *> envp;

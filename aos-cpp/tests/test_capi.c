@@ -13,10 +13,13 @@ int main(void) {
         "\"cwd\":\"/\",\"env\":{\"AOS_C_TEST\":\"yes\"},"
         "\"timeout_ms\":1000}";
     aos_instruction *instruction = aos_instruction_new();
+    aos_instruction *reloaded;
     aos_exec_result result;
     size_t size = 0;
     char *output;
     int fds[2];
+    char path[] = "/tmp/aos-capi-XXXXXX";
+    int file_fd;
 
     assert(instruction != NULL);
     assert(strcmp(aos_version_string(), "0.1.0") == 0);
@@ -63,8 +66,43 @@ int main(void) {
     assert(aos_instruction_read_fd(fds[0], instruction) == AOS_INST_OK);
     assert(close(fds[0]) == 0);
 
+    file_fd = mkstemp(path);
+    assert(file_fd >= 0);
+    assert(close(file_fd) == 0);
+
+    assert(aos_instruction_read_buffer(record, sizeof(record) - 1,
+                                       instruction) == AOS_INST_OK);
+    assert(aos_instruction_write_file(instruction, path) == AOS_INST_OK);
+
+    reloaded = aos_instruction_new();
+    assert(reloaded != NULL);
+    assert(aos_instruction_read_file(path, reloaded) == AOS_INST_OK);
+    assert(aos_instruction_argc(reloaded) == 3);
+    assert(strcmp(aos_instruction_arg(reloaded, 2), "exit 7") == 0);
+    assert(aos_instruction_timeout_ms(reloaded) == 1000);
+
+    assert(aos_instruction_read_file(NULL, reloaded) == AOS_INST_INVALID_ARGUMENT);
+    assert(aos_instruction_read_file("/nonexistent/aos", reloaded) ==
+           AOS_INST_READ_ERROR);
+
+    assert(pipe(fds) == 0);
+    assert(aos_instruction_write_fd(instruction, fds[1]) == AOS_INST_OK);
+    assert(close(fds[1]) == 0);
+    aos_instruction_clear(reloaded);
+    assert(aos_instruction_read_fd(fds[0], reloaded) == AOS_INST_OK);
+    assert(aos_instruction_argc(reloaded) == 3);
+    assert(close(fds[0]) == 0);
+
+    aos_instruction_clear(reloaded);
+    assert(aos_instruction_write_file(reloaded, path) == AOS_INST_EMPTY_ARGV);
+    assert(aos_instruction_read_file(path, reloaded) == AOS_INST_OK);
+    assert(aos_instruction_argc(reloaded) == 3);
+    aos_instruction_free(reloaded);
+    assert(unlink(path) == 0);
+
     assert(strcmp(aos_inst_state_string(AOS_INST_JSON_SYNTAX), "JsonSyntax") == 0);
-    assert(strcmp(aos_exec_state_string(AOS_EXEC_OK), "ok") == 0);
+    assert(strcmp(aos_inst_state_string(AOS_INST_WRITE_ERROR), "WriteError") == 0);
+    assert(strcmp(aos_exec_state_string(AOS_EXEC_OK), "Ok") == 0);
     aos_instruction_free(instruction);
     return 0;
 }

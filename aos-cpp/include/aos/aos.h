@@ -26,7 +26,8 @@ typedef enum aos_inst_state {
     AOS_INST_ENV_KEY_INVALID = 7,
     AOS_INST_ALLOC_FAILED = 8,
     AOS_INST_READ_ERROR = 9,
-    AOS_INST_BUFFER_TOO_SMALL = 10
+    AOS_INST_BUFFER_TOO_SMALL = 10,
+    AOS_INST_WRITE_ERROR = 11
 } aos_inst_state;
 
 /* ABI rule: existing enum values are frozen. New values may only be appended. */
@@ -89,9 +90,15 @@ AOS_API aos_inst_state aos_instruction_read_buffer(
     const char *data, size_t size, aos_instruction *instruction);
 AOS_API aos_inst_state aos_instruction_read_fd(
     int fd, aos_instruction *instruction);
+AOS_API aos_inst_state aos_instruction_read_file(
+    const char *path, aos_instruction *instruction);
 AOS_API aos_inst_state aos_instruction_write_buffer(
     const aos_instruction *instruction, char *buffer, size_t size,
     size_t *needed);
+AOS_API aos_inst_state aos_instruction_write_fd(
+    const aos_instruction *instruction, int fd);
+AOS_API aos_inst_state aos_instruction_write_file(
+    const aos_instruction *instruction, const char *path);
 
 AOS_API aos_exec_state aos_instruction_execute(
     aos_instruction *instruction, aos_exec_result *result);

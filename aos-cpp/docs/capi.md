@@ -94,22 +94,45 @@ getter/setter 值以毫秒為單位；零會停用截止時間。
 
 ## 讀取、寫入與執行
 
-`aos_instruction_read_buffer()` 會從提供的位元組中剛好解析一個 JSON 指令物件。
-`aos_instruction_read_fd()` 會一路讀到 EOF、讓呼叫端持有的 fd 保持開啟、將其
-標記為 close-on-exec、對被中斷的讀取進行重試，並把結果解析成一筆指令。兩者
-都會在解析前清除目的地。兩者都只接受單一指令物件，不接受批次陣列，也都不使用
-`FILE *`。
+讀寫各有三個入口，成對出現：
 
-沒有任何上限：`aos_instruction_read_fd()` 會一直讀到 EOF，`argv`、`env` 與 JSON
-巢狀深度也都不設上界。記憶體用量由輸入大小決定，配置失敗會回報成
+| 來源／目的 | 讀 | 寫 |
+| --- | --- | --- |
+| 記憶體 | `aos_instruction_read_buffer()` | `aos_instruction_write_buffer()` |
+| 已開啟的 fd | `aos_instruction_read_fd()` | `aos_instruction_write_fd()` |
+| 檔案路徑 | `aos_instruction_read_file()` | `aos_instruction_write_file()` |
+
+`read_buffer()` 從提供的位元組中剛好解析一個 JSON 指令物件。
+`read_fd()` 會一路讀到 EOF、讓呼叫端持有的 fd 保持開啟、將其標記為
+close-on-exec、對被中斷的讀取進行重試。
+`read_file()` 自己用 `O_RDONLY | O_CLOEXEC` 開檔、讀到 EOF、然後關掉自己開的
+那個 fd；呼叫端不需要碰 fd。三者都會在解析前清除目的地，都只接受單一指令物件、
+不接受批次陣列，也都不使用 `FILE *`。
+
+`write_fd()` 序列化之後把全部位元組寫進呼叫端的 fd（處理部分寫入與 `EINTR`），
+不關閉它、也不動它的 flag。`write_file()` 用
+`O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC`（權限 0666）開檔、寫完、關檔，並且
+把關檔失敗也算成失敗——寫入路徑上的 `close()` 錯誤可能代表資料沒落地。
+截斷而非附加，跟 `exit` 欄位同一個慣例。
+
+**`write_file()` 是先驗證、後開檔**：指令無效時它回傳對應的驗證狀態，而那個檔案
+連建立或截斷都不會發生。所以一次失敗的寫出不會毀掉目標檔案既有的內容。
+
+開檔、讀取或寫入失敗會回傳 `AOS_INST_READ_ERROR` 或 `AOS_INST_WRITE_ERROR`，
+並讓 `errno` 保持在失敗那個 syscall 設定的值。這兩個狀態不區分「檔案不存在」與
+「I/O 錯誤」——要那個區別就自己看 `errno`。
+
+沒有任何上限：`read_fd()` 與 `read_file()` 都會一直讀到 EOF，`argv`、`env` 與
+JSON 巢狀深度也都不設上界。記憶體用量由輸入大小決定，配置失敗會回報成
 `AOS_INST_ALLOC_FAILED`。要設界是呼叫端的責任（`ulimit`、cgroup，或在餵進來之前
 自己先量）。深層巢狀的輸入會讓解析器遞迴爆堆疊而崩潰，那不是一個可回報的狀態
 ——只餵可信來源的指令檔。
 
-序列化採用兩次呼叫的大小查詢，如範例所示。所需的位元組數包含最後的 LF，但
-不含為方便而附加的 NUL。緩衝區必須能容納 `needed + 1` 個位元組。查詢或緩衝區
-過小的呼叫會回傳 `AOS_INST_BUFFER_TOO_SMALL`、回報所需的數量，並讓緩衝區維持
-原狀不動。
+只有 `write_buffer()` 採用兩次呼叫的大小查詢，如範例所示。所需的位元組數包含
+最後的 LF，但不含為方便而附加的 NUL。緩衝區必須能容納 `needed + 1` 個位元組。
+查詢或緩衝區過小的呼叫會回傳 `AOS_INST_BUFFER_TOO_SMALL`、回報所需的數量，並讓
+緩衝區維持原狀不動。`write_fd()` 與 `write_file()` 不需要這套協定——它們自己知道
+要寫多少。
 
 `aos_instruction_execute()` 會重置一個非 NULL 的 result、等待命令完成，並回傳
 一個 `aos_exec_state`。result 的 `status` 是子行程的離開值或 `128 + signal`；
